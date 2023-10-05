@@ -155,7 +155,7 @@ function DigitSelect({ tag, onCancel, addDigit, removeDigit, onSubmit }) {
 }
 
 function ConfirmScreen({ tag, station, color, onCancel, onSubmit }) {
-  const name = () => {
+  const name = (() => {
     if (station == 1) {
       return "Angel";
     } else if (station == 2) {
@@ -163,7 +163,7 @@ function ConfirmScreen({ tag, station, color, onCancel, onSubmit }) {
     } else {
       return "Jesus";
     }
-  };
+  })();
   return (
     <>
       <header className="App-header">
