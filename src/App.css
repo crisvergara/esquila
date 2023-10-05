@@ -99,6 +99,13 @@
   border: 1px solid #282c34;
 }
 
+
+.Tag-button-red {
+  background-color: #ef3636;
+  color: #282c34;
+  border: 1px solid #282c34;
+}
+
 .Tag-button-pink {
   background-color: #f55a9a;
   color: #282c34;
@@ -237,6 +244,17 @@
   font-size: 24pt;
 }
 
+
+.Tag-Display-red {
+  background-color: #ef3636;
+  color: #282c34;
+  border: 1px solid #282c34;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content:space-evenly;
+  font-size: 24pt;
+}
 
 .Tag-Display-none {
   background-color: #000000;
