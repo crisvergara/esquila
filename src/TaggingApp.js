@@ -82,6 +82,23 @@ function BirthLocationSelect({ onCancel, setLocation }) {
   );
 }
 
+function LactationSelection({ onCancel, setLactation }) {
+  return (
+    <>
+      <header className="App-header">
+        <button onClick={onCancel} className="Cancel-button">
+          Cancelar
+        </button>
+      </header>
+      <section className="Tag-buttons">
+        <button onClick={() => setLactation("OK")}>OK</button>
+        <button onClick={() => setLactation("dry")}>Seca</button>
+        <button onClick={() => setLactation("idk")}>No sé</button>
+      </section>
+    </>
+  );
+}
+
 function DigitSelect({ tag, onCancel, addDigit, removeDigit, onSubmit }) {
   const digitsDisabled = tag.length >= 6;
   const canSubmit = tag.length >= 5;
@@ -244,6 +261,7 @@ function TaggingApp() {
   const [digits, setDigits] = useState("");
   const [showMessage, setShowMessage] = useState(null);
   const [digitsSubmitted, setDigitsSubmitted] = useState(false);
+  const [lactation, setLactation] = useState(null);
 
   const onCancel = () => {
     setStation(0);
@@ -252,6 +270,7 @@ function TaggingApp() {
     setDigits("");
     setShowMessage(null);
     setDigitsSubmitted(false);
+    setLactation(null);
   };
 
   const onSubmitDigits = () => {
@@ -281,6 +300,7 @@ function TaggingApp() {
           tag,
           color,
           station,
+          lactation,
         }),
       });
       setShowMessage("success");
@@ -311,6 +331,10 @@ function TaggingApp() {
         removeDigit={removeDigit}
         onSubmit={onSubmitDigits}
       />
+    );
+  } else if (!lactation) {
+    screen = (
+      <LactationSelection onCancel={onCancel} setLactation={setLactation} />
     );
   } else if (showMessage === "success") {
     screen = <SuccessScreen />;

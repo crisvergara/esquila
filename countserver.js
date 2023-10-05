@@ -6,9 +6,9 @@ const port = 3001;
 
 let lambs = 0;
 
-const writeTag = async (tag, station, color) => {
+const writeTag = async (tag, station, color, lactation = "idk") => {
   const d = new Date();
-  const line = `${station},${tag},${color},${d.toISOString()}\n`;
+  const line = `${station},${tag},${color},${d.toISOString()},${lactation}\n`;
   await fs.writeFile("./counts/counts.csv", line, { flag: "a+" });
 };
 
@@ -76,7 +76,7 @@ app.post("/count", bodyParser.json(), (req, res) => {
   if (!req.body.tag || !req.body.station || !req.body.color) {
     res.sendStatus(400);
   }
-  writeTag(req.body.tag, req.body.station, req.body.color)
+  writeTag(req.body.tag, req.body.station, req.body.color, req.body.lactation)
     .then(() => res.sendStatus(200))
     .catch((err) => res.sendStatus(500));
 
