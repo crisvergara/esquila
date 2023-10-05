@@ -171,7 +171,7 @@ function DigitSelect({ tag, onCancel, addDigit, removeDigit, onSubmit }) {
   );
 }
 
-function ConfirmScreen({ tag, station, color, onCancel, onSubmit }) {
+function ConfirmScreen({ tag, station, color, lactation, onCancel, onSubmit }) {
   const name = (() => {
     if (station == 1) {
       return "Angel";
@@ -181,21 +181,32 @@ function ConfirmScreen({ tag, station, color, onCancel, onSubmit }) {
       return "Jesus";
     }
   })();
+
+  const displayLactation = (() => {
+    if (lactation === "OK") {
+      return "OK";
+    } else if (lactation === "dry") {
+      return "Seca";
+    } else {
+      return "No sé";
+    }
+  })();
   return (
     <>
       <header className="App-header">
         <button onClick={onCancel} className="Cancel-button">
-          Cancela
+          Cancelar
         </button>
-        <p>Confirma</p>
+        <p>Confirmar</p>
       </header>
       <section className="Tag-display">
         <p>Esqilador: {name}</p>
         <p className={`Tag-button-${color}`}>{tag}</p>
+        <p>Lactante: {displayLactation}</p>
       </section>
       <section className="Tag-buttons">
-        <button onClick={(ev) => onSubmit(ev)}>Envíe</button>
-        <button onClick={() => onCancel()}>Cancela</button>
+        <button onClick={(ev) => onSubmit(ev)}>OK</button>
+        <button onClick={() => onCancel()}>Cancelar</button>
       </section>
     </>
   );
@@ -348,6 +359,7 @@ function TaggingApp() {
         tag={tag}
         station={station}
         color={color}
+        lactation={lactation}
         onCancel={onCancel}
         onSubmit={onSubmit}
       />

@@ -103,17 +103,17 @@ function ConfirmScreen({ quantity, station, onCancel, onSubmit }) {
     <>
       <header className="App-header">
         <button onClick={onCancel} className="Cancel-button">
-          Cancela
+          Cancelar
         </button>
-        <p>Confirma</p>
+        <p>Confirmar</p>
       </header>
       <section className="Tag-display">
         <p>Esqilador: {name}</p>
         <p className={`Tag-button-white`}>Qty: {quantity}</p>
       </section>
       <section className="Tag-buttons">
-        <button onClick={(ev) => onSubmit(ev)}>Envíe</button>
-        <button onClick={() => onCancel()}>Cancela</button>
+        <button onClick={(ev) => onSubmit(ev)}>OK</button>
+        <button onClick={() => onCancel()}>Cancelar</button>
       </section>
     </>
   );
