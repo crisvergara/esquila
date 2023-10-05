@@ -4,6 +4,8 @@ const app = express();
 const fs = require("node:fs/promises");
 const port = 3001;
 
+let lambs = 0;
+
 const writeTag = async (tag, station, color) => {
   const d = new Date();
   const line = `${station},${tag},${color},${d.toISOString()}\n`;
@@ -77,6 +79,33 @@ app.post("/count", bodyParser.json(), (req, res) => {
   writeTag(req.body.tag, req.body.station, req.body.color)
     .then(() => res.sendStatus(200))
     .catch((err) => res.sendStatus(500));
+
+  countStatsByStation[req.body.station].lastTag = req.body.tag;
+  countStatsByStation[req.body.station].counted++;
+});
+
+const writeBulkTags = async (station, quantity) => {
+  for (let i = 0; i < quantity; ++i) {
+    lambs += 1;
+    let tag = "L" + "0000".slice(lambs.toString().length) + lambs;
+
+    await writeTag(tag, station, "none");
+  }
+};
+
+app.post("/bulk", bodyParser.json(), (req, res) => {
+  console.log("Bulk Request received");
+  if (!req.body.station || !req.body.quantity) {
+    res.sendStatus(400);
+  }
+  const quantity = parseInt(req.body.quantity);
+
+  writeBulkTags(req.body.station, quantity)
+    .then(() => res.sendStatus(200))
+    .catch((err) => {
+      console.error(err);
+      res.sendStatus(500);
+    });
 
   countStatsByStation[req.body.station].lastTag = req.body.tag;
   countStatsByStation[req.body.station].counted++;
