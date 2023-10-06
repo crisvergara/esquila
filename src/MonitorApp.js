@@ -37,6 +37,9 @@ function MonitorApp() {
           <div className="Esquilador-header">
             1: Angel -- {stats[1].counted}
           </div>
+          <div className={`Tag-Display-none`}>
+            B: {stats[1].borrega} -- C: {stats[1].carnero}
+          </div>
           <div className={`Tag-Display-${stats[1].lastTagColor}`}>
             {stats[1].lastTag}
           </div>
@@ -45,6 +48,9 @@ function MonitorApp() {
           <div className="Esquilador-header">
             2: Pacheco -- {stats[2].counted}
           </div>
+          <div className={`Tag-Display-none`}>
+            B: {stats[2].borrega} -- C: {stats[2].carnero}
+          </div>
           <div className={`Tag-Display-${stats[2].lastTagColor}`}>
             {stats[2].lastTag}
           </div>
@@ -52,6 +58,9 @@ function MonitorApp() {
         <div>
           <div className="Esquilador-header">
             3: Jesus -- {stats[3].counted}
+          </div>
+          <div className={`Tag-Display-none`}>
+            B: {stats[3].borrega} -- C: {stats[3].carnero}
           </div>
           <div className={`Tag-Display-${stats[3].lastTagColor}`}>
             {stats[3].lastTag}

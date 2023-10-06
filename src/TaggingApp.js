@@ -1,16 +1,26 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 import "./App.css";
 
-function StationSelect({ setStation }) {
+function StationSelect({ setStation, counts }) {
+  console.log(counts);
   return (
     <>
       <header className="App-header">
         <p>Elija un esquilador</p>
       </header>
       <section className="Station-buttons">
+        <div className={`Tag-Display-${counts[1].lastTagColor}`}>
+          {counts[1].lastTag}
+        </div>
         <button onClick={() => setStation(1)}>Angel</button>
+        <div className={`Tag-Display-${counts[2].lastTagColor}`}>
+          {counts[2].lastTag}
+        </div>
         <button onClick={() => setStation(2)}>Pacheco</button>
+        <div className={`Tag-Display-${counts[3].lastTagColor}`}>
+          {counts[3].lastTag}
+        </div>
         <button onClick={() => setStation(3)}>Jesus</button>
       </section>
     </>
@@ -268,11 +278,42 @@ function SendingScreen() {
 function TaggingApp() {
   const [station, setStation] = useState(0);
   const [color, setColor] = useState(null);
+  const [counts, setCounts] = useState({
+    1: {
+      lastTag: "",
+      lastTagColor: "none",
+      counted: 0,
+    },
+    2: {
+      lastTag: "",
+      lastTagColor: "none",
+      counted: 0,
+    },
+    3: {
+      lastTag: "",
+      lastTagColor: "none",
+      counted: 0,
+    },
+  });
   const [location, setLocation] = useState(null);
   const [digits, setDigits] = useState("");
   const [showMessage, setShowMessage] = useState(null);
   const [digitsSubmitted, setDigitsSubmitted] = useState(false);
   const [lactation, setLactation] = useState(null);
+
+  useEffect(() => {
+    let interval = setInterval(async () => {
+      try {
+        const countsRes = await fetch("/count");
+        setCounts(await countsRes.json());
+      } catch (error) {
+        console.error(error);
+      }
+    }, 3000);
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
 
   const onCancel = () => {
     setStation(0);
@@ -318,7 +359,13 @@ function TaggingApp() {
     } catch (err) {
       setShowMessage("failed");
     }
-    setTimeout(() => {
+    setTimeout(async () => {
+      try {
+        const countsRes = await fetch("/count");
+        setCounts(await countsRes.json());
+      } catch (error) {
+        console.error(error);
+      }
       onCancel();
     }, 1000);
   };
@@ -326,7 +373,7 @@ function TaggingApp() {
   let screen = null;
 
   if (station === 0) {
-    screen = <StationSelect setStation={setStation} />;
+    screen = <StationSelect setStation={setStation} counts={counts} />;
   } else if (!color) {
     screen = <TagColorSelect onCancel={onCancel} setColor={setColor} />;
   } else if (!location) {

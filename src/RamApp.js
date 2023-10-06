@@ -290,7 +290,7 @@ function RamApp() {
           color,
           station,
           lactation: "OK",
-          type: "ram",
+          type: "carnero",
         }),
       });
       setShowMessage("success");

@@ -40,6 +40,16 @@
   min-width: 75vw;
 }
 
+
+.Station-buttons > div {
+  margin: 10px auto;
+  padding: 10px;
+  flex: 1;
+  font-size: 20px;
+  border-radius: 10px;
+  min-width: 75vw;
+}
+
 .Station-buttons > button:disabled {
   background-color: #c5c5c5;
   color: #282c34;

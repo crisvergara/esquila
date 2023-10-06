@@ -4,7 +4,53 @@ const app = express();
 const fs = require("node:fs/promises");
 const port = 3001;
 
-let lambs = 0;
+let lambs = 102;
+
+let countStatsByStation = {
+  1: {
+    lastTag: "",
+    lastTagColor: "none",
+    counted: 0,
+    oveja: 0,
+    borrega: 0,
+    carnero: 0,
+  },
+  2: {
+    lastTag: "",
+    lastTagColor: "none",
+    counted: 0,
+    oveja: 0,
+    borrega: 0,
+    carnero: 0,
+  },
+  3: {
+    lastTag: "",
+    lastTagColor: "none",
+    counted: 0,
+    oveja: 0,
+    borrega: 0,
+    carnero: 0,
+  },
+};
+
+// Flag to prevent race condition between API requests updating
+// the stats object, and the timer replacing it outright with
+// file contents.
+
+let writeGuard = false;
+
+setInterval(async () => {
+  if (!writeGuard) {
+    writeGuard = true;
+    try {
+      countStatsByStation = await getStatsFromFile();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      writeGuard = false;
+    }
+  }
+}, 5000);
 
 const writeTag = async (
   tag,
@@ -15,7 +61,26 @@ const writeTag = async (
 ) => {
   const d = new Date();
   const line = `${station},${tag},${color},${d.toISOString()},${lactation},${type}\n`;
+
   await fs.writeFile("./counts/counts.csv", line, { flag: "a+" });
+  // If we're loading from file system, wait for load to finish.
+  while (writeGuard) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  countStatsByStation[station].lastTag = tag;
+  countStatsByStation[station].lastTagColor = color;
+  countStatsByStation[station].counted++;
+  countStatsByStation[station][type] += 1;
+};
+
+const writeBulkTags = async (station, quantity) => {
+  for (let i = 0; i < quantity; ++i) {
+    lambs += 1;
+    let tag = "L" + "0000".slice(lambs.toString().length) + lambs;
+
+    await writeTag(tag, station, "none", "idk", "borrega");
+  }
 };
 
 const getStatsFromFile = async () => {
@@ -28,16 +93,25 @@ const getStatsFromFile = async () => {
       lastTag: "",
       lastTagColor: "none",
       counted: 0,
+      oveja: 0,
+      borrega: 0,
+      carnero: 0,
     },
     2: {
       lastTag: "",
       lastTagColor: "none",
       counted: 0,
+      oveja: 0,
+      borrega: 0,
+      carnero: 0,
     },
     3: {
       lastTag: "",
       lastTagColor: "none",
       counted: 0,
+      oveja: 0,
+      borrega: 0,
+      carnero: 0,
     },
   };
   for (let line of lines) {
@@ -46,35 +120,9 @@ const getStatsFromFile = async () => {
     stats[fields[0]].lastTag = fields[1];
     stats[fields[0]].lastTagColor = fields[2];
     stats[fields[0]].counted += 1;
+    stats[fields[0]][fields[5]] += 1;
   }
   return stats;
-};
-
-let countStatsByStation = {
-  1: {
-    lastTag: "",
-    counted: 0,
-  },
-  2: {
-    lastTag: "",
-    counted: 0,
-  },
-  3: {
-    lastTag: "",
-    counted: 0,
-  },
-  4: {
-    lastTag: "",
-    counted: 0,
-  },
-  5: {
-    lastTag: "",
-    counted: 0,
-  },
-  6: {
-    lastTag: "",
-    counted: 0,
-  },
 };
 
 app.post("/count", bodyParser.json(), (req, res) => {
@@ -91,19 +139,7 @@ app.post("/count", bodyParser.json(), (req, res) => {
   )
     .then(() => res.sendStatus(200))
     .catch((err) => res.sendStatus(500));
-
-  countStatsByStation[req.body.station].lastTag = req.body.tag;
-  countStatsByStation[req.body.station].counted++;
 });
-
-const writeBulkTags = async (station, quantity) => {
-  for (let i = 0; i < quantity; ++i) {
-    lambs += 1;
-    let tag = "L" + "0000".slice(lambs.toString().length) + lambs;
-
-    await writeTag(tag, station, "none", "idk", "borrega");
-  }
-};
 
 app.post("/bulk", bodyParser.json(), (req, res) => {
   console.log("Bulk Request received");
@@ -118,48 +154,10 @@ app.post("/bulk", bodyParser.json(), (req, res) => {
       console.error(err);
       res.sendStatus(500);
     });
-
-  countStatsByStation[req.body.station].lastTag = req.body.tag;
-  countStatsByStation[req.body.station].counted++;
 });
 
 app.get("/count", (req, res) => {
-  getStatsFromFile()
-    .then((stats) => res.json(stats))
-    .catch((err) => {
-      console.error(err);
-      res.sendStatus(500);
-    });
-});
-
-app.put("/reset", (req, res) => {
-  countStatsByStation = {
-    1: {
-      lastTag: "",
-      counted: 0,
-    },
-    2: {
-      lastTag: "",
-      counted: 0,
-    },
-    3: {
-      lastTag: "",
-      counted: 0,
-    },
-    4: {
-      lastTag: "",
-      counted: 0,
-    },
-    5: {
-      lastTag: "",
-      counted: 0,
-    },
-    6: {
-      lastTag: "",
-      counted: 0,
-    },
-  };
-  res.sendStatus(200);
+  res.json(countStatsByStation);
 });
 
 // parse various different custom JSON types as JSON
