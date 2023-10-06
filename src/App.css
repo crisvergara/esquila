@@ -103,6 +103,12 @@
   border: 1px solid #282c34;
 }
 
+.Tag-button-green {
+  background-color: #25d342;
+  color: #282c34;
+  border: 1px solid #282c34;
+}
+
 .Tag-button-orange {
   background-color: #f5a95a;
   color: #282c34;
@@ -134,7 +140,6 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100%;
 }
 
 
@@ -223,6 +228,17 @@
 
 .Tag-Display-blue {
   background-color: #5a9af5;
+  color: #282c34;
+  border: 1px solid #282c34;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content:space-evenly;
+  font-size: 24pt;
+}
+
+.Tag-Display-green {
+  background-color: #25d342;
   color: #282c34;
   border: 1px solid #282c34;
   display: flex;

@@ -1,21 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import "./App.css";
-
-function StationSelect({ setStation }) {
-  return (
-    <>
-      <header className="App-header">
-        <p>Elija un esquilador</p>
-      </header>
-      <section className="Station-buttons">
-        <button onClick={() => setStation(1)}>Angel</button>
-        <button onClick={() => setStation(2)}>Pacheco</button>
-        <button onClick={() => setStation(3)}>Jesus</button>
-      </section>
-    </>
-  );
-}
+import StationSelect from "./components/StationSelect";
 
 function DigitSelect({ quantity, onCancel, addDigit, removeDigit, onSubmit }) {
   const digitsDisabled = false;
@@ -172,11 +158,15 @@ function SendingScreen() {
  C - Cabereria
 */
 
-function BulkLambApp() {
+function BulkLambApp({ counts, refreshCounts }) {
   const [station, setStation] = useState(0);
   const [quantity, setQuantity] = useState("");
   const [showMessage, setShowMessage] = useState(null);
   const [digitsSubmitted, setDigitsSubmitted] = useState(false);
+
+  useEffect(() => {
+    refreshCounts();
+  }, [refreshCounts]);
 
   const onCancel = () => {
     setStation(0);
@@ -215,7 +205,12 @@ function BulkLambApp() {
     } catch (err) {
       setShowMessage("failed");
     }
-    setTimeout(() => {
+    setTimeout(async () => {
+      try {
+        await refreshCounts();
+      } catch (err) {
+        console.error(err);
+      }
       onCancel();
     }, 1000);
   };
@@ -223,7 +218,7 @@ function BulkLambApp() {
   let screen = null;
 
   if (station === 0) {
-    screen = <StationSelect setStation={setStation} />;
+    screen = <StationSelect setStation={setStation} counts={counts} />;
   } else if (!digitsSubmitted) {
     screen = (
       <DigitSelect

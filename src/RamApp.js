@@ -34,6 +34,9 @@ function TagColorSelect({ onCancel, setColor }) {
         <button className="Tag-button-blue" onClick={() => setColor("blue")}>
           Azúl
         </button>
+        <button className="Tag-button-green" onClick={() => setColor("green")}>
+          Verde
+        </button>
         <button
           className="Tag-button-orange"
           onClick={() => setColor("orange")}

@@ -4,7 +4,7 @@ const app = express();
 const fs = require("node:fs/promises");
 const port = 3001;
 
-let lambs = 43;
+let lambs = 0;
 
 let countStatsByStation = {
   1: {
