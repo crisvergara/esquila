@@ -1,31 +1,7 @@
 import { useState, useEffect } from "react";
 
 import "./App.css";
-
-function StationSelect({ setStation, counts }) {
-  console.log(counts);
-  return (
-    <>
-      <header className="App-header">
-        <p>Elija un esquilador</p>
-      </header>
-      <section className="Station-buttons">
-        <div className={`Tag-Display-${counts[1].lastTagColor}`}>
-          {counts[1].lastTag}
-        </div>
-        <button onClick={() => setStation(1)}>Angel</button>
-        <div className={`Tag-Display-${counts[2].lastTagColor}`}>
-          {counts[2].lastTag}
-        </div>
-        <button onClick={() => setStation(2)}>Pacheco</button>
-        <div className={`Tag-Display-${counts[3].lastTagColor}`}>
-          {counts[3].lastTag}
-        </div>
-        <button onClick={() => setStation(3)}>Jesus</button>
-      </section>
-    </>
-  );
-}
+import StationSelect from "./components/StationSelect";
 
 function TagColorSelect({ onCancel, setColor }) {
   return (
@@ -275,26 +251,10 @@ function SendingScreen() {
  C - Cabereria
 */
 
-function TaggingApp() {
+function TaggingApp({ counts, refreshCounts }) {
   const [station, setStation] = useState(0);
   const [color, setColor] = useState(null);
-  const [counts, setCounts] = useState({
-    1: {
-      lastTag: "",
-      lastTagColor: "none",
-      counted: 0,
-    },
-    2: {
-      lastTag: "",
-      lastTagColor: "none",
-      counted: 0,
-    },
-    3: {
-      lastTag: "",
-      lastTagColor: "none",
-      counted: 0,
-    },
-  });
+
   const [location, setLocation] = useState(null);
   const [digits, setDigits] = useState("");
   const [showMessage, setShowMessage] = useState(null);
@@ -302,18 +262,8 @@ function TaggingApp() {
   const [lactation, setLactation] = useState(null);
 
   useEffect(() => {
-    let interval = setInterval(async () => {
-      try {
-        const countsRes = await fetch("/count");
-        setCounts(await countsRes.json());
-      } catch (error) {
-        console.error(error);
-      }
-    }, 3000);
-    return () => {
-      clearInterval(interval);
-    };
-  }, []);
+    refreshCounts();
+  }, [refreshCounts]);
 
   const onCancel = () => {
     setStation(0);
@@ -361,8 +311,7 @@ function TaggingApp() {
     }
     setTimeout(async () => {
       try {
-        const countsRes = await fetch("/count");
-        setCounts(await countsRes.json());
+        await refreshCounts();
       } catch (error) {
         console.error(error);
       }

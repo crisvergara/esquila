@@ -2,31 +2,10 @@ import { useState, useEffect } from "react";
 
 import "./App.css";
 
-function MonitorApp() {
-  const [stats, setStats] = useState({
-    1: {
-      lastTag: "",
-      counted: 0,
-    },
-    2: {
-      lastTag: "",
-      counted: 0,
-    },
-    3: {
-      lastTag: "",
-      counted: 0,
-    },
-  });
+function MonitorApp({ counts, refreshCounts }) {
   useEffect(() => {
-    const handle = setInterval(async () => {
-      const res = await fetch("/count");
-      const obj = await res.json();
-      setStats(obj);
-    }, 5000);
-    return () => {
-      clearInterval(handle);
-    };
-  }, []);
+    refreshCounts();
+  }, [refreshCounts]);
   return (
     <>
       <header className="App-header">
@@ -35,35 +14,35 @@ function MonitorApp() {
       <section className="Esquilador-monitor">
         <div>
           <div className="Esquilador-header">
-            1: Angel -- {stats[1].counted}
+            1: Angel -- {counts[1].counted}
           </div>
           <div className={`Tag-Display-none`}>
-            B: {stats[1].borrega} -- C: {stats[1].carnero}
+            B: {counts[1].borrega} -- C: {counts[1].carnero}
           </div>
-          <div className={`Tag-Display-${stats[1].lastTagColor}`}>
-            {stats[1].lastTag}
+          <div className={`Tag-Display-${counts[1].lastTagColor}`}>
+            {counts[1].lastTag}
           </div>
         </div>
         <div>
           <div className="Esquilador-header">
-            2: Pacheco -- {stats[2].counted}
+            2: Pacheco -- {counts[2].counted}
           </div>
           <div className={`Tag-Display-none`}>
-            B: {stats[2].borrega} -- C: {stats[2].carnero}
+            B: {counts[2].borrega} -- C: {counts[2].carnero}
           </div>
-          <div className={`Tag-Display-${stats[2].lastTagColor}`}>
-            {stats[2].lastTag}
+          <div className={`Tag-Display-${counts[2].lastTagColor}`}>
+            {counts[2].lastTag}
           </div>
         </div>
         <div>
           <div className="Esquilador-header">
-            3: Jesus -- {stats[3].counted}
+            3: Jesus -- {counts[3].counted}
           </div>
           <div className={`Tag-Display-none`}>
-            B: {stats[3].borrega} -- C: {stats[3].carnero}
+            B: {counts[3].borrega} -- C: {counts[3].carnero}
           </div>
-          <div className={`Tag-Display-${stats[3].lastTagColor}`}>
-            {stats[3].lastTag}
+          <div className={`Tag-Display-${counts[3].lastTagColor}`}>
+            {counts[3].lastTag}
           </div>
         </div>
       </section>

@@ -1,21 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import "./App.css";
-
-function StationSelect({ setStation }) {
-  return (
-    <>
-      <header className="App-header">
-        <p>Elija un esquilador</p>
-      </header>
-      <section className="Station-buttons">
-        <button onClick={() => setStation(1)}>Angel</button>
-        <button onClick={() => setStation(2)}>Pacheco</button>
-        <button onClick={() => setStation(3)}>Jesus</button>
-      </section>
-    </>
-  );
-}
+import StationSelect from "./components/StationSelect";
 
 function TagColorSelect({ onCancel, setColor }) {
   return (
@@ -245,13 +231,17 @@ function SendingScreen() {
  C - Cabereria
 */
 
-function RamApp() {
+function RamApp({ counts, refreshCounts }) {
   const [station, setStation] = useState(0);
   const [color, setColor] = useState(null);
   const [location, setLocation] = useState(null);
   const [digits, setDigits] = useState("");
   const [showMessage, setShowMessage] = useState(null);
   const [digitsSubmitted, setDigitsSubmitted] = useState(false);
+
+  useEffect(() => {
+    refreshCounts();
+  }, [refreshCounts]);
 
   const onCancel = () => {
     setStation(0);
@@ -297,7 +287,12 @@ function RamApp() {
     } catch (err) {
       setShowMessage("failed");
     }
-    setTimeout(() => {
+    setTimeout(async () => {
+      try {
+        await refreshCounts();
+      } catch (err) {
+        console.error(err);
+      }
       onCancel();
     }, 1000);
   };
@@ -305,7 +300,7 @@ function RamApp() {
   let screen = null;
 
   if (station === 0) {
-    screen = <StationSelect setStation={setStation} />;
+    screen = <StationSelect setStation={setStation} counts={counts} />;
   } else if (!color) {
     screen = <TagColorSelect onCancel={onCancel} setColor={setColor} />;
   } else if (!location) {
