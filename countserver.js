@@ -6,9 +6,15 @@ const port = 3001;
 
 let lambs = 0;
 
-const writeTag = async (tag, station, color, lactation = "idk") => {
+const writeTag = async (
+  tag,
+  station,
+  color,
+  lactation = "idk",
+  type = "oveja"
+) => {
   const d = new Date();
-  const line = `${station},${tag},${color},${d.toISOString()},${lactation}\n`;
+  const line = `${station},${tag},${color},${d.toISOString()},${lactation},${type}\n`;
   await fs.writeFile("./counts/counts.csv", line, { flag: "a+" });
 };
 
@@ -76,7 +82,13 @@ app.post("/count", bodyParser.json(), (req, res) => {
   if (!req.body.tag || !req.body.station || !req.body.color) {
     res.sendStatus(400);
   }
-  writeTag(req.body.tag, req.body.station, req.body.color, req.body.lactation)
+  writeTag(
+    req.body.tag,
+    req.body.station,
+    req.body.color,
+    req.body.lactation,
+    req.body.type ?? "oveja"
+  )
     .then(() => res.sendStatus(200))
     .catch((err) => res.sendStatus(500));
 
@@ -89,7 +101,7 @@ const writeBulkTags = async (station, quantity) => {
     lambs += 1;
     let tag = "L" + "0000".slice(lambs.toString().length) + lambs;
 
-    await writeTag(tag, station, "none");
+    await writeTag(tag, station, "none", "idk", "borrega");
   }
 };
 

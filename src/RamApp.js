@@ -290,6 +290,7 @@ function RamApp() {
           color,
           station,
           lactation: "OK",
+          type: "ram",
         }),
       });
       setShowMessage("success");
