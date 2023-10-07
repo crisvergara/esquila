@@ -57,10 +57,12 @@ const writeTag = async (
   station,
   color,
   lactation = "idk",
-  type = "oveja"
+  type = "oveja",
+  woolQuality = "IDK"
 ) => {
   const d = new Date();
-  const line = `${station},${tag},${color},${d.toISOString()},${lactation},${type}\n`;
+  const dateString = d.toISOString();
+  const line = `${station},${tag},${color},${dateString},${lactation},${type},${woolQuality}\n`;
 
   await fs.writeFile("./counts/counts.csv", line, { flag: "a+" });
   // If we're loading from file system, wait for load to finish.
@@ -70,6 +72,7 @@ const writeTag = async (
 
   countStatsByStation[station].lastTag = tag;
   countStatsByStation[station].lastTagColor = color;
+  countStatsByStation[station].lastScanTime = dateString;
   countStatsByStation[station].counted++;
   countStatsByStation[station][type] += 1;
 };
@@ -92,6 +95,7 @@ const getStatsFromFile = async () => {
     1: {
       lastTag: "",
       lastTagColor: "none",
+      lastTagScanTime: null,
       counted: 0,
       oveja: 0,
       borrega: 0,
@@ -100,6 +104,7 @@ const getStatsFromFile = async () => {
     2: {
       lastTag: "",
       lastTagColor: "none",
+      lastTagScanTime: null,
       counted: 0,
       oveja: 0,
       borrega: 0,
@@ -108,6 +113,7 @@ const getStatsFromFile = async () => {
     3: {
       lastTag: "",
       lastTagColor: "none",
+      lastTagScanTime: null,
       counted: 0,
       oveja: 0,
       borrega: 0,
@@ -119,6 +125,7 @@ const getStatsFromFile = async () => {
     if (fields.length < 3) continue;
     stats[fields[0]].lastTag = fields[1];
     stats[fields[0]].lastTagColor = fields[2];
+    stats[fields[0]].lastScanTime = fields[3];
     stats[fields[0]].counted += 1;
     stats[fields[0]][fields[5]] += 1;
   }
@@ -135,7 +142,8 @@ app.post("/count", bodyParser.json(), (req, res) => {
     req.body.station,
     req.body.color,
     req.body.lactation,
-    req.body.type ?? "oveja"
+    req.body.type ?? "oveja",
+    req.body.woolQuality ?? "IDK"
   )
     .then(() => res.sendStatus(200))
     .catch((err) => res.sendStatus(500));

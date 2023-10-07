@@ -85,6 +85,23 @@ function LactationSelection({ onCancel, setLactation }) {
   );
 }
 
+function WoolQualitySelection({ onCancel, setWoolQuality }) {
+  return (
+    <>
+      <header className="App-header">
+        <button onClick={onCancel} className="Cancel-button">
+          Cancelar
+        </button>
+      </header>
+      <section className="Tag-buttons">
+        <button onClick={() => setWoolQuality("BAD")}>BAD</button>
+        <button onClick={() => setWoolQuality("GOOD")}>GOOD</button>
+        <button onClick={() => setWoolQuality("EXCELLENT")}>EXCELLENT</button>
+      </section>
+    </>
+  );
+}
+
 function DigitSelect({ tag, onCancel, addDigit, removeDigit, onSubmit }) {
   const digitsDisabled = tag.length >= 6;
   const canSubmit = tag.length >= 5;
@@ -260,6 +277,7 @@ function TaggingApp({ counts, refreshCounts }) {
   const [showMessage, setShowMessage] = useState(null);
   const [digitsSubmitted, setDigitsSubmitted] = useState(false);
   const [lactation, setLactation] = useState(null);
+  const [woolQuality, setWoolQuality] = useState(null);
 
   useEffect(() => {
     refreshCounts();
@@ -273,6 +291,7 @@ function TaggingApp({ counts, refreshCounts }) {
     setShowMessage(null);
     setDigitsSubmitted(false);
     setLactation(null);
+    setWoolQuality(null);
   };
 
   const onSubmitDigits = () => {
@@ -303,6 +322,7 @@ function TaggingApp({ counts, refreshCounts }) {
           color,
           station,
           lactation,
+          woolQuality,
         }),
       });
       setShowMessage("success");
@@ -342,6 +362,13 @@ function TaggingApp({ counts, refreshCounts }) {
   } else if (!lactation) {
     screen = (
       <LactationSelection onCancel={onCancel} setLactation={setLactation} />
+    );
+  } else if (!woolQuality) {
+    screen = (
+      <WoolQualitySelection
+        onCancel={onCancel}
+        setWoolQuality={setWoolQuality}
+      />
     );
   } else if (showMessage === "success") {
     screen = <SuccessScreen />;
