@@ -37,7 +37,7 @@
     flex-direction: row;
     align-items: center;
     justify-content:space-evenly;
-    font-size: 48pt;
+    font-size: 96pt;
   }
   
   .Esquilador-Tag-Display-white {
@@ -46,11 +46,10 @@
     border-color: #282c34;
     display: flex;
     flex: 0 0 33.3333%;
-    flex: 1;
     flex-direction: row;
     align-items: center;
     justify-content:space-evenly;
-    font-size: 48pt;
+    font-size: 96pt;
   }
   
   .Esquilador-Tag-Display-purple {
@@ -59,11 +58,10 @@
     border: 1px solid #282c34;
     display: flex;
     flex: 0 0 33.3333%;
-    flex: 1;
     flex-direction: row;
     align-items: center;
     justify-content:space-evenly;
-    font-size: 48pt;
+    font-size: 96pt;
   }
   
   .Esquilador-Tag-Display-blue {
@@ -72,11 +70,10 @@
     border: 1px solid #282c34;
     display: flex;
     flex: 0 0 33.3333%;
-    flex: 1;
     flex-direction: row;
     align-items: center;
     justify-content:space-evenly;
-    font-size: 48pt;
+    font-size: 96pt;
   }
   
   .Esquilador-Tag-Display-green {
@@ -85,11 +82,10 @@
     border: 1px solid #282c34;
     display: flex;
     flex: 0 0 33.3333%;
-    flex: 1;
     flex-direction: row;
     align-items: center;
     justify-content:space-evenly;
-    font-size: 48pt;
+    font-size: 96pt;
   }
   
   .Esquilador-Tag-Display-orange {
@@ -98,11 +94,10 @@
     border: 1px solid #282c34;
     display: flex;
     flex: 0 0 33.3333%;
-    flex: 1;
     flex-direction: row;
     align-items: center;
     justify-content:space-evenly;
-    font-size: 48pt;
+    font-size: 96pt;
   }
   
   .Esquilador-Tag-Display-pink {
@@ -111,11 +106,10 @@
     border: 1px solid #282c34;
     display: flex;
     flex: 0 0 33.3333%;
-    flex: 1;
     flex-direction: row;
     align-items: center;
     justify-content:space-evenly;
-    font-size: 48pt;
+    font-size: 96pt;
   }
   
   
@@ -125,11 +119,10 @@
     border: 1px solid #282c34;
     display: flex;
     flex: 0 0 33.3333%;
-    flex: 1;
     flex-direction: row;
     align-items: center;
     justify-content:space-evenly;
-    font-size: 48pt;
+    font-size: 96pt;
   }
   
   .Esquilador-Tag-Display-none {
@@ -138,16 +131,15 @@
     border-color: #282c34;
     display: flex;
     flex: 0 0 33.3333%;
-    flex: 1;
     flex-direction: row;
     align-items: center;
     justify-content:space-evenly;
-    font-size: 48pt;
+    font-size: 96pt;
   }
 
 
 .Esquilador-monitor p {
-    font-size: 48pt;
+    font-size: 96pt;
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -157,10 +149,10 @@
       background-color: #c5c8d0;
       display: flex;
       flex-direction: row;
-      padding: 0 48pt;
+      padding: 0 96pt;
       align-items: center;
       justify-content:space-between;
       flex: 0 0 33.3333%;
-      font-size: 48pt;
+      font-size: 96pt;
       color: black;
   }
