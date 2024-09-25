@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 
-import "./App.css";
+import "./MonitorApp.css";
 
 const timeSinceISO = (isoString) => {
   if (!isoString) return "00:00:00";
@@ -40,45 +40,45 @@ function MonitorApp({ counts, refreshCounts }) {
   const timeSince3 = useTimeSince(counts[3].lastScanTime);
   return (
     <>
-      <header className="App-header">
+      <header className="Monitor-app-header">
         <p>Shearing Monitor</p>
       </header>
       <section className="Esquilador-monitor">
-        <div>
+        <div className="Esquilador-row">
           <div className="Esquilador-header">
-            1: Angel -- {counts[1].counted}
+          <p>Pacheco</p> <p>{counts[1].counted}</p>
           </div>
-          <div className={`Tag-Display-none`}>Tiempo: {timeSince1}</div>
+          <div className={`Esquilador-Tag-Display-${counts[1].lastTagColor}`}>
+            {counts[1].lastTag}
+          </div>
+          <div className={`Esquilador-Tag-Display-none`}>{timeSince1}</div>
           {/*<div className={`Tag-Display-none`}>
             B: {counts[1].borrega} -- C: {counts[1].carnero}
   </div>*/}
-          <div className={`Tag-Display-${counts[1].lastTagColor}`}>
-            {counts[1].lastTag}
-          </div>
         </div>
-        <div>
+        <div className="Esquilador-row">
           <div className="Esquilador-header">
-            2: Pacheco -- {counts[2].counted}
+            <p>Pacheco</p> <p>{counts[2].counted}</p>
           </div>
-          <div className={`Tag-Display-none`}>Tiempo: {timeSince2}</div>
+          <div className={`Esquilador-Tag-Display-${counts[2].lastTagColor}`}>
+            {counts[2].lastTag}
+          </div>
+          <div className={`Esquilador-Tag-Display-none`}>{timeSince2}</div>
           {/*<div className={`Tag-Display-none`}>
             B: {counts[2].borrega} -- C: {counts[2].carnero}
 </div>*/}
-          <div className={`Tag-Display-${counts[2].lastTagColor}`}>
-            {counts[2].lastTag}
-          </div>
         </div>
-        <div>
+        <div className="Esquilador-row">
           <div className="Esquilador-header">
-            3: Jesus -- {counts[3].counted}
+          <p>Angel</p> <p>{counts[3].counted}</p>
           </div>
-          <div className={`Tag-Display-none`}>Tiempo: {timeSince3}</div>
+          <div className={`Esquilador-Tag-Display-${counts[3].lastTagColor}`}>
+            {counts[3].lastTag}
+          </div>
+          <div className={`Esquilador-Tag-Display-none`}>{timeSince3}</div>
           {/*<div className={`Tag-Display-none`}>
             B: {counts[3].borrega} -- C: {counts[3].carnero}
 </div>*/}
-          <div className={`Tag-Display-${counts[3].lastTagColor}`}>
-            {counts[3].lastTag}
-          </div>
         </div>
       </section>
     </>

@@ -1,13 +1,31 @@
-const express = require("express");
-const bodyParser = require("body-parser");
+import express from 'express';
+import bodyParser from 'body-parser';
+import sqlite3 from 'sqlite3';
+import ViteExpress from 'vite-express';
 const app = express();
-const fs = require("node:fs/promises");
 const port = 3001;
+
+const db = new sqlite3.Database('esquila');
+
+db.serialize(() => {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS counts (
+      tag TEXT,
+      station INTEGER,
+      color TEXT,
+      lactation TEXT,
+      type TEXT,
+      woolQuality TEXT,
+      date TEXT
+    )
+  `);
+});
 
 let lambs = 0;
 
 let countStatsByStation = {
   1: {
+    lastRowId: 0,
     lastTag: "",
     lastTagColor: "none",
     counted: 0,
@@ -16,6 +34,7 @@ let countStatsByStation = {
     carnero: 0,
   },
   2: {
+    lastRowId: 0,
     lastTag: "",
     lastTagColor: "none",
     counted: 0,
@@ -24,6 +43,7 @@ let countStatsByStation = {
     carnero: 0,
   },
   3: {
+    lastRowId: 0,
     lastTag: "",
     lastTagColor: "none",
     counted: 0,
@@ -39,18 +59,60 @@ let countStatsByStation = {
 
 let writeGuard = false;
 
+const refreshCounts = async () => {
+  countStatsByStation = await getStatsFromDb();
+}
+
 setInterval(async () => {
-  if (!writeGuard) {
-    writeGuard = true;
-    try {
-      countStatsByStation = await getStatsFromFile();
-    } catch (err) {
-      console.error(err);
-    } finally {
-      writeGuard = false;
-    }
-  }
+  await refreshCounts();
 }, 5000);
+
+const writeTagToDb = (tag, station, color, lactation, type, woolQuality, date) => {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `
+        INSERT INTO counts (tag, station, color, lactation, type, woolQuality, date)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `,
+      [tag, station, color, lactation, type, woolQuality, date],
+      (result, error) => {
+        error ? reject(error) : resolve(result);
+      }
+    );
+  });
+}
+
+const readTagsFromDb = () => {
+  return new Promise((resolve, reject) => {
+    db.all(
+      `
+        SELECT rowid, tag, station, color, lactation, type, woolQuality, date FROM counts
+        ORDER BY date;
+      `,
+      (error, rows) => {
+        console.log(error);
+        console.log(rows);
+        error ? reject(error) : resolve(rows);
+      }
+    );
+  });
+};
+
+const updateTagByRowId = (rowid, tag, station, color, lactation, type, woolQuality, date) => {
+  return new Promise((resolve, reject) => {
+    db.run(
+      `
+        UPDATE counts
+        SET tag = ?, station = ?, color = ?, lactation = ?, type = ?, woolQuality = ?, date = ?
+        WHERE rowid = ?
+      `,
+      [tag, station, color, lactation, type, woolQuality, date, rowid],
+      (result, error) => {
+        error ? reject(error) : resolve(result);
+      }
+    );
+  });
+};
 
 const writeTag = async (
   tag,
@@ -62,13 +124,10 @@ const writeTag = async (
 ) => {
   const d = new Date();
   const dateString = d.toISOString();
-  const line = `${station},${tag},${color},${dateString},${lactation},${type},${woolQuality}\n`;
 
-  await fs.writeFile("./counts/counts.csv", line, { flag: "a+" });
-  // If we're loading from file system, wait for load to finish.
-  while (writeGuard) {
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
+  await writeTagToDb(tag, station, color, lactation, type, woolQuality, dateString);
+  
+  await refreshCounts();
 
   countStatsByStation[station].lastTag = tag;
   countStatsByStation[station].lastTagColor = color;
@@ -86,13 +145,12 @@ const writeBulkTags = async (station, quantity) => {
   }
 };
 
-const getStatsFromFile = async () => {
-  const fileContents = await fs.readFile("./counts/counts.csv", {
-    encoding: "utf-8",
-  });
-  const lines = fileContents.split("\n");
+const getStatsFromDb = async () => {
+  const tags = await readTagsFromDb();
+  console.log(tags);
   const stats = {
     1: {
+      lastRowId: 0,
       lastTag: "",
       lastTagColor: "none",
       lastTagScanTime: null,
@@ -102,6 +160,7 @@ const getStatsFromFile = async () => {
       carnero: 0,
     },
     2: {
+      lastRowId: 0,
       lastTag: "",
       lastTagColor: "none",
       lastTagScanTime: null,
@@ -111,6 +170,7 @@ const getStatsFromFile = async () => {
       carnero: 0,
     },
     3: {
+      lastRowId: 0,
       lastTag: "",
       lastTagColor: "none",
       lastTagScanTime: null,
@@ -120,14 +180,13 @@ const getStatsFromFile = async () => {
       carnero: 0,
     },
   };
-  for (let line of lines) {
-    const fields = line.split(",");
-    if (fields.length < 3) continue;
-    stats[fields[0]].lastTag = fields[1];
-    stats[fields[0]].lastTagColor = fields[2];
-    stats[fields[0]].lastScanTime = fields[3];
-    stats[fields[0]].counted += 1;
-    stats[fields[0]][fields[5]] += 1;
+  for (let tag of tags) {
+    stats[tag.station].lastRowId = tag.rowid;
+    stats[tag.station].lastTag = tag.tag;
+    stats[tag.station].lastTagColor = tag.color;
+    stats[tag.station].lastScanTime = tag.date;
+    stats[tag.station].counted += 1;
+    stats[tag.station][tag.type] += 1;
   }
   return stats;
 };
@@ -171,6 +230,6 @@ app.get("/count", (req, res) => {
 // parse various different custom JSON types as JSON
 app.use(express.static("build"));
 
-app.listen(port, () => {
+ViteExpress.listen(app, port, () => {
   console.log(`Example app listening on port ${port}`);
 });

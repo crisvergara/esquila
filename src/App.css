@@ -176,23 +176,6 @@
   font-size: 42pt;
 }
 
-.Esquilador-monitor p {
-  font-size: 24pt;
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-}
-
-.Esquilador-header {
-    background-color: #c5c8d0;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content:space-evenly;
-    font-size: 36pt;
-    color: black;
-}
-
 .Tag-Display-yellow {
   background-color: #f5f542;
   color: #282c34;
