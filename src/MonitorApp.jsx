@@ -46,7 +46,7 @@ function MonitorApp({ counts, refreshCounts }) {
       <section className="Esquilador-monitor">
         <div className="Esquilador-row">
           <div className="Esquilador-header">
-          <p>Pacheco</p> <p>{counts[1].counted}</p>
+          <p>Salvador</p> <p>{counts[1].counted}</p>
           </div>
           <div className={`Esquilador-Tag-Display-${counts[1].lastTagColor}`}>
             {counts[1].lastTag}
@@ -58,7 +58,7 @@ function MonitorApp({ counts, refreshCounts }) {
         </div>
         <div className="Esquilador-row">
           <div className="Esquilador-header">
-            <p>Pacheco</p> <p>{counts[2].counted}</p>
+            <p>Bastian</p> <p>{counts[2].counted}</p>
           </div>
           <div className={`Esquilador-Tag-Display-${counts[2].lastTagColor}`}>
             {counts[2].lastTag}
@@ -70,7 +70,7 @@ function MonitorApp({ counts, refreshCounts }) {
         </div>
         <div className="Esquilador-row">
           <div className="Esquilador-header">
-          <p>Angel</p> <p>{counts[3].counted}</p>
+          <p>Carlos</p> <p>{counts[3].counted}</p>
           </div>
           <div className={`Esquilador-Tag-Display-${counts[3].lastTagColor}`}>
             {counts[3].lastTag}
