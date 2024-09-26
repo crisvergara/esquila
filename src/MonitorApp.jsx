@@ -32,6 +32,19 @@ const useTimeSince = (isoString) => {
   return timeSince;
 };
 
+const useCurrentTime = () => {
+  const [currentTime, setCurrentTime] = useState(new Date().toISOString());
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(new Date().toISOString());
+    }, 1000);
+    return () => {
+      clearInterval(interval);
+    };
+  }, []);
+  return currentTime;
+};
+
 function EsquiladorRow({ shearer, counts }) {
   const timeSince = useTimeSince(counts[shearer.station].lastScanTime);
   return (
@@ -55,10 +68,11 @@ function MonitorApp({ counts, refreshCounts }) {
   useEffect(() => {
     refreshCounts();
   }, [refreshCounts]);
+  const currentTime = useCurrentTime();
   return (
     <div className="Monitor-app">
       <header className="Monitor-app-header">
-        <p>Shearing Monitor</p>
+        <p>{currentTime}</p>
       </header>
       <section className="Esquilador-monitor">
         {shearers.map((shearer, index) => (
