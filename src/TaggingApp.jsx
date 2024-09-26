@@ -177,11 +177,11 @@ function DigitSelect({ tag, onCancel, addDigit, removeDigit, onSubmit }) {
 function ConfirmScreen({ tag, station, color, lactation, onCancel, onSubmit }) {
   const name = (() => {
     if (station == 1) {
-      return "Angel";
+      return "Bastian";
     } else if (station == 2) {
-      return "Pacheco";
+      return "Carlos";
     } else {
-      return "Jesus";
+      return "Salvador";
     }
   })();
 

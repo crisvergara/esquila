@@ -153,11 +153,11 @@ function DigitSelect({ tag, onCancel, addDigit, removeDigit, onSubmit }) {
 function ConfirmScreen({ tag, station, color, lactation, onCancel, onSubmit }) {
   const name = (() => {
     if (station == 1) {
-      return "Angel";
+      return "Bastian";
     } else if (station == 2) {
-      return "Pacheco";
+      return "Carlos";
     } else {
-      return "Jesus";
+      return "Salvador";
     }
   })();
 
@@ -234,7 +234,7 @@ function SendingScreen() {
  C - Cabereria
 */
 
-function RamApp({ counts, refreshCounts }) {
+function RamApp({ counts, shearers, refreshCounts }) {
   const [station, setStation] = useState(0);
   const [color, setColor] = useState(null);
   const [location, setLocation] = useState(null);
@@ -303,7 +303,13 @@ function RamApp({ counts, refreshCounts }) {
   let screen = null;
 
   if (station === 0) {
-    screen = <StationSelect setStation={setStation} counts={counts} />;
+    screen = (
+      <StationSelect
+        setStation={setStation}
+        shearers={shearers}
+        counts={counts}
+      />
+    );
   } else if (!color) {
     screen = <TagColorSelect onCancel={onCancel} setColor={setColor} />;
   } else if (!location) {
