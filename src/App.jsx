@@ -49,7 +49,11 @@ const App = () => {
     return <RamApp counts={counts} refreshCounts={refreshCounts} />;
   }
   return (
-    <RamApp counts={counts} shearers={shearers} refreshCounts={refreshCounts} />
+    <TaggingApp
+      counts={counts}
+      shearers={shearers}
+      refreshCounts={refreshCounts}
+    />
   );
 };
 
