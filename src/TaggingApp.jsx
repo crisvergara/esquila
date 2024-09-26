@@ -28,6 +28,9 @@ function TagColorSelect({ onCancel, setColor }) {
         >
           Morado
         </button>
+        <button className="Tag-button-red" onClick={() => setColor("red")}>
+          Rojo
+        </button>
         <button className="Tag-button-blue" onClick={() => setColor("blue")}>
           Azúl
         </button>
