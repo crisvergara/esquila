@@ -129,11 +129,6 @@ const writeTag = async (
   
   await refreshCounts();
 
-  countStatsByStation[station].lastTag = tag;
-  countStatsByStation[station].lastTagColor = color;
-  countStatsByStation[station].lastScanTime = dateString;
-  countStatsByStation[station].counted++;
-  countStatsByStation[station][type] += 1;
 };
 
 const writeBulkTags = async (station, quantity) => {
