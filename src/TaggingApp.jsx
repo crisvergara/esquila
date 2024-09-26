@@ -37,9 +37,6 @@ function TagColorSelect({ onCancel, setColor }) {
         >
           Naranjo
         </button>
-        <button className="Tag-button-pink" onClick={() => setColor("pink")}>
-          Rosa
-        </button>
         <button className="Tag-button-none" onClick={() => setColor("none")}>
           No Hay
         </button>
@@ -61,6 +58,7 @@ function BirthLocationSelect({ onCancel, setLocation }) {
         <button onClick={() => setLocation("A")}>A</button>
         <button onClick={() => setLocation("B")}>B</button>
         <button onClick={() => setLocation("C")}>C</button>
+        <button onClick={() => setLocation("S")}>S</button>
         <button onClick={() => setLocation("L")}>L</button>
         <button onClick={() => setLocation("X")}>X</button>
       </section>
