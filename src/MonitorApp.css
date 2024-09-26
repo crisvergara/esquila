@@ -1,158 +1,164 @@
+.Monitor-app {
+  height: 100vh;
+  width: 100vw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
 .Monitor-app-header {
   background-color: #282c34;
   display: flex;
   flex-direction: row;
   align-items: center;
   width: 100%;
-  justify-content:space-evenly;
+  justify-content: space-evenly;
   font-size: calc(48px + 2vmin);
   color: white;
 }
 
 .Esquilador-monitor {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: flex-start;
-    height: 100%;
-    width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  height: 100%;
+  width: 100%;
 }
 
 .Esquilador-row {
-    display: flex;
-    flex: 1;
-    flex-direction: row;
-    align-content: center;
-    justify-content: space-evenly;
-    width: 100vw
+  display: flex;
+  flex: 1;
+  flex-direction: row;
+  align-content: center;
+  justify-content: space-evenly;
+  width: 100vw;
 }
 
-
 .Esquilador-Tag-Display-yellow {
-    background-color: #f5f542;
-    color: #282c34;
-    border: 1px solid #282c34;
-    display: flex;
-    flex: 0 0 33.3333%;
-    flex-direction: row;
-    align-items: center;
-    justify-content:space-evenly;
-    font-size: 96pt;
-  }
-  
-  .Esquilador-Tag-Display-white {
-    background-color: #ffffff;
-    color: #282c34;
-    border-color: #282c34;
-    display: flex;
-    flex: 0 0 33.3333%;
-    flex-direction: row;
-    align-items: center;
-    justify-content:space-evenly;
-    font-size: 96pt;
-  }
-  
-  .Esquilador-Tag-Display-purple {
-    background-color: #a95af5;
-    color: #282c34;
-    border: 1px solid #282c34;
-    display: flex;
-    flex: 0 0 33.3333%;
-    flex-direction: row;
-    align-items: center;
-    justify-content:space-evenly;
-    font-size: 96pt;
-  }
-  
-  .Esquilador-Tag-Display-blue {
-    background-color: #5a9af5;
-    color: #282c34;
-    border: 1px solid #282c34;
-    display: flex;
-    flex: 0 0 33.3333%;
-    flex-direction: row;
-    align-items: center;
-    justify-content:space-evenly;
-    font-size: 96pt;
-  }
-  
-  .Esquilador-Tag-Display-green {
-    background-color: #25d342;
-    color: #282c34;
-    border: 1px solid #282c34;
-    display: flex;
-    flex: 0 0 33.3333%;
-    flex-direction: row;
-    align-items: center;
-    justify-content:space-evenly;
-    font-size: 96pt;
-  }
-  
-  .Esquilador-Tag-Display-orange {
-    background-color: #f5a95a;
-    color: #282c34;
-    border: 1px solid #282c34;
-    display: flex;
-    flex: 0 0 33.3333%;
-    flex-direction: row;
-    align-items: center;
-    justify-content:space-evenly;
-    font-size: 96pt;
-  }
-  
-  .Esquilador-Tag-Display-pink {
-    background-color: #f55a9a;
-    color: #282c34;
-    border: 1px solid #282c34;
-    display: flex;
-    flex: 0 0 33.3333%;
-    flex-direction: row;
-    align-items: center;
-    justify-content:space-evenly;
-    font-size: 96pt;
-  }
-  
-  
-  .Esquilador-Tag-Display-red {
-    background-color: #ef3636;
-    color: #282c34;
-    border: 1px solid #282c34;
-    display: flex;
-    flex: 0 0 33.3333%;
-    flex-direction: row;
-    align-items: center;
-    justify-content:space-evenly;
-    font-size: 96pt;
-  }
-  
-  .Esquilador-Tag-Display-none {
-    background-color: #000000;
-    color: #ffffff;
-    border-color: #282c34;
-    display: flex;
-    flex: 0 0 33.3333%;
-    flex-direction: row;
-    align-items: center;
-    justify-content:space-evenly;
-    font-size: 96pt;
-  }
+  background-color: #f5f542;
+  color: #282c34;
+  border: 1px solid #282c34;
+  display: flex;
+  flex: 0 0 33.3333%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-evenly;
+  font-size: 96pt;
+}
 
+.Esquilador-Tag-Display-white {
+  background-color: #ffffff;
+  color: #282c34;
+  border-color: #282c34;
+  display: flex;
+  flex: 0 0 33.3333%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-evenly;
+  font-size: 96pt;
+}
+
+.Esquilador-Tag-Display-purple {
+  background-color: #a95af5;
+  color: #282c34;
+  border: 1px solid #282c34;
+  display: flex;
+  flex: 0 0 33.3333%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-evenly;
+  font-size: 96pt;
+}
+
+.Esquilador-Tag-Display-blue {
+  background-color: #5a9af5;
+  color: #282c34;
+  border: 1px solid #282c34;
+  display: flex;
+  flex: 0 0 33.3333%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-evenly;
+  font-size: 96pt;
+}
+
+.Esquilador-Tag-Display-green {
+  background-color: #25d342;
+  color: #282c34;
+  border: 1px solid #282c34;
+  display: flex;
+  flex: 0 0 33.3333%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-evenly;
+  font-size: 96pt;
+}
+
+.Esquilador-Tag-Display-orange {
+  background-color: #f5a95a;
+  color: #282c34;
+  border: 1px solid #282c34;
+  display: flex;
+  flex: 0 0 33.3333%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-evenly;
+  font-size: 96pt;
+}
+
+.Esquilador-Tag-Display-pink {
+  background-color: #f55a9a;
+  color: #282c34;
+  border: 1px solid #282c34;
+  display: flex;
+  flex: 0 0 33.3333%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-evenly;
+  font-size: 96pt;
+}
+
+.Esquilador-Tag-Display-red {
+  background-color: #ef3636;
+  color: #282c34;
+  border: 1px solid #282c34;
+  display: flex;
+  flex: 0 0 33.3333%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-evenly;
+  font-size: 96pt;
+}
+
+.Esquilador-Tag-Display-none {
+  background-color: #000000;
+  color: #ffffff;
+  border-color: #282c34;
+  display: flex;
+  flex: 0 0 33.3333%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-evenly;
+  font-size: 96pt;
+}
 
 .Esquilador-monitor p {
-    font-size: 96pt;
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-  }
-  
-  .Esquilador-header {
-      background-color: #c5c8d0;
-      display: flex;
-      flex-direction: row;
-      padding: 0 96pt;
-      align-items: center;
-      justify-content:space-between;
-      flex: 0 0 33.3333%;
-      font-size: 96pt;
-      color: black;
-  }
+  font-size: 96pt;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+}
+
+.Esquilador-header {
+  background-color: #c5c8d0;
+  display: flex;
+  flex-direction: row;
+  padding: 0 96pt;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 33.3333%;
+  font-size: 96pt;
+  color: black;
+}

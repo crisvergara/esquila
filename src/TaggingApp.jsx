@@ -268,7 +268,7 @@ function SendingScreen() {
  C - Cabereria
 */
 
-function TaggingApp({ counts, refreshCounts }) {
+function TaggingApp({ counts, shearers, refreshCounts }) {
   const [station, setStation] = useState(0);
   const [color, setColor] = useState(null);
 
@@ -342,7 +342,13 @@ function TaggingApp({ counts, refreshCounts }) {
   let screen = null;
 
   if (station === 0) {
-    screen = <StationSelect setStation={setStation} counts={counts} />;
+    screen = (
+      <StationSelect
+        setStation={setStation}
+        counts={counts}
+        shearers={shearers}
+      />
+    );
   } else if (!color) {
     screen = <TagColorSelect onCancel={onCancel} setColor={setColor} />;
   } else if (!location) {

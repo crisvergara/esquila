@@ -3,6 +3,7 @@ import MonitorApp from "./MonitorApp";
 import BulkLambApp from "./BulkLambApp";
 import RamApp from "./RamApp";
 import { useState, useEffect, useCallback } from "react";
+import shearers from "../shearers.json";
 
 const App = () => {
   const [counts, setCounts] = useState({
@@ -47,7 +48,13 @@ const App = () => {
   } else if (window.location.hash === "#ram") {
     return <RamApp counts={counts} refreshCounts={refreshCounts} />;
   }
-  return <TaggingApp counts={counts} refreshCounts={refreshCounts} />;
+  return (
+    <TaggingApp
+      counts={counts}
+      shearers={shearers}
+      refreshCounts={refreshCounts}
+    />
+  );
 };
 
 export default App;

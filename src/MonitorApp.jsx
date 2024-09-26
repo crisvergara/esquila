@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import shearers from "../shearers.json";
 
 import "./MonitorApp.css";
 
@@ -31,57 +32,40 @@ const useTimeSince = (isoString) => {
   return timeSince;
 };
 
+function EsquiladorRow({ shearer, counts }) {
+  const timeSince = useTimeSince(counts[shearer.station].lastScanTime);
+  return (
+    <div className="Esquilador-row">
+      <div className="Esquilador-header">
+        <p>{shearer.name}</p> <p>{counts[shearer.station].counted}</p>
+      </div>
+      <div
+        className={`Esquilador-Tag-Display-${
+          counts[shearer.station].lastTagColor
+        }`}
+      >
+        {counts[shearer.station].lastTag}
+      </div>
+      <div className={`Esquilador-Tag-Display-none`}>{timeSince}</div>
+    </div>
+  );
+}
+
 function MonitorApp({ counts, refreshCounts }) {
   useEffect(() => {
     refreshCounts();
   }, [refreshCounts]);
-  const timeSince1 = useTimeSince(counts[1].lastScanTime);
-  const timeSince2 = useTimeSince(counts[2].lastScanTime);
-  const timeSince3 = useTimeSince(counts[3].lastScanTime);
   return (
-    <>
+    <div className="Monitor-app">
       <header className="Monitor-app-header">
         <p>Shearing Monitor</p>
       </header>
       <section className="Esquilador-monitor">
-        <div className="Esquilador-row">
-          <div className="Esquilador-header">
-          <p>Bastian</p> <p>{counts[1].counted}</p>
-          </div>
-          <div className={`Esquilador-Tag-Display-${counts[1].lastTagColor}`}>
-            {counts[1].lastTag}
-          </div>
-          <div className={`Esquilador-Tag-Display-none`}>{timeSince1}</div>
-          {/*<div className={`Tag-Display-none`}>
-            B: {counts[1].borrega} -- C: {counts[1].carnero}
-  </div>*/}
-        </div>
-        <div className="Esquilador-row">
-          <div className="Esquilador-header">
-            <p>Carlos</p> <p>{counts[2].counted}</p>
-          </div>
-          <div className={`Esquilador-Tag-Display-${counts[2].lastTagColor}`}>
-            {counts[2].lastTag}
-          </div>
-          <div className={`Esquilador-Tag-Display-none`}>{timeSince2}</div>
-          {/*<div className={`Tag-Display-none`}>
-            B: {counts[2].borrega} -- C: {counts[2].carnero}
-</div>*/}
-        </div>
-        <div className="Esquilador-row">
-          <div className="Esquilador-header">
-          <p>Salvador</p> <p>{counts[3].counted}</p>
-          </div>
-          <div className={`Esquilador-Tag-Display-${counts[3].lastTagColor}`}>
-            {counts[3].lastTag}
-          </div>
-          <div className={`Esquilador-Tag-Display-none`}>{timeSince3}</div>
-          {/*<div className={`Tag-Display-none`}>
-            B: {counts[3].borrega} -- C: {counts[3].carnero}
-</div>*/}
-        </div>
+        {shearers.map((shearer, index) => (
+          <EsquiladorRow key={index} shearer={shearer} counts={counts} />
+        ))}
       </section>
-    </>
+    </div>
   );
 }
 
