@@ -94,7 +94,7 @@ function WoolQualitySelection({ onCancel, setWoolQuality }) {
         </button>
       </header>
       <section className="Tag-buttons">
-        <button onClick={() => setWoolQuality("BAD")}>BAD</button>
+        <button onClick={() => setWoolQuality("BAD")}>MALO</button>
         <button onClick={() => setWoolQuality("GOOD")}>GOOD</button>
         <button onClick={() => setWoolQuality("EXCELLENT")}>EXCELLENT</button>
       </section>
