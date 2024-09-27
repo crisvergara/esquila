@@ -46,7 +46,7 @@ function MobileMonitorApp({ counts, refreshCounts }) {
       <section className="Esquilador-mobile-monitor">
         <div>
           <div className="Esquilador-mobile-header">
-            1: Angel -- {counts[1].counted}
+            1: Bastian -- {counts[1].counted}
           </div>
           <div className={`Tag-Display-none`}>Tiempo: {timeSince1}</div>
           {/*<div className={`Tag-Display-none`}>
@@ -58,7 +58,7 @@ function MobileMonitorApp({ counts, refreshCounts }) {
         </div>
         <div>
           <div className="Esquilador-mobile-header">
-            2: Pacheco -- {counts[2].counted}
+            2: Carlos -- {counts[2].counted}
           </div>
           <div className={`Tag-Display-none`}>Tiempo: {timeSince2}</div>
           {/*<div className={`Tag-Display-none`}>
@@ -70,7 +70,7 @@ function MobileMonitorApp({ counts, refreshCounts }) {
         </div>
         <div>
           <div className="Esquilador-mobile-header">
-            3: Jesus -- {counts[3].counted}
+            3: Salvador -- {counts[3].counted}
           </div>
           <div className={`Tag-Display-none`}>Tiempo: {timeSince3}</div>
           {/*<div className={`Tag-Display-none`}>
