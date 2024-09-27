@@ -87,6 +87,7 @@ const readTagsFromDb = () => {
     db.all(
       `
         SELECT rowid, tag, station, color, lactation, type, woolQuality, date FROM counts
+        WHERE date > date()
         ORDER BY date;
       `,
       (error, rows) => {
