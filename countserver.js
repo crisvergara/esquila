@@ -90,8 +90,6 @@ const readTagsFromDb = () => {
         ORDER BY date;
       `,
       (error, rows) => {
-        console.log(error);
-        console.log(rows);
         error ? reject(error) : resolve(rows);
       }
     );
@@ -142,7 +140,6 @@ const writeBulkTags = async (station, quantity) => {
 
 const getStatsFromDb = async () => {
   const tags = await readTagsFromDb();
-  console.log(tags);
   const stats = {
     1: {
       lastRowId: 0,
@@ -187,7 +184,6 @@ const getStatsFromDb = async () => {
 };
 
 app.post("/count", bodyParser.json(), (req, res) => {
-  console.log("Request received");
   if (!req.body.tag || !req.body.station || !req.body.color) {
     res.sendStatus(400);
   }
@@ -200,11 +196,13 @@ app.post("/count", bodyParser.json(), (req, res) => {
     req.body.woolQuality ?? "IDK"
   )
     .then(() => res.sendStatus(200))
-    .catch((err) => res.sendStatus(500));
+    .catch((err) => {
+      console.error(err);
+      res.sendStatus(500);
+    });
 });
 
 app.post("/bulk", bodyParser.json(), (req, res) => {
-  console.log("Bulk Request received");
   if (!req.body.station || !req.body.quantity) {
     res.sendStatus(400);
   }
