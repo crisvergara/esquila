@@ -74,6 +74,7 @@ function MonitorApp({ counts, refreshCounts }) {
   return (
     <div className="Monitor-app">
       <header className="Monitor-app-header">
+        <img src="/qr.png" alt="QR Code" />
         <p>{currentTime}</p>
       </header>
       <section className="Esquilador-monitor">

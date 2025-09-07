@@ -2,6 +2,9 @@ import express from 'express';
 import bodyParser from 'body-parser';
 import sqlite3 from 'sqlite3';
 import ViteExpress from 'vite-express';
+import QRCode from 'qrcode';
+import os from 'os';
+
 const app = express();
 const port = 3001;
 
@@ -219,6 +222,11 @@ app.post("/bulk", bodyParser.json(), (req, res) => {
 
 app.get("/count", (req, res) => {
   res.json(countStatsByStation);
+});
+
+app.get("/qr.png", (req, res) => {
+  const url = `http://${Object.values(os.networkInterfaces()).flat().find(addr => !addr.internal && addr.family === 'IPv4')?.address}:3001#app`;
+  QRCode.toFileStream(res, url);
 });
 
 // parse various different custom JSON types as JSON
