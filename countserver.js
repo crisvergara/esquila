@@ -3,11 +3,21 @@ import bodyParser from 'body-parser';
 import Database from 'better-sqlite3';
 import QRCode from 'qrcode';
 import os from 'os';
+import { PassThrough } from 'node:stream';
+import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 
 const app = express();
 const port = 3001;
 
 const db = new Database('esquila', {});
+
+const s3Client = new S3Client(/*{
+  region: 'us-east-1',
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  },
+}*/);
 
 const createCountTable = db.prepare(`
   CREATE TABLE IF NOT EXISTS counts (
@@ -212,6 +222,45 @@ app.get("/qr.png", (req, res) => {
 
 app.use(express.static("build"));
 
-app.listen(port, () => {
+app.listen(port, async () => {
+  const url = `http://${Object.values(os.networkInterfaces()).flat().find(addr => !addr.internal && addr.family === 'IPv4')?.address}:3001#app`;
+  
+  try {
+    // Create a PassThrough stream to collect QR code data
+    const pass = new PassThrough();
+    const chunks = [];
+    
+    // Collect data as it's written
+    pass.on('data', (chunk) => {
+      chunks.push(chunk);
+    });
+    
+    pass.on('end', async () => {
+      // Convert chunks to buffer
+      const qrBuffer = Buffer.concat(chunks);
+      
+      // Upload to S3
+      const command = new PutObjectCommand({
+        Bucket: 'sheepplusplus-backups',
+        Key: 'qr.png',
+        Body: qrBuffer,
+        ContentType: 'image/png'
+      });
+      
+      try {
+        await s3Client.send(command);
+        console.log('QR code uploaded to S3 successfully');
+      } catch (err) {
+        console.error('Failed to upload QR code to S3:', err);
+      }
+    });
+    
+    // Generate QR code to the PassThrough stream
+    QRCode.toFileStream(pass, url);
+    
+  } catch (err) {
+    console.error('Failed to generate QR code:', err);
+  }
+  
   console.log(`Go count some sheep! App listening on port ${port}`);
 });
