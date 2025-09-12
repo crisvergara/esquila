@@ -1,28 +1,33 @@
 import express from 'express';
 import bodyParser from 'body-parser';
-import sqlite3 from 'sqlite3';
-import ViteExpress from 'vite-express';
+import Database from 'better-sqlite3';
 import QRCode from 'qrcode';
 import os from 'os';
 
 const app = express();
 const port = 3001;
 
-const db = new sqlite3.Database('esquila');
+const db = new Database('esquila', {});
 
-db.serialize(() => {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS counts (
-      tag TEXT,
-      station INTEGER,
-      color TEXT,
-      lactation TEXT,
-      type TEXT,
-      woolQuality TEXT,
-      date TEXT
-    )
-  `);
-});
+const createCountTable = db.prepare(`
+  CREATE TABLE IF NOT EXISTS counts (
+    tag TEXT,
+    station INTEGER,
+    color TEXT,
+    lactation TEXT,
+    type TEXT,
+    woolQuality TEXT,
+    date TEXT
+  )
+`);
+
+createCountTable.run();
+
+const readTagsFromDb = db.prepare(`
+  SELECT rowid, tag, station, color, lactation, type, woolQuality, date FROM counts
+  WHERE date > date()
+  ORDER BY date;
+`);
 
 let lambs = 0;
 
@@ -70,35 +75,10 @@ setInterval(async () => {
   await refreshCounts();
 }, 5000);
 
-const writeTagToDb = (tag, station, color, lactation, type, woolQuality, date) => {
-  return new Promise((resolve, reject) => {
-    db.run(
-      `
-        INSERT INTO counts (tag, station, color, lactation, type, woolQuality, date)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-      `,
-      [tag, station, color, lactation, type, woolQuality, date],
-      (result, error) => {
-        error ? reject(error) : resolve(result);
-      }
-    );
-  });
-}
-
-const readTagsFromDb = () => {
-  return new Promise((resolve, reject) => {
-    db.all(
-      `
-        SELECT rowid, tag, station, color, lactation, type, woolQuality, date FROM counts
-        WHERE date > date()
-        ORDER BY date;
-      `,
-      (error, rows) => {
-        error ? reject(error) : resolve(rows);
-      }
-    );
-  });
-};
+const writeTagToDb = db.prepare(`
+  INSERT INTO counts (tag, station, color, lactation, type, woolQuality, date)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
+`);
 
 const updateTagByRowId = (rowid, tag, station, color, lactation, type, woolQuality, date) => {
   return new Promise((resolve, reject) => {
@@ -127,7 +107,7 @@ const writeTag = async (
   const d = new Date();
   const dateString = d.toISOString();
 
-  await writeTagToDb(tag, station, color, lactation, type, woolQuality, dateString);
+  writeTagToDb.run(tag, station, color, lactation, type, woolQuality, dateString);
   
   await refreshCounts();
 
@@ -143,7 +123,7 @@ const writeBulkTags = async (station, quantity) => {
 };
 
 const getStatsFromDb = async () => {
-  const tags = await readTagsFromDb();
+  const tags = readTagsFromDb.iterate();
   const stats = {
     1: {
       lastRowId: 0,
@@ -229,9 +209,9 @@ app.get("/qr.png", (req, res) => {
   QRCode.toFileStream(res, url);
 });
 
-// parse various different custom JSON types as JSON
+
 app.use(express.static("build"));
 
-ViteExpress.listen(app, port, () => {
-  console.log(`Example app listening on port ${port}`);
+app.listen(port, () => {
+  console.log(`Go count some sheep! App listening on port ${port}`);
 });
