@@ -5,6 +5,14 @@ export default defineConfig(() => {
   return {
     build: {
       outDir: 'build',
+      rollupOptions: {
+        input: {
+          main: './index.html',
+          tagger: './tagger/index.html',
+          monitor: './monitor/index.html',
+          mobilemonitor: './mobilemonitor/index.html',
+        },
+      },
     },
     publicDir: 'public',
     plugins: [react()],

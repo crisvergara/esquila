@@ -1,0 +1,240 @@
+[
+  {
+    "type": "oveja",
+    "tagSchema": {
+      "colors": [
+        {
+          "name": "Amarillo",
+          "value": "yellow",
+          "color": "#f5f542",
+          "text": "#282c34"
+        },
+        {
+          "name": "Blanco",
+          "value": "white",
+          "color": "#ffffff",
+          "text": "#282c34"
+        },
+        {
+          "name": "Morado",
+          "value": "purple",
+          "color": "#a95af5",
+          "text": "#282c34"
+        },
+        {
+          "name": "Azul",
+          "value": "blue",
+          "color": "#5a9af5",
+          "text": "#282c34"
+        },
+        {
+          "name": "Naranja",
+          "value": "orange",
+          "color": "#f5a95a",
+          "text": "#282c34"
+        },
+        {
+          "name": "Rosa",
+          "value": "pink",
+          "color": "#f55a9a",
+          "text": "#282c34"
+        },
+        {
+          "name": "Rojo",
+          "value": "red",
+          "color": "#ef3636",
+          "text": "#282c34"
+        },
+        {
+          "name": "No Hay",
+          "value": "none",
+          "color": "#000000",
+          "text": "#ffffff"
+        }
+      ],
+      "textSchema": [
+        {
+          "type": "code",
+          "options": [
+            {
+              "name": "A",
+              "value": "A"
+            },
+            {
+              "name": "B",
+              "value": "B"
+            },
+            {
+              "name": "C",
+              "value": "C"
+            },
+            {
+              "name": "S",
+              "value": "S"
+            },
+            {
+              "name": "L",
+              "value": "L"
+            },
+            {
+              "name": "X",
+              "value": "X"
+            }
+          ]
+        },
+        {
+          "type": "digits",
+          "min": 5,
+          "max": 6
+        }
+      ]
+    },
+    "surveySchema": [
+      {
+        "field": "woolQuality",
+        "display": "Calidad",
+        "options": [
+          {
+            "name": "Malo",
+            "value": "BAD"
+          },
+          {
+            "name": "Bueno",
+            "value": "GOOD"
+          },
+          {
+            "name": "Excelente",
+            "value": "EXCELLENT"
+          }
+        ]
+      },
+      {
+        "field": "lactation",
+        "display": "Lactante",
+        "options": [
+          {
+            "name": "OK",
+            "value": "OK"
+          },
+          {
+            "name": "Seca",
+            "value": "dry"
+          },
+          {
+            "name": "No sé",
+            "value": "idk"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "type": "carnero",
+    "tagSchema": {
+      "colors": [
+        {
+          "name": "Amarillo",
+          "value": "yellow",
+          "color": "#f5f542",
+          "text": "#282c34"
+        },
+        {
+          "name": "Blanco",
+          "value": "white",
+          "color": "#ffffff",
+          "text": "#282c34"
+        },
+        {
+          "name": "Morado",
+          "value": "purple",
+          "color": "#a95af5",
+          "text": "#282c34"
+        },
+        {
+          "name": "Rojo",
+          "value": "red",
+          "color": "#ef3636",
+          "text": "#282c34"
+        },
+        {
+          "name": "Azul",
+          "value": "blue",
+          "color": "#5a9af5",
+          "text": "#282c34"
+        },
+        {
+          "name": "Verde",
+          "value": "green",
+          "color": "#25d342",
+          "text": "#282c34"
+        },
+        {
+          "name": "Naranja",
+          "value": "orange",
+          "color": "#f5a95a",
+          "text": "#282c34"
+        },
+        {
+          "name": "Rosa",
+          "value": "pink",
+          "color": "#f55a9a",
+          "text": "#282c34"
+        },
+        {
+          "name": "No Hay",
+          "value": "none",
+          "color": "#000000",
+          "text": "#ffffff"
+        }
+      ],
+      "textSchema": [
+        {
+          "type": "code",
+          "options": [
+            {
+              "name": "A",
+              "value": "A"
+            },
+            {
+              "name": "B",
+              "value": "B"
+            },
+            {
+              "name": "C",
+              "value": "C"
+            },
+            {
+              "name": "S",
+              "value": "S"
+            },
+            {
+              "name": "AC",
+              "value": "AC"
+            },
+            {
+              "name": "BC",
+              "value": "BC"
+            },
+            {
+              "name": "CB",
+              "value": "CB"
+            },
+            {
+              "name": "SC",
+              "value": "SC"
+            },
+            {
+              "name": "X",
+              "value": "X"
+            }
+          ]
+        },
+        {
+          "type": "digits",
+          "min": 5,
+          "max": 6
+        }
+      ]
+    }
+  }
+]

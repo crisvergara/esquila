@@ -1,7 +1,6 @@
-import BulkLambApp from "./BulkLambApp";
 import { useState, useEffect, useCallback } from "react";
 
-const App = () => {
+const useCounts = () => {
   const [counts, setCounts] = useState({
     1: {
       lastTag: "",
@@ -24,6 +23,7 @@ const App = () => {
     const countsRes = await fetch("/count");
     setCounts(await countsRes.json());
   }, []);
+
   useEffect(() => {
     let interval = setInterval(async () => {
       try {
@@ -37,10 +37,11 @@ const App = () => {
     };
   }, [refreshCounts]);
 
-  if (window.location.hash === "#bulk") {
-    return <BulkLambApp counts={counts} refreshCounts={refreshCounts} />;
-  }
-  return <></>;
+  useEffect(() => {
+    refreshCounts();
+  }, [refreshCounts]);
+
+  return { counts, refreshCounts };
 };
 
-export default App;
+export default useCounts;
