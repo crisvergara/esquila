@@ -1,4 +1,3 @@
-import "./StationSelect.css";
 import React from "react";
 
 function StationSelect({ setStation, counts, shearers }) {

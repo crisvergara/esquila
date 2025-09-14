@@ -236,5 +236,9 @@
         }
       ]
     }
+  },
+  {
+    "type": "carnillero",
+    "bulk": true
   }
 ]

@@ -1,13 +1,11 @@
-import { useState, useReducer } from "react";
+import { useState, useEffect, useReducer } from "react";
 
 import "./Tagger.css";
-import StationSelect from "../src/components/StationSelect";
+import StationSelect from "./StationSelect";
 import shearers from "../shearers.json";
-import modes from "./modeschema.json";
 import useCounts from "../hooks/useCounts";
 import useTagEditor from "../hooks/useTagEditor";
-
-const mode = modes[1];
+import useTaggingMode from "../hooks/useTaggingMode";
 
 function TagColorSelect({ tagSchema, onCancel, setColor }) {
   const colors = tagSchema.colors;
@@ -71,7 +69,8 @@ function SurveySelect({ surveySchema, onCancel, setSurvey }) {
 }
 
 function DigitSelect({
-  tag,
+  display,
+  headerText,
   canSubmit,
   disableDigits,
   onCancel,
@@ -95,10 +94,10 @@ function DigitSelect({
         <button onClick={onCancel} className="Cancel-button">
           Cancela
         </button>
-        <p>Elija los numeros</p>
+        <p>{headerText}</p>
       </header>
       <section className="Tag-display">
-        <p>{tag}</p>
+        <p>{display}</p>
       </section>
       <section className="Tag-buttons">
         <section className="Tag-button-row">
@@ -143,6 +142,29 @@ function DigitSelect({
             ✔
           </button>
         </section>
+      </section>
+    </>
+  );
+}
+
+function QuantityConfirmScreen({ quantity, station, onCancel, onSubmit }) {
+  const name = shearers[station - 1].name;
+
+  return (
+    <>
+      <header className="App-header">
+        <button onClick={onCancel} className="Cancel-button">
+          Cancelar
+        </button>
+        <p>Confirmar</p>
+      </header>
+      <section className="Tag-display">
+        <p>Esqilador: {name}</p>
+        <p style={{}}>Qty: {quantity}</p>
+      </section>
+      <section className="Tag-buttons">
+        <button onClick={(ev) => onSubmit(ev)}>OK</button>
+        <button onClick={() => onCancel()}>Cancelar</button>
       </section>
     </>
   );
@@ -261,8 +283,22 @@ function SendingScreen() {
 
 function TaggingApp() {
   const [station, setStation] = useState(0);
+  const [quantity, setQuantity] = useState("");
+  const [quantitySubmitted, setQuantitySubmitted] = useState(false);
+
+  const onSubmitQuantity = () => {
+    setQuantitySubmitted(true);
+  };
+  const addDigit = (x) => {
+    setQuantity(quantity + x);
+  };
+
+  const removeDigit = () => {
+    setQuantity(quantity.slice(0, -1));
+  };
 
   const [showMessage, setShowMessage] = useState(null);
+  const mode = useTaggingMode();
 
   const {
     color,
@@ -319,6 +355,8 @@ function TaggingApp() {
     setStation(0);
     resetTag();
     resetSurvey();
+    setQuantity("");
+    setQuantitySubmitted(false);
     setShowMessage(null);
   };
 
@@ -326,6 +364,7 @@ function TaggingApp() {
     ev.preventDefault();
     try {
       setShowMessage("sending");
+
       await fetch("/count", {
         method: "POST",
         headers: {
@@ -333,9 +372,9 @@ function TaggingApp() {
         },
         body: JSON.stringify({
           type: mode.type,
+          station,
           tag,
           color: color.value,
-          station,
           ...surveyResponses,
         }),
       });
@@ -353,6 +392,38 @@ function TaggingApp() {
     }, 1000);
   };
 
+  const onBulkSubmit = async (ev) => {
+    ev.preventDefault();
+    try {
+      setShowMessage("sending");
+      await fetch("/bulk", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          quantity,
+          station,
+        }),
+      });
+      setShowMessage("success");
+    } catch (err) {
+      setShowMessage("failed");
+    }
+    setTimeout(async () => {
+      try {
+        await refreshCounts();
+      } catch (error) {
+        console.error(error);
+      }
+      onCancel();
+    }, 1000);
+  };
+
+  useEffect(() => {
+    onCancel();
+  }, [mode]);
+
   let screen = null;
 
   if (station === 0) {
@@ -363,39 +434,60 @@ function TaggingApp() {
         shearers={shearers}
       />
     );
-  } else if (needsColor && !color) {
+  } else if (mode.tagSchema) {
+    if (needsColor && !color) {
+      screen = (
+        <TagColorSelect
+          tagSchema={mode.tagSchema}
+          onCancel={onCancel}
+          setColor={setColor}
+        />
+      );
+    } else if (!tagCompleted) {
+      const textSchema = mode.tagSchema.textSchema[nextTagStepIndex];
+      if (textSchema.type === "code") {
+        screen = (
+          <CodeSelect
+            codeSchema={textSchema}
+            onCancel={onCancel}
+            setCode={(code) =>
+              replaceTagComponent(nextTagStepIndex, {
+                value: code,
+                valid: true,
+              })
+            }
+          />
+        );
+      } else if (textSchema.type === "digits") {
+        screen = (
+          <DigitSelect
+            display={tag}
+            headerText={"Elija los numeros"}
+            canSubmit={tag.length >= textSchema.min}
+            disableDigits={tag.length >= textSchema.max}
+            onCancel={onCancel}
+            addDigit={(digit) =>
+              addDigitToTagComponent(nextTagStepIndex, digit)
+            }
+            removeDigit={() => removeDigitFromTagComponent(nextTagStepIndex)}
+            onSubmit={() => setDigitsValid(nextTagStepIndex)}
+          />
+        );
+      }
+    }
+  } else if (mode.bulk && !quantitySubmitted) {
     screen = (
-      <TagColorSelect
-        tagSchema={mode.tagSchema}
+      <DigitSelect
+        display={quantity}
+        headerText={"¿Cuantos cordilleros hay?"}
+        canSubmit={quantity.length >= 1}
+        disableDigits={false}
         onCancel={onCancel}
-        setColor={setColor}
+        addDigit={addDigit}
+        removeDigit={removeDigit}
+        onSubmit={onSubmitQuantity}
       />
     );
-  } else if (!tagCompleted) {
-    const textSchema = mode.tagSchema.textSchema[nextTagStepIndex];
-    if (textSchema.type === "code") {
-      screen = (
-        <CodeSelect
-          codeSchema={textSchema}
-          onCancel={onCancel}
-          setCode={(code) =>
-            replaceTagComponent(nextTagStepIndex, { value: code, valid: true })
-          }
-        />
-      );
-    } else if (textSchema.type === "digits") {
-      screen = (
-        <DigitSelect
-          tag={tag}
-          canSubmit={tag.length >= textSchema.min}
-          disableDigits={tag.length >= textSchema.max}
-          onCancel={onCancel}
-          addDigit={(digit) => addDigitToTagComponent(nextTagStepIndex, digit)}
-          removeDigit={() => removeDigitFromTagComponent(nextTagStepIndex)}
-          onSubmit={() => setDigitsValid(nextTagStepIndex)}
-        />
-      );
-    }
   } else if (!surveyFullfilled) {
     const surveySchema = mode.surveySchema[nextSurveyStepIndex];
     screen = (
@@ -411,12 +503,23 @@ function TaggingApp() {
     screen = <FailedScreen />;
   } else if (showMessage === "sending") {
     screen = <SendingScreen />;
+  } else if (mode.bulk) {
+    screen = (
+      <QuantityConfirmScreen
+        quantity={quantity}
+        station={station}
+        onCancel={onCancel}
+        onSubmit={onBulkSubmit}
+      />
+    );
   } else {
     screen = (
       <ConfirmScreen
         tag={tag}
         station={station}
         color={color}
+        mode={mode}
+        quantity={quantity}
         tagSchema={mode.tagSchema}
         surveySchema={mode.surveySchema}
         surveyResponses={surveyResponses}

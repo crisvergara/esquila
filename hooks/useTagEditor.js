@@ -78,11 +78,11 @@ const useTagEditor = (tagSchema) => {
   );
 
   const tag = tagState.textComponent.map((tc) => tc.value).join("");
-  const needsColor = tagSchema.colors && !tagState.color;
+  const needsColor = tagSchema?.colors && !tagState.color;
   const nextTagStepIndex = tagState.textComponent.filter(
     (tc) => tc.valid
   ).length;
-  const tagCompleted = nextTagStepIndex === tagSchema.textSchema.length;
+  const tagCompleted = nextTagStepIndex === tagSchema?.textSchema.length;
 
   const setColor = (color) => {
     dispatchTagState({ type: "setColor", color });

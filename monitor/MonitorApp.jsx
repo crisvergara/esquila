@@ -5,19 +5,15 @@ import useCounts from "../hooks/useCounts";
 import useCurrentTime from "../hooks/useCurrentTime";
 import useTimeSince from "../hooks/useTimeSince";
 
-function EsquiladorRow({ shearer, counts }) {
-  const timeSince = useTimeSince(counts[shearer.station].lastScanTime);
+function EsquiladorRow({ shearer, count }) {
+  const timeSince = useTimeSince(count.lastScanTime);
   return (
     <div className="Esquilador-row">
       <div className="Esquilador-header">
-        <p>{shearer.name}</p> <p>{counts[shearer.station].counted}</p>
+        <p>{shearer.name}</p> <p>{count.counted}</p>
       </div>
-      <div
-        className={`Esquilador-Tag-Display-${
-          counts[shearer.station].lastTagColor
-        }`}
-      >
-        {counts[shearer.station].lastTag}
+      <div className={`Esquilador-Tag-Display-${count.lastTagColor}`}>
+        {count.lastTag}
       </div>
       <div className={`Esquilador-Tag-Display-none`}>{timeSince}</div>
     </div>
@@ -35,7 +31,11 @@ function MonitorApp() {
       </header>
       <section className="Esquilador-monitor">
         {shearers.map((shearer, index) => (
-          <EsquiladorRow key={index} shearer={shearer} counts={counts} />
+          <EsquiladorRow
+            key={index}
+            shearer={shearer}
+            count={counts[index + 1]}
+          />
         ))}
       </section>
     </div>

@@ -9,26 +9,29 @@ import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import nodemailer from "nodemailer";
 import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
 import { unlink } from "node:fs/promises";
+import EventEmitter from "events";
+
+const modeEmitter = new EventEmitter();
 
 const app = express();
 const port = 3001;
 
 const db = new Database("esquila", {});
 
-const s3Client = new S3Client(/*{
-  region: 'us-east-1',
+const s3Client = new S3Client({
+  region: "us-east-1",
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
-}*/);
-const sesClient = new SESv2Client(/*{
-  region: 'us-east-1',
+});
+const sesClient = new SESv2Client({
+  region: "us-east-1",
   credentials: {
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
   },
-}*/);
+});
 
 const transporter = nodemailer.createTransport({
   SES: { sesClient, SendEmailCommand },
@@ -47,6 +50,38 @@ const createCountTable = db.prepare(`
 `);
 
 createCountTable.run();
+
+const createSettingsTable = db.prepare(`
+  CREATE TABLE IF NOT EXISTS settings (
+    mode TEXT,
+    email TEXT
+  )
+`);
+
+createSettingsTable.run();
+
+const getSettingsFromDb = db.prepare(`
+  SELECT mode, email FROM settings
+`);
+
+const setSettingsFromDb = db.prepare(`
+  INSERT INTO settings (mode, email) VALUES (?, ?)
+`);
+
+const updateSettingsFromDb = db.prepare(`
+  UPDATE settings SET mode = ?
+`);
+let mode, email;
+// If there is no mode in the database, set it to "oveja"
+let settings = getSettingsFromDb.get();
+if (!settings) {
+  setSettingsFromDb.run("oveja", "esquila@sheepplusplus.com");
+  mode = "oveja";
+  email = "esquila@sheepplusplus.com";
+} else {
+  mode = settings.mode;
+  email = settings.email;
+}
 
 const backupDb = async () => {
   const backupName = `esquila-${new Date().toISOString()}.sqlite`;
@@ -286,14 +321,43 @@ app.get("/qr.png", (req, res) => {
   QRCode.toFileStream(res, url);
 });
 
+app.post("/mode", bodyParser.json(), (req, res) => {
+  updateSettingsFromDb.run(req.body.mode);
+  mode = req.body.mode;
+  modeEmitter.emit("modeswitch", req.body.mode);
+  res.sendStatus(200);
+});
+
+app.get("/sse", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+  res.write(`data: ${JSON.stringify({ mode })}\n\n`);
+
+  const modeSwitchHandler = (mode) => {
+    res.write(`data: ${JSON.stringify({ mode })}\n\n`);
+  };
+  modeEmitter.on("modeswitch", modeSwitchHandler);
+  res.on("close", () => {
+    modeEmitter.off("count", modeSwitchHandler);
+  });
+});
+
 app.use(express.static("build"));
 
 app.listen(port, async () => {
-  const url = `http://${
+  const taggerUrl = `http://${
     Object.values(os.networkInterfaces())
       .flat()
       .find((addr) => !addr.internal && addr.family === "IPv4")?.address
   }:3001/tagger`;
+
+  const mobileMonitorUrl = `http://${
+    Object.values(os.networkInterfaces())
+      .flat()
+      .find((addr) => !addr.internal && addr.family === "IPv4")?.address
+  }:3001/mobilemonitor`;
 
   try {
     // Create a PassThrough stream to collect QR code data
@@ -311,10 +375,12 @@ app.listen(port, async () => {
 
       const info = await transporter.sendMail({
         from: "esquila@sheepplusplus.com",
-        to: "esquila@sheepplusplus.com",
+        to: email,
         subject: "QR code generated for sheep app!",
         text: `The QR code has been generated for the sheep app and is attached.
-        The URL is ${url}.`,
+The URL is ${taggerUrl}.
+
+The mobile monitor URL is ${mobileMonitorUrl}.`,
         attachments: [
           {
             filename: "qr.png",
@@ -326,7 +392,7 @@ app.listen(port, async () => {
     });
 
     // Generate QR code to the PassThrough stream
-    QRCode.toFileStream(pass, url);
+    QRCode.toFileStream(pass, taggerUrl);
   } catch (err) {
     console.error("Failed to generate QR code:", err);
   }
