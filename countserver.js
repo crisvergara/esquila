@@ -136,7 +136,7 @@ const readTagsFromDb = db.prepare(`
 const searchSheepByTag = db.prepare(`
   SELECT rowid, tag, station, color, lactation, type, woolQuality, vaccinated, vaccinationDate, date
   FROM counts
-  WHERE tag = ? AND date > date()
+  WHERE tag = ?
   ORDER BY date
 `);
 
