@@ -51,6 +51,18 @@ const createCountTable = db.prepare(`
 
 createCountTable.run();
 
+// Add vaccination columns (safe to re-run once columns exist)
+try {
+  db.exec("ALTER TABLE counts ADD COLUMN vaccinated INTEGER DEFAULT 0");
+} catch (e) {
+  // Column already exists
+}
+try {
+  db.exec("ALTER TABLE counts ADD COLUMN vaccinationDate TEXT");
+} catch (e) {
+  // Column already exists
+}
+
 const createSettingsTable = db.prepare(`
   CREATE TABLE IF NOT EXISTS settings (
     mode TEXT,
@@ -119,6 +131,17 @@ const readTagsFromDb = db.prepare(`
   SELECT rowid, tag, station, color, lactation, type, woolQuality, date FROM counts
   WHERE date > date()
   ORDER BY date;
+`);
+
+const searchSheepByTag = db.prepare(`
+  SELECT rowid, tag, station, color, lactation, type, woolQuality, vaccinated, vaccinationDate, date
+  FROM counts
+  WHERE tag = ? AND date > date()
+  ORDER BY date
+`);
+
+const vaccinateSheepByRowid = db.prepare(`
+  UPDATE counts SET vaccinated = 1, vaccinationDate = ? WHERE rowid = ?
 `);
 
 let lambs = 0;
@@ -342,6 +365,29 @@ app.get("/sse", (req, res) => {
   res.on("close", () => {
     modeEmitter.off("count", modeSwitchHandler);
   });
+});
+
+app.get("/sheep", (req, res) => {
+  const tag = req.query.tag;
+  if (!tag) {
+    return res.status(400).json({ error: "tag parameter required" });
+  }
+  const rows = searchSheepByTag.all(tag);
+  res.json(rows);
+});
+
+app.post("/vaccinate", bodyParser.json(), (req, res) => {
+  const { rowid } = req.body;
+  if (!rowid) {
+    return res.status(400).json({ error: "rowid required" });
+  }
+  try {
+    vaccinateSheepByRowid.run(new Date().toISOString(), rowid);
+    res.sendStatus(200);
+  } catch (err) {
+    console.error(err);
+    res.sendStatus(500);
+  }
 });
 
 app.use(express.static("build"));

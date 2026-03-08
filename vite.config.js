@@ -11,6 +11,7 @@ export default defineConfig(() => {
           tagger: './tagger/index.html',
           monitor: './monitor/index.html',
           mobilemonitor: './mobilemonitor/index.html',
+          vaccinator: './vaccinator/index.html',
         },
       },
     },
