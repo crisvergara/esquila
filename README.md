@@ -113,5 +113,4 @@ Edit `shearers.json` to change shearer names. Station numbers correspond to arra
 ```
 
 ## Configuring Modes & Tag Schemas
-
 Edit `tagger/modeschema.json` to add/remove modes, change available tag colors, letter codes, or survey questions.
