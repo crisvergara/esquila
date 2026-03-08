@@ -2,138 +2,34 @@ import { useState, useEffect } from "react";
 
 import "./Vaccinator.css";
 import shearers from "../shearers.json";
-import useTagEditor from "../hooks/useTagEditor";
-import modeSchema from "../tagger/modeschema.json";
 
-const ovejaMode = modeSchema.find((m) => m.type === "oveja");
-// Use only the textSchema (no colors needed for vaccination lookup)
-const vaccinatorTagSchema = { textSchema: ovejaMode.tagSchema.textSchema };
+function SheepList({ sheep, filter, onSelect }) {
+  const query = filter.toUpperCase();
+  const filtered = query
+    ? sheep.filter((s) => s.tag.includes(query))
+    : sheep;
 
-function CodeSelect({ codeSchema, onCancel, setCode }) {
   return (
-    <>
-      <header className="App-header">
-        <button onClick={onCancel} className="Cancel-button">
-          Cancela
-        </button>
-        <p>Elija la letra</p>
-      </header>
-      <section className="Tag-buttons">
-        {codeSchema.options.map((option) => (
-          <button key={option.value} onClick={() => setCode(option.value)}>
-            {option.name}
+    <section className="Sheep-list">
+      {filtered.length === 0 && (
+        <p style={{ color: "#fff" }}>No se encontró</p>
+      )}
+      {filtered.map((s) => {
+        const shearer =
+          shearers[s.station - 1]?.name || `Estación ${s.station}`;
+        return (
+          <button
+            key={s.rowid}
+            className={`Tag-button-${s.color}`}
+            onClick={() => onSelect(s)}
+            disabled={s.vaccinated === 1}
+          >
+            {s.tag} — {s.type} — {shearer}
+            {s.vaccinated === 1 ? " ✅" : ""}
           </button>
-        ))}
-      </section>
-    </>
-  );
-}
-
-function DigitSelect({
-  display,
-  headerText,
-  canSubmit,
-  disableDigits,
-  onCancel,
-  addDigit,
-  removeDigit,
-  onSubmit,
-}) {
-  const onAddDigit = (digit) => {
-    if (!disableDigits) addDigit(digit);
-  };
-  const onClickSubmit = () => {
-    if (canSubmit) onSubmit();
-  };
-  return (
-    <>
-      <header className="App-header">
-        <button onClick={onCancel} className="Cancel-button">
-          Cancela
-        </button>
-        <p>{headerText}</p>
-      </header>
-      <section className="Tag-display">
-        <p>{display}</p>
-      </section>
-      <section className="Tag-buttons">
-        <section className="Tag-button-row">
-          <button disabled={disableDigits} onClick={() => onAddDigit("1")}>
-            1
-          </button>
-          <button disabled={disableDigits} onClick={() => onAddDigit("2")}>
-            2
-          </button>
-          <button disabled={disableDigits} onClick={() => onAddDigit("3")}>
-            3
-          </button>
-        </section>
-        <section className="Tag-button-row">
-          <button disabled={disableDigits} onClick={() => onAddDigit("4")}>
-            4
-          </button>
-          <button disabled={disableDigits} onClick={() => onAddDigit("5")}>
-            5
-          </button>
-          <button disabled={disableDigits} onClick={() => onAddDigit("6")}>
-            6
-          </button>
-        </section>
-        <section className="Tag-button-row">
-          <button disabled={disableDigits} onClick={() => onAddDigit("7")}>
-            7
-          </button>
-          <button disabled={disableDigits} onClick={() => onAddDigit("8")}>
-            8
-          </button>
-          <button disabled={disableDigits} onClick={() => onAddDigit("9")}>
-            9
-          </button>
-        </section>
-        <section className="Tag-button-row">
-          <button onClick={() => removeDigit()}>&lt;</button>
-          <button disabled={disableDigits} onClick={() => onAddDigit("0")}>
-            0
-          </button>
-          <button disabled={!canSubmit} onClick={() => onClickSubmit()}>
-            ✔
-          </button>
-        </section>
-      </section>
-    </>
-  );
-}
-
-function ResultsScreen({ results, onCancel, onSelect }) {
-  return (
-    <>
-      <header className="App-header">
-        <button onClick={onCancel} className="Cancel-button">
-          Cancela
-        </button>
-        <p>Resultados</p>
-      </header>
-      <section className="Station-buttons">
-        {results.length === 0 && (
-          <p style={{ color: "#fff" }}>No se encontró</p>
-        )}
-        {results.map((sheep) => {
-          const shearer =
-            shearers[sheep.station - 1]?.name || `Estación ${sheep.station}`;
-          return (
-            <button
-              key={sheep.rowid}
-              className={`Tag-button-${sheep.color}`}
-              onClick={() => onSelect(sheep)}
-              disabled={sheep.vaccinated === 1}
-            >
-              {sheep.tag} — {sheep.type} — {shearer}
-              {sheep.vaccinated === 1 ? " ✅" : ""}
-            </button>
-          );
-        })}
-      </section>
-    </>
+        );
+      })}
+    </section>
   );
 }
 
@@ -168,7 +64,7 @@ function SuccessScreen() {
         <p>Vacunado</p>
       </header>
       <section className="Tag-display">
-        <p className="Tag-button-green">¡Vacunado!</p>
+        <p className={`Tag-button-green`}>¡Vacunado!</p>
       </section>
     </>
   );
@@ -181,7 +77,7 @@ function FailedScreen() {
         <p>Error</p>
       </header>
       <section className="Tag-display">
-        <p className="Tag-button-red">Error al vacunar</p>
+        <p className={`Tag-button-red`}>Error al vacunar</p>
       </section>
     </>
   );
@@ -194,41 +90,30 @@ function SendingScreen() {
         <p>Enviando...</p>
       </header>
       <section className="Tag-display">
-        <p className="Tag-button-white">Enviando...</p>
+        <p className={`Tag-button-white`}>Enviando...</p>
       </section>
     </>
   );
 }
 
 function VaccinatorApp() {
-  const {
-    replaceTagComponent,
-    addDigitToTagComponent,
-    removeDigitFromTagComponent,
-    setDigitsValid,
-    resetTag,
-    tag,
-    nextTagStepIndex,
-    tagCompleted,
-  } = useTagEditor(vaccinatorTagSchema);
-
-  const [results, setResults] = useState(null);
+  const [allSheep, setAllSheep] = useState([]);
+  const [filter, setFilter] = useState("");
   const [selectedSheep, setSelectedSheep] = useState(null);
   const [message, setMessage] = useState(null);
 
-  // Auto-search when tag entry is complete
+  const loadSheep = () => {
+    fetch("/sheep")
+      .then((res) => res.json())
+      .then((data) => setAllSheep(data))
+      .catch(() => setAllSheep([]));
+  };
+
   useEffect(() => {
-    if (tagCompleted && tag) {
-      fetch(`/sheep?tag=${encodeURIComponent(tag)}`)
-        .then((res) => res.json())
-        .then((data) => setResults(data))
-        .catch(() => setResults([]));
-    }
-  }, [tagCompleted, tag]);
+    loadSheep();
+  }, []);
 
   const onCancel = () => {
-    resetTag();
-    setResults(null);
     setSelectedSheep(null);
     setMessage(null);
   };
@@ -238,17 +123,22 @@ function VaccinatorApp() {
       setMessage("sending");
       await fetch("/vaccinate", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({ rowid: selectedSheep.rowid }),
       });
       setMessage("success");
-    } catch {
+    } catch (err) {
       setMessage("failed");
     }
-    setTimeout(() => onCancel(), 1500);
+    setTimeout(() => {
+      loadSheep();
+      onCancel();
+    }, 1500);
   };
 
-  let screen;
+  let screen = null;
 
   if (message === "success") {
     screen = <SuccessScreen />;
@@ -264,45 +154,33 @@ function VaccinatorApp() {
         onConfirm={onConfirmVaccinate}
       />
     );
-  } else if (results !== null) {
+  } else {
     screen = (
-      <ResultsScreen
-        results={results}
-        onCancel={onCancel}
-        onSelect={(sheep) => setSelectedSheep(sheep)}
-      />
+      <>
+        <header className="App-header">
+          <p>Vacunador</p>
+        </header>
+        <div className="Search-bar">
+          <input
+            className="Search-input"
+            type="text"
+            autoFocus
+            placeholder="Filtrar por código..."
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            autoCapitalize="characters"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck="false"
+          />
+        </div>
+        <SheepList
+          sheep={allSheep}
+          filter={filter}
+          onSelect={(s) => setSelectedSheep(s)}
+        />
+      </>
     );
-  } else if (!tagCompleted) {
-    const textSchema = vaccinatorTagSchema.textSchema[nextTagStepIndex];
-    if (textSchema.type === "code") {
-      screen = (
-        <CodeSelect
-          codeSchema={textSchema}
-          onCancel={onCancel}
-          setCode={(code) =>
-            replaceTagComponent(nextTagStepIndex, {
-              value: code,
-              valid: true,
-            })
-          }
-        />
-      );
-    } else if (textSchema.type === "digits") {
-      screen = (
-        <DigitSelect
-          display={tag}
-          headerText="Elija los números"
-          canSubmit={tag.length >= textSchema.min}
-          disableDigits={tag.length >= textSchema.max}
-          onCancel={onCancel}
-          addDigit={(digit) =>
-            addDigitToTagComponent(nextTagStepIndex, digit)
-          }
-          removeDigit={() => removeDigitFromTagComponent(nextTagStepIndex)}
-          onSubmit={() => setDigitsValid(nextTagStepIndex)}
-        />
-      );
-    }
   }
 
   return <div className="App">{screen}</div>;

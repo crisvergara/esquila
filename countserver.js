@@ -367,13 +367,21 @@ app.get("/sse", (req, res) => {
   });
 });
 
+const getAllSheep = db.prepare(`
+  SELECT rowid, tag, station, color, lactation, type, woolQuality, vaccinated, vaccinationDate, date
+  FROM counts
+  ORDER BY date DESC
+`);
+
 app.get("/sheep", (req, res) => {
   const tag = req.query.tag;
-  if (!tag) {
-    return res.status(400).json({ error: "tag parameter required" });
+  if (tag) {
+    const rows = searchSheepByTag.all(tag);
+    res.json(rows);
+  } else {
+    const rows = getAllSheep.all();
+    res.json(rows);
   }
-  const rows = searchSheepByTag.all(tag);
-  res.json(rows);
 });
 
 app.post("/vaccinate", bodyParser.json(), (req, res) => {
