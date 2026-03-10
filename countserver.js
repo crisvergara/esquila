@@ -222,6 +222,30 @@ const deletePresetById = db.prepare(`
   DELETE FROM treatment_presets WHERE id = ?
 `);
 
+const getVaccinationSummaryAll = db.prepare(`
+  SELECT date(date) AS day, COUNT(*) AS count
+  FROM treatments
+  WHERE type = 'vaccination'
+  GROUP BY date(date)
+  ORDER BY day DESC
+`);
+
+const getVaccinationSummaryRange = db.prepare(`
+  SELECT date(date) AS day, COUNT(*) AS count
+  FROM treatments
+  WHERE type = 'vaccination' AND date(date) BETWEEN ? AND ?
+  GROUP BY date(date)
+  ORDER BY day DESC
+`);
+
+const getVaccinationSummaryFrom = db.prepare(`
+  SELECT date(date) AS day, COUNT(*) AS count
+  FROM treatments
+  WHERE type = 'vaccination' AND date(date) >= ?
+  GROUP BY date(date)
+  ORDER BY day DESC
+`);
+
 let lambs = 0;
 
 let countStatsByStation = {
@@ -529,6 +553,25 @@ app.get("/treatment-counts", (req, res) => {
       counts[row.tag] = { vaccinations: row.vaccinations, dewormings: row.dewormings };
     }
     res.json(counts);
+  } catch (err) {
+    console.error(err);
+    res.sendStatus(500);
+  }
+});
+
+app.get("/vaccination-summary", (req, res) => {
+  try {
+    const { start, end } = req.query;
+    let rows;
+    if (start && end) {
+      rows = getVaccinationSummaryRange.all(start, end);
+    } else if (start) {
+      rows = getVaccinationSummaryFrom.all(start);
+    } else {
+      rows = getVaccinationSummaryAll.all();
+    }
+    const total = rows.reduce((sum, r) => sum + r.count, 0);
+    res.json({ days: rows, total });
   } catch (err) {
     console.error(err);
     res.sendStatus(500);

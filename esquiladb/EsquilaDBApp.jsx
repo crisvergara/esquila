@@ -193,180 +193,6 @@ function TreatmentForm({ tag, onSave, onCancel }) {
   );
 }
 
-function PresetManager({ onBack }) {
-  const [presets, setPresets] = useState([]);
-  const [type, setType] = useState("vaccination");
-  const [medication, setMedication] = useState("");
-  const [dose, setDose] = useState("");
-  const [sending, setSending] = useState(false);
-  const [deleting, setDeleting] = useState(null);
-
-  const loadPresets = () => {
-    fetch("/treatment-presets")
-      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
-      .then(setPresets)
-      .catch(() => setPresets([]));
-  };
-
-  useEffect(() => { loadPresets(); }, []);
-
-  const onSubmit = async (e) => {
-    e.preventDefault();
-    if (!medication.trim()) return;
-    setSending(true);
-    try {
-      const res = await fetch("/treatment-presets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type, medication: medication.trim(), dose: dose.trim() }),
-      });
-      if (!res.ok) throw new Error();
-      setMedication("");
-      setDose("");
-      loadPresets();
-    } catch {
-      // ignore
-    }
-    setSending(false);
-  };
-
-  const onDelete = async (id) => {
-    if (!window.confirm("¿Eliminar este preset?")) return;
-    setDeleting(id);
-    try {
-      await fetch(`/treatment-presets/${id}`, { method: "DELETE" });
-      loadPresets();
-    } catch {
-      // ignore
-    }
-    setDeleting(null);
-  };
-
-  const vaccinations = presets.filter((p) => p.type === "vaccination");
-  const dewormings = presets.filter((p) => p.type === "deworming");
-
-  return (
-    <>
-      <header className="App-header">
-        <button onClick={onBack} className="Cancel-button">
-          ← Volver
-        </button>
-        <p>Presets</p>
-      </header>
-
-      <section className="Detail-section">
-        <form className="Treatment-form" onSubmit={onSubmit}>
-          <h3>Nuevo Preset</h3>
-
-          <div className="Treatment-type-toggle">
-            <button
-              type="button"
-              className={`Type-btn ${type === "vaccination" ? "Type-btn--active" : ""}`}
-              onClick={() => setType("vaccination")}
-            >
-              Vacuna
-            </button>
-            <button
-              type="button"
-              className={`Type-btn ${type === "deworming" ? "Type-btn--active" : ""}`}
-              onClick={() => setType("deworming")}
-            >
-              Desparasitante
-            </button>
-          </div>
-
-          <input
-            className="Treatment-input"
-            type="text"
-            placeholder="Marca / medicamento..."
-            value={medication}
-            onChange={(e) => setMedication(e.target.value)}
-            autoFocus
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck="false"
-          />
-
-          <input
-            className="Treatment-input"
-            type="text"
-            placeholder="Dosis (ej. 2ml, 1 pastilla)..."
-            value={dose}
-            onChange={(e) => setDose(e.target.value)}
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck="false"
-          />
-
-          <button
-            type="submit"
-            className="Treatment-save-btn"
-            disabled={!medication.trim() || sending}
-          >
-            {sending ? "Guardando..." : "Guardar Preset"}
-          </button>
-        </form>
-      </section>
-
-      <section className="Detail-section">
-        <h3 className="Detail-section-title">Vacunas</h3>
-        {vaccinations.length === 0 ? (
-          <p className="Detail-empty">Sin presets de vacuna</p>
-        ) : (
-          <div className="Detail-list">
-            {vaccinations.map((p) => (
-              <div key={p.id} className="Detail-list-item Detail-list-item--treatment">
-                <div className="Detail-list-left">
-                  <span className="Treatment-badge Treatment-badge--vaccination">Vacuna</span>
-                  <span className="Detail-list-primary">
-                    {p.medication}{p.dose ? ` · ${p.dose}` : ""}
-                  </span>
-                </div>
-                <button
-                  className="Detail-delete-btn"
-                  onClick={() => onDelete(p.id)}
-                  disabled={deleting === p.id}
-                  title="Eliminar"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="Detail-section">
-        <h3 className="Detail-section-title">Desparasitantes</h3>
-        {dewormings.length === 0 ? (
-          <p className="Detail-empty">Sin presets de desparasitante</p>
-        ) : (
-          <div className="Detail-list">
-            {dewormings.map((p) => (
-              <div key={p.id} className="Detail-list-item Detail-list-item--treatment">
-                <div className="Detail-list-left">
-                  <span className="Treatment-badge Treatment-badge--deworming">Desparasitante</span>
-                  <span className="Detail-list-primary">
-                    {p.medication}{p.dose ? ` · ${p.dose}` : ""}
-                  </span>
-                </div>
-                <button
-                  className="Detail-delete-btn"
-                  onClick={() => onDelete(p.id)}
-                  disabled={deleting === p.id}
-                  title="Eliminar"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-    </>
-  );
-}
-
 function SheepDetailView({ sheep, presets, onBack }) {
   const [shearingHistory, setShearingHistory] = useState([]);
   const [treatments, setTreatments] = useState([]);
@@ -536,13 +362,275 @@ function SheepDetailView({ sheep, presets, onBack }) {
   );
 }
 
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function mondayOfWeek() {
+  const d = new Date();
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  return new Date(d.getFullYear(), d.getMonth(), diff).toISOString().slice(0, 10);
+}
+
+function VaccinationReport({ onBack, onPresetsChanged }) {
+  const [start, setStart] = useState(todayStr);
+  const [end, setEnd] = useState(todayStr);
+  const [data, setData] = useState({ days: [], total: 0 });
+  const [loading, setLoading] = useState(true);
+
+  const [presets, setPresets] = useState([]);
+  const [showPresetForm, setShowPresetForm] = useState(false);
+  const [presetType, setPresetType] = useState("vaccination");
+  const [medication, setMedication] = useState("");
+  const [dose, setDose] = useState("");
+  const [sending, setSending] = useState(false);
+  const [deleting, setDeleting] = useState(null);
+
+  const loadSummary = () => {
+    setLoading(true);
+    const params = new URLSearchParams({ start, end });
+    fetch(`/vaccination-summary?${params}`)
+      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(setData)
+      .catch(() => setData({ days: [], total: 0 }))
+      .finally(() => setLoading(false));
+  };
+
+  const loadPresets = () => {
+    fetch("/treatment-presets")
+      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(setPresets)
+      .catch(() => setPresets([]));
+  };
+
+  useEffect(() => { loadSummary(); }, [start, end]);
+  useEffect(() => { loadPresets(); }, []);
+
+  const setToday = () => { setStart(todayStr()); setEnd(todayStr()); };
+  const setThisWeek = () => { setStart(mondayOfWeek()); setEnd(todayStr()); };
+
+  const onSubmitPreset = async (e) => {
+    e.preventDefault();
+    if (!medication.trim()) return;
+    setSending(true);
+    try {
+      const res = await fetch("/treatment-presets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: presetType, medication: medication.trim(), dose: dose.trim() }),
+      });
+      if (!res.ok) throw new Error();
+      setMedication("");
+      setDose("");
+      setShowPresetForm(false);
+      loadPresets();
+      onPresetsChanged();
+    } catch {
+      // ignore
+    }
+    setSending(false);
+  };
+
+  const onDeletePreset = async (id) => {
+    if (!window.confirm("¿Eliminar este preset?")) return;
+    setDeleting(id);
+    try {
+      await fetch(`/treatment-presets/${id}`, { method: "DELETE" });
+      loadPresets();
+      onPresetsChanged();
+    } catch {
+      // ignore
+    }
+    setDeleting(null);
+  };
+
+  const vaccinations = presets.filter((p) => p.type === "vaccination");
+  const dewormings = presets.filter((p) => p.type === "deworming");
+
+  return (
+    <>
+      <header className="App-header Vacc-header">
+        <button onClick={onBack} className="Cancel-button Vacc-back-btn">
+          ← Volver
+        </button>
+        <p>Vacunaciones</p>
+      </header>
+
+      <section className="Detail-section">
+        <div className="Quick-filter-row">
+          <button className="Quick-filter-btn" onClick={setToday}>Hoy</button>
+          <button className="Quick-filter-btn" onClick={setThisWeek}>Esta semana</button>
+          <button
+            className="Header-add-btn"
+            onClick={() => setShowPresetForm(!showPresetForm)}
+            title="Administrar presets"
+          >
+            {showPresetForm ? "✕" : "+"}
+          </button>
+        </div>
+      </section>
+
+      {showPresetForm ? (
+        <>
+          <section className="Detail-section">
+            <form className="Treatment-form" onSubmit={onSubmitPreset}>
+              <h3>Nuevo Preset</h3>
+
+              <div className="Treatment-type-toggle">
+                <button
+                  type="button"
+                  className={`Type-btn ${presetType === "vaccination" ? "Type-btn--active" : ""}`}
+                  onClick={() => setPresetType("vaccination")}
+                >
+                  Vacuna
+                </button>
+                <button
+                  type="button"
+                  className={`Type-btn ${presetType === "deworming" ? "Type-btn--active" : ""}`}
+                  onClick={() => setPresetType("deworming")}
+                >
+                  Desparasitante
+                </button>
+              </div>
+
+              <input
+                className="Treatment-input"
+                type="text"
+                placeholder="Marca / medicamento..."
+                value={medication}
+                onChange={(e) => setMedication(e.target.value)}
+                autoFocus
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck="false"
+              />
+
+              <input
+                className="Treatment-input"
+                type="text"
+                placeholder="Dosis (ej. 2ml, 1 pastilla)..."
+                value={dose}
+                onChange={(e) => setDose(e.target.value)}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck="false"
+              />
+
+              <button
+                type="submit"
+                className="Treatment-save-btn"
+                disabled={!medication.trim() || sending}
+              >
+                {sending ? "Guardando..." : "Guardar Preset"}
+              </button>
+            </form>
+          </section>
+
+          <section className="Detail-section">
+            <h3 className="Detail-section-title">Vacunas</h3>
+            {vaccinations.length === 0 ? (
+              <p className="Detail-empty">Sin presets de vacuna</p>
+            ) : (
+              <div className="Detail-list">
+                {vaccinations.map((p) => (
+                  <div key={p.id} className="Detail-list-item Detail-list-item--treatment">
+                    <div className="Detail-list-left">
+                      <span className="Treatment-badge Treatment-badge--vaccination">Vacuna</span>
+                      <span className="Detail-list-primary">
+                        {p.medication}{p.dose ? ` · ${p.dose}` : ""}
+                      </span>
+                    </div>
+                    <button
+                      className="Detail-delete-btn"
+                      onClick={() => onDeletePreset(p.id)}
+                      disabled={deleting === p.id}
+                      title="Eliminar"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="Detail-section">
+            <h3 className="Detail-section-title">Desparasitantes</h3>
+            {dewormings.length === 0 ? (
+              <p className="Detail-empty">Sin presets de desparasitante</p>
+            ) : (
+              <div className="Detail-list">
+                {dewormings.map((p) => (
+                  <div key={p.id} className="Detail-list-item Detail-list-item--treatment">
+                    <div className="Detail-list-left">
+                      <span className="Treatment-badge Treatment-badge--deworming">Desparasitante</span>
+                      <span className="Detail-list-primary">
+                        {p.medication}{p.dose ? ` · ${p.dose}` : ""}
+                      </span>
+                    </div>
+                    <button
+                      className="Detail-delete-btn"
+                      onClick={() => onDeletePreset(p.id)}
+                      disabled={deleting === p.id}
+                      title="Eliminar"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      ) : (
+        <>
+          <section className="Detail-section">
+            <div className="Vaccination-date-picker">
+              <label className="Vaccination-date-label">
+                Desde
+                <input type="date" className="Treatment-input" value={start} onChange={(e) => setStart(e.target.value)} />
+              </label>
+              <label className="Vaccination-date-label">
+                Hasta
+                <input type="date" className="Treatment-input" value={end} onChange={(e) => setEnd(e.target.value)} />
+              </label>
+            </div>
+          </section>
+
+          <section className="Vaccination-summary">
+            <span className="Vaccination-summary-count">{loading ? "..." : data.total}</span>
+            <span className="Vaccination-summary-label">vacunaciones</span>
+          </section>
+
+          <section className="Detail-section" style={{ flex: 1, overflowY: "auto" }}>
+            <h3 className="Detail-section-title">Desglose por día</h3>
+            {data.days.length === 0 && !loading ? (
+              <p className="Detail-empty">Sin vacunaciones en este rango</p>
+            ) : (
+              <div className="Detail-list">
+                {data.days.map((d) => (
+                  <div key={d.day} className="Vaccination-day-row">
+                    <span className="Vaccination-day-date">{formatDate(d.day + "T12:00:00")}</span>
+                    <span className="Vaccination-day-count">{d.count}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        </>
+      )}
+    </>
+  );
+}
+
 function EsquilaDBApp() {
   const [allSheep, setAllSheep] = useState([]);
   const [treatmentCounts, setTreatmentCounts] = useState({});
   const [filter, setFilter] = useState("");
   const [selectedSheep, setSelectedSheep] = useState(null);
   const [highlightedSheep, setHighlightedSheep] = useState(null);
-  const [showPresets, setShowPresets] = useState(false);
+  const [showVaccinationReport, setShowVaccinationReport] = useState(false);
   const [presets, setPresets] = useState([]);
 
   const loadSheep = () => {
@@ -581,13 +669,11 @@ function EsquilaDBApp() {
 
   let screen = null;
 
-  if (showPresets) {
+  if (showVaccinationReport) {
     screen = (
-      <PresetManager
-        onBack={() => {
-          setShowPresets(false);
-          loadPresets();
-        }}
+      <VaccinationReport
+        onBack={() => { setShowVaccinationReport(false); loadPresets(); }}
+        onPresetsChanged={loadPresets}
       />
     );
   } else if (selectedSheep) {
@@ -596,17 +682,21 @@ function EsquilaDBApp() {
     screen = (
       <>
         <header className="App-header">
-          <p>EsquilaDB</p>
           <button
-            className="Header-gear-btn"
-            onClick={() => setShowPresets(true)}
-            title="Presets de tratamiento"
+            className="Header-vacc-btn"
+            onClick={() => setShowVaccinationReport(true)}
+            title="Reporte de vacunaciones"
           >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="Header-gear-icon">
-              <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
-              <circle cx="12" cy="12" r="3" />
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="Header-vacc-icon">
+              <path d="m18 2 4 4" />
+              <path d="m17 7 3-3" />
+              <path d="M19 9 8.7 19.3c-1 1-2.5 1-3.4 0l-.6-.6c-1-1-1-2.5 0-3.4L15 5" />
+              <path d="m9 11 4 4" />
+              <path d="m5 19-3 3" />
+              <path d="m14 4 6 6" />
             </svg>
           </button>
+          <p>EsquilaDB</p>
         </header>
         <div className="Search-bar">
           <input

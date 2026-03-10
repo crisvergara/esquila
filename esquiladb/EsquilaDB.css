@@ -463,10 +463,45 @@
   cursor: pointer;
 }
 
-/* Header gear button */
+/* Header buttons */
 
 .App-header {
   position: relative;
+}
+
+.Vacc-header {
+  justify-content: center;
+}
+
+.Vacc-back-btn {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.Header-add-btn {
+  margin-left: auto;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 600;
+  color: #61dafb;
+  background: none;
+  border: 2px solid #61dafb;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.Header-add-btn:hover {
+  background-color: #61dafb;
+  color: #282c34;
 }
 
 .Header-gear-btn {
@@ -526,4 +561,118 @@
 .Quick-apply-btn--deworming {
   background-color: #f5a95a;
   color: #000;
+}
+
+/* Header vaccination button */
+
+.Header-vacc-btn {
+  position: absolute;
+  left: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.Header-vacc-icon {
+  width: 24px;
+  height: 24px;
+  color: #25d342;
+}
+
+.Header-vacc-btn:hover .Header-vacc-icon {
+  color: #fff;
+}
+
+/* Vaccination report */
+
+.Quick-filter-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.Quick-filter-btn {
+  padding: 8px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  border: 2px solid #61dafb;
+  border-radius: 20px;
+  background-color: transparent;
+  color: #61dafb;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.Quick-filter-btn:hover {
+  background-color: #61dafb;
+  color: #282c34;
+}
+
+.Vaccination-date-picker {
+  display: flex;
+  gap: 12px;
+}
+
+.Vaccination-date-label {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.Vaccination-date-label .Treatment-input {
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+
+.Vaccination-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 24px 20px;
+  background-color: #1a1e24;
+}
+
+.Vaccination-summary-count {
+  font-size: 56px;
+  font-weight: 700;
+  color: #25d342;
+  line-height: 1;
+}
+
+.Vaccination-summary-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.Vaccination-day-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background-color: #1a1e24;
+  border-radius: 8px;
+}
+
+.Vaccination-day-date {
+  font-size: 15px;
+  color: #fff;
+}
+
+.Vaccination-day-count {
+  font-size: 18px;
+  font-weight: 700;
+  color: #25d342;
 }

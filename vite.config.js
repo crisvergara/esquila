@@ -24,6 +24,7 @@ export default defineConfig(() => {
         '/treatments': 'http://localhost:3001',
         '/treatment-counts': 'http://localhost:3001',
         '/treatment-presets': 'http://localhost:3001',
+        '/vaccination-summary': 'http://localhost:3001',
         '/count': 'http://localhost:3001',
         '/mode': 'http://localhost:3001',
         '/sse': 'http://localhost:3001',
