@@ -100,6 +100,15 @@ if (migrated.length > 0) {
   console.log(`Migrated ${migrated.length} legacy vaccination records into treatments table`);
 }
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS treatment_presets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    type TEXT NOT NULL,
+    medication TEXT NOT NULL,
+    dose TEXT DEFAULT ''
+  )
+`);
+
 const createSettingsTable = db.prepare(`
   CREATE TABLE IF NOT EXISTS settings (
     mode TEXT,
@@ -199,6 +208,18 @@ const getTreatmentCountsByTag = db.prepare(`
     SUM(CASE WHEN type = 'deworming' THEN 1 ELSE 0 END) AS dewormings
   FROM treatments
   GROUP BY tag
+`);
+
+const getAllPresets = db.prepare(`
+  SELECT id, type, medication, dose FROM treatment_presets ORDER BY type, medication
+`);
+
+const insertPreset = db.prepare(`
+  INSERT INTO treatment_presets (type, medication, dose) VALUES (?, ?, ?)
+`);
+
+const deletePresetById = db.prepare(`
+  DELETE FROM treatment_presets WHERE id = ?
 `);
 
 let lambs = 0;
@@ -508,6 +529,47 @@ app.get("/treatment-counts", (req, res) => {
       counts[row.tag] = { vaccinations: row.vaccinations, dewormings: row.dewormings };
     }
     res.json(counts);
+  } catch (err) {
+    console.error(err);
+    res.sendStatus(500);
+  }
+});
+
+app.get("/treatment-presets", (req, res) => {
+  try {
+    const rows = getAllPresets.all();
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.sendStatus(500);
+  }
+});
+
+app.post("/treatment-presets", bodyParser.json(), (req, res) => {
+  const { type, medication, dose } = req.body;
+  if (!type || !medication) {
+    return res.status(400).json({ error: "type and medication are required" });
+  }
+  if (type !== "vaccination" && type !== "deworming") {
+    return res.status(400).json({ error: "type must be 'vaccination' or 'deworming'" });
+  }
+  try {
+    const result = insertPreset.run(type, medication.trim(), (dose ?? "").trim());
+    res.json({ id: result.lastInsertRowid });
+  } catch (err) {
+    console.error(err);
+    res.sendStatus(500);
+  }
+});
+
+app.delete("/treatment-presets/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: "valid id required" });
+  }
+  try {
+    deletePresetById.run(id);
+    res.sendStatus(200);
   } catch (err) {
     console.error(err);
     res.sendStatus(500);
