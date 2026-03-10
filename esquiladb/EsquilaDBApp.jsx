@@ -99,6 +99,7 @@ function SheepTable({
 function TreatmentForm({ tag, onSave, onCancel }) {
   const [type, setType] = useState("vaccination");
   const [medication, setMedication] = useState("");
+  const [dose, setDose] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [sending, setSending] = useState(false);
 
@@ -114,6 +115,7 @@ function TreatmentForm({ tag, onSave, onCancel }) {
           tag,
           type,
           medication: medication.trim(),
+          dose: dose.trim(),
           date: new Date(date + "T12:00:00").toISOString(),
         }),
       });
@@ -152,6 +154,17 @@ function TreatmentForm({ tag, onSave, onCancel }) {
         value={medication}
         onChange={(e) => setMedication(e.target.value)}
         autoFocus
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck="false"
+      />
+
+      <input
+        className="Treatment-input"
+        type="text"
+        placeholder="Dosis (ej. 2ml, 1 pastilla)..."
+        value={dose}
+        onChange={(e) => setDose(e.target.value)}
         autoComplete="off"
         autoCorrect="off"
         spellCheck="false"
@@ -307,7 +320,9 @@ function SheepDetailView({ sheep, onBack }) {
                   >
                     {t.type === "vaccination" ? "Vacuna" : "Desparasitante"}
                   </span>
-                  <span className="Detail-list-primary">{t.medication}</span>
+                  <span className="Detail-list-primary">
+                    {t.medication}{t.dose ? ` · ${t.dose}` : ""}
+                  </span>
                 </div>
                 <div className="Detail-list-right">
                   <span className="Detail-list-secondary">

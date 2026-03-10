@@ -73,6 +73,12 @@ db.exec(`
   )
 `);
 
+try {
+  db.exec("ALTER TABLE treatments ADD COLUMN dose TEXT DEFAULT ''");
+} catch (e) {
+  // Column already exists
+}
+
 // Migrate legacy vaccinated rows into treatments table (one-time)
 const migrated = db
   .prepare(
@@ -176,11 +182,11 @@ const vaccinateSheepByRowid = db.prepare(`
 `);
 
 const insertTreatment = db.prepare(`
-  INSERT INTO treatments (tag, type, medication, date) VALUES (?, ?, ?, ?)
+  INSERT INTO treatments (tag, type, medication, dose, date) VALUES (?, ?, ?, ?, ?)
 `);
 
 const getTreatmentsByTag = db.prepare(`
-  SELECT id, tag, type, medication, date FROM treatments WHERE tag = ? ORDER BY date DESC
+  SELECT id, tag, type, medication, dose, date FROM treatments WHERE tag = ? ORDER BY date DESC
 `);
 
 const deleteTreatmentById = db.prepare(`
@@ -464,7 +470,7 @@ app.get("/treatments", (req, res) => {
 });
 
 app.post("/treatments", bodyParser.json(), (req, res) => {
-  const { tag, type, medication, date } = req.body;
+  const { tag, type, medication, dose, date } = req.body;
   if (!tag || !type || !medication || !date) {
     return res.status(400).json({ error: "tag, type, medication, and date are required" });
   }
@@ -472,7 +478,7 @@ app.post("/treatments", bodyParser.json(), (req, res) => {
     return res.status(400).json({ error: "type must be 'vaccination' or 'deworming'" });
   }
   try {
-    const result = insertTreatment.run(tag, type, medication, date);
+    const result = insertTreatment.run(tag, type, medication, dose ?? "", date);
     res.json({ id: result.lastInsertRowid });
   } catch (err) {
     console.error(err);
