@@ -30,13 +30,16 @@ esquila/
 │   └── MonitorApp.jsx
 ├── mobilemonitor/          # Mobile-friendly monitor UI
 │   └── MobileMonitorApp.jsx
+├── esquiladb/              # Sheep records & treatment tracking UI
+│   ├── EsquilaDBApp.jsx
+│   └── EsquilaDB.css
 ├── hooks/
 │   ├── useCounts.js        # Polls /count endpoint for live stats
 │   ├── useCurrentTime.js   # Live clock
 │   ├── useTagEditor.js     # Tag entry state machine
 │   ├── useTaggingMode.js   # Subscribes to SSE for real-time mode changes
 │   └── useTimeSince.js     # "X minutes ago" display for last scan
-└── vite.config.js          # Multi-page build (tagger, monitor, mobilemonitor)
+└── vite.config.js          # Multi-page build (tagger, monitor, mobilemonitor, esquiladb)
 ```
 
 ## Stations & Shearers
@@ -46,6 +49,16 @@ Stations and shearer names are configured in `shearers.json`. There are 3 statio
 ## Tag Format
 
 Tags consist of a **letter prefix** (A, B, C, S, L, X — representing ranch/origin) followed by **5–6 digits**. Tag colors indicate year/cohort.
+
+## EsquilaDB — Sheep Records & Treatment Tracking
+
+The EsquilaDB interface (`/esquiladb`) lets you browse all sheep records, view shearing history, and manage treatments (vaccinations and dewormings). Selecting a sheep shows its full detail view with:
+
+- **Shearing history** — dates and which shearer handled the animal
+- **Treatment history** — vaccinations and deworming medications with dates
+- **Add treatment** — record a new vaccination or deworming with the medication name and date
+
+Tracking medication names is important because brands need to be rotated periodically to prevent resistance.
 
 ## API Endpoints
 
@@ -57,6 +70,11 @@ Tags consist of a **letter prefix** (A, B, C, S, L, X — representing ranch/ori
 | `POST` | `/mode` | Switch the active tagging mode |
 | `GET` | `/sse` | Server-Sent Events stream for real-time mode updates |
 | `GET` | `/qr.png` | QR code image pointing to the tagger URL |
+| `GET` | `/sheep` | List all sheep records (or filter by `?tag=X`) |
+| `GET` | `/treatments?tag=X` | Get all treatments (vaccinations/dewormings) for a sheep |
+| `POST` | `/treatments` | Add a treatment `{ tag, type, medication, date }` |
+| `DELETE` | `/treatments/:id` | Remove a treatment record |
+| `GET` | `/treatment-counts` | Get vaccination/deworming counts per tag |
 
 ## Setup & Running
 
@@ -94,6 +112,7 @@ The server starts on port **3001**. On startup it emails a QR code to the config
 | `http://<host>:3001/tagger` | Tagger UI — for shearers on their phones |
 | `http://<host>:3001/monitor` | Desktop monitor — shows all stations at a glance |
 | `http://<host>:3001/mobilemonitor` | Mobile monitor — same info, phone-friendly |
+| `http://<host>:3001/esquiladb` | EsquilaDB — sheep records & treatment tracking |
 | `http://<host>:3001/qr.png` | QR code linking to the tagger |
 
 ## Data & Backups

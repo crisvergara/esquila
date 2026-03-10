@@ -93,6 +93,16 @@
   opacity: 0.5;
 }
 
+.Estado-badge {
+  font-size: 13px;
+  font-weight: 600;
+  color: #61dafb;
+}
+
+.Estado-empty {
+  color: #666;
+}
+
 .Color-dot {
   display: inline-block;
   width: 12px;
@@ -142,4 +152,313 @@
 .Edit-icon {
   width: 18px;
   height: 18px;
+}
+
+/* Detail View */
+
+.Detail-info {
+  padding: 20px;
+  background-color: #1a1e24;
+  text-align: center;
+}
+
+.Detail-tag-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+}
+
+.Color-dot--lg {
+  width: 20px;
+  height: 20px;
+}
+
+.Detail-tag {
+  font-size: 32px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.Detail-meta {
+  margin-top: 6px;
+  font-size: 16px;
+  color: #aaa;
+}
+
+.Detail-fields {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #3a3f4b;
+}
+
+.Detail-field {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.Detail-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #888;
+  letter-spacing: 0.5px;
+}
+
+.Detail-field-value {
+  font-size: 15px;
+  color: #fff;
+  text-transform: capitalize;
+}
+
+.Detail-section {
+  padding: 16px 20px;
+  background-color: #282c34;
+}
+
+.Detail-section + .Detail-section {
+  border-top: 1px solid #3a3f4b;
+}
+
+.Detail-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.Detail-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #61dafb;
+  margin: 0 0 12px;
+}
+
+.Detail-section-header .Detail-section-title {
+  margin-bottom: 0;
+}
+
+.Detail-add-btn {
+  padding: 6px 14px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #282c34;
+  background-color: #61dafb;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.Detail-empty {
+  color: #666;
+  font-size: 14px;
+  margin: 0;
+}
+
+.Detail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 8px;
+}
+
+.Detail-list-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background-color: #1a1e24;
+  border-radius: 8px;
+}
+
+.Detail-list-item--shearing {
+  gap: 8px;
+}
+
+.Detail-list-item--shearing .Detail-list-left {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.Detail-list-item--treatment {
+  gap: 8px;
+}
+
+.Detail-list-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.Detail-list-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.Detail-list-primary {
+  font-size: 15px;
+  color: #fff;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.Detail-list-secondary {
+  font-size: 13px;
+  color: #888;
+  white-space: nowrap;
+}
+
+.Detail-delete-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #888;
+  background: none;
+  border: 1px solid #3a3f4b;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.Detail-delete-btn:hover {
+  color: #ef3636;
+  border-color: #ef3636;
+}
+
+.Detail-delete-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+/* Treatment badges */
+
+.Treatment-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.Treatment-badge--vaccination {
+  background-color: #25d342;
+  color: #000;
+}
+
+.Treatment-badge--deworming {
+  background-color: #f5a95a;
+  color: #000;
+}
+
+/* Treatment form */
+
+.Treatment-form {
+  padding: 16px;
+  margin-top: 12px;
+  background-color: #1a1e24;
+  border-radius: 10px;
+}
+
+.Treatment-form h3 {
+  margin: 0 0 14px;
+  font-size: 16px;
+  color: #fff;
+}
+
+.Treatment-type-toggle {
+  display: flex;
+  gap: 0;
+  margin-bottom: 12px;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 2px solid #3a3f4b;
+}
+
+.Type-btn {
+  flex: 1;
+  padding: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  background-color: #282c34;
+  color: #888;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.Type-btn--active {
+  background-color: #61dafb;
+  color: #282c34;
+}
+
+.Treatment-input {
+  display: block;
+  width: 100%;
+  padding: 12px;
+  margin-bottom: 10px;
+  font-size: 16px;
+  border: 2px solid #3a3f4b;
+  border-radius: 8px;
+  background-color: #282c34;
+  color: #fff;
+  box-sizing: border-box;
+}
+
+.Treatment-input::placeholder {
+  color: #666;
+}
+
+.Treatment-input:focus {
+  border-color: #61dafb;
+  outline: none;
+}
+
+.Treatment-form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.Treatment-save-btn {
+  flex: 1;
+  padding: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #282c34;
+  background-color: #61dafb;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.Treatment-save-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.Treatment-cancel-btn {
+  flex: 1;
+  padding: 12px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  background-color: #3a3f4b;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
 }

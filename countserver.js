@@ -63,6 +63,37 @@ try {
   // Column already exists
 }
 
+db.exec(`
+  CREATE TABLE IF NOT EXISTS treatments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tag TEXT NOT NULL,
+    type TEXT NOT NULL,
+    medication TEXT NOT NULL,
+    date TEXT NOT NULL
+  )
+`);
+
+// Migrate legacy vaccinated rows into treatments table (one-time)
+const migrated = db
+  .prepare(
+    `SELECT rowid, tag, vaccinationDate FROM counts
+     WHERE vaccinated = 1
+       AND tag NOT IN (SELECT DISTINCT tag FROM treatments)`
+  )
+  .all();
+if (migrated.length > 0) {
+  const insertMigrated = db.prepare(
+    `INSERT INTO treatments (tag, type, medication, date) VALUES (?, 'vaccination', 'Desconocido', ?)`
+  );
+  const migrate = db.transaction((rows) => {
+    for (const row of rows) {
+      insertMigrated.run(row.tag, row.vaccinationDate ?? new Date().toISOString());
+    }
+  });
+  migrate(migrated);
+  console.log(`Migrated ${migrated.length} legacy vaccination records into treatments table`);
+}
+
 const createSettingsTable = db.prepare(`
   CREATE TABLE IF NOT EXISTS settings (
     mode TEXT,
@@ -142,6 +173,26 @@ const searchSheepByTag = db.prepare(`
 
 const vaccinateSheepByRowid = db.prepare(`
   UPDATE counts SET vaccinated = 1, vaccinationDate = ? WHERE rowid = ?
+`);
+
+const insertTreatment = db.prepare(`
+  INSERT INTO treatments (tag, type, medication, date) VALUES (?, ?, ?, ?)
+`);
+
+const getTreatmentsByTag = db.prepare(`
+  SELECT id, tag, type, medication, date FROM treatments WHERE tag = ? ORDER BY date DESC
+`);
+
+const deleteTreatmentById = db.prepare(`
+  DELETE FROM treatments WHERE id = ?
+`);
+
+const getTreatmentCountsByTag = db.prepare(`
+  SELECT tag,
+    SUM(CASE WHEN type = 'vaccination' THEN 1 ELSE 0 END) AS vaccinations,
+    SUM(CASE WHEN type = 'deworming' THEN 1 ELSE 0 END) AS dewormings
+  FROM treatments
+  GROUP BY tag
 `);
 
 let lambs = 0;
@@ -392,6 +443,65 @@ app.post("/vaccinate", bodyParser.json(), (req, res) => {
   try {
     vaccinateSheepByRowid.run(new Date().toISOString(), rowid);
     res.sendStatus(200);
+  } catch (err) {
+    console.error(err);
+    res.sendStatus(500);
+  }
+});
+
+app.get("/treatments", (req, res) => {
+  const tag = req.query.tag;
+  if (!tag) {
+    return res.status(400).json({ error: "tag query parameter required" });
+  }
+  try {
+    const rows = getTreatmentsByTag.all(tag);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.sendStatus(500);
+  }
+});
+
+app.post("/treatments", bodyParser.json(), (req, res) => {
+  const { tag, type, medication, date } = req.body;
+  if (!tag || !type || !medication || !date) {
+    return res.status(400).json({ error: "tag, type, medication, and date are required" });
+  }
+  if (type !== "vaccination" && type !== "deworming") {
+    return res.status(400).json({ error: "type must be 'vaccination' or 'deworming'" });
+  }
+  try {
+    const result = insertTreatment.run(tag, type, medication, date);
+    res.json({ id: result.lastInsertRowid });
+  } catch (err) {
+    console.error(err);
+    res.sendStatus(500);
+  }
+});
+
+app.delete("/treatments/:id", (req, res) => {
+  const id = parseInt(req.params.id);
+  if (!id) {
+    return res.status(400).json({ error: "valid id required" });
+  }
+  try {
+    deleteTreatmentById.run(id);
+    res.sendStatus(200);
+  } catch (err) {
+    console.error(err);
+    res.sendStatus(500);
+  }
+});
+
+app.get("/treatment-counts", (req, res) => {
+  try {
+    const rows = getTreatmentCountsByTag.all();
+    const counts = {};
+    for (const row of rows) {
+      counts[row.tag] = { vaccinations: row.vaccinations, dewormings: row.dewormings };
+    }
+    res.json(counts);
   } catch (err) {
     console.error(err);
     res.sendStatus(500);

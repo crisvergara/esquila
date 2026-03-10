@@ -21,6 +21,8 @@ export default defineConfig(() => {
       proxy: {
         '/sheep': 'http://localhost:3001',
         '/vaccinate': 'http://localhost:3001',
+        '/treatments': 'http://localhost:3001',
+        '/treatment-counts': 'http://localhost:3001',
         '/count': 'http://localhost:3001',
         '/mode': 'http://localhost:3001',
         '/sse': 'http://localhost:3001',

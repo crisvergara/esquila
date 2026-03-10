@@ -3,7 +3,23 @@ import { useState, useEffect } from "react";
 import "./EsquilaDB.css";
 import shearers from "../shearers.json";
 
-function SheepTable({ sheep, filter, highlightedId, onHighlight }) {
+function formatDate(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString("es-MX", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function SheepTable({
+  sheep,
+  filter,
+  highlightedId,
+  onHighlight,
+  treatmentCounts,
+}) {
   const query = filter.toUpperCase();
   const filtered = query
     ? sheep.filter((s) => s.tag.includes(query))
@@ -28,22 +44,30 @@ function SheepTable({ sheep, filter, highlightedId, onHighlight }) {
               <th>Tag</th>
               <th>Tipo</th>
               <th>Esquilador</th>
-              <th>Estado</th>
+              <th>Tratam.</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((s) => {
               const shearer =
                 shearers[s.station - 1]?.name || `Estación ${s.station}`;
-              const isVaccinated = s.vaccinated === 1;
+              const counts = treatmentCounts[s.tag];
+              const hasTreatments = counts && (counts.vaccinations > 0 || counts.dewormings > 0);
               const isHighlighted = highlightedId === s.rowid;
               const rowClass = [
                 "Sheep-row",
                 isHighlighted && "Sheep-row--selected",
-                isVaccinated && "Sheep-row--vaccinated",
               ]
                 .filter(Boolean)
                 .join(" ");
+
+              let estadoLabel = "—";
+              if (hasTreatments) {
+                const parts = [];
+                if (counts.vaccinations > 0) parts.push(`${counts.vaccinations}V`);
+                if (counts.dewormings > 0) parts.push(`${counts.dewormings}D`);
+                estadoLabel = parts.join(" ");
+              }
 
               return (
                 <tr
@@ -57,7 +81,11 @@ function SheepTable({ sheep, filter, highlightedId, onHighlight }) {
                   <td>{s.tag}</td>
                   <td>{s.type}</td>
                   <td>{shearer}</td>
-                  <td>{isVaccinated ? "✅" : "—"}</td>
+                  <td>
+                    <span className={hasTreatments ? "Estado-badge" : "Estado-empty"}>
+                      {estadoLabel}
+                    </span>
+                  </td>
                 </tr>
               );
             })}
@@ -68,64 +96,236 @@ function SheepTable({ sheep, filter, highlightedId, onHighlight }) {
   );
 }
 
-function ConfirmScreen({ sheep, onCancel, onConfirm }) {
-  const shearer =
-    shearers[sheep.station - 1]?.name || `Estación ${sheep.station}`;
+function TreatmentForm({ tag, onSave, onCancel }) {
+  const [type, setType] = useState("vaccination");
+  const [medication, setMedication] = useState("");
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [sending, setSending] = useState(false);
+
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    if (!medication.trim()) return;
+    setSending(true);
+    try {
+      const res = await fetch("/treatments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tag,
+          type,
+          medication: medication.trim(),
+          date: new Date(date + "T12:00:00").toISOString(),
+        }),
+      });
+      if (!res.ok) throw new Error("save failed");
+      onSave();
+    } catch {
+      setSending(false);
+    }
+  };
+
   return (
-    <>
-      <header className="App-header">
-        <button onClick={onCancel} className="Cancel-button">
+    <form className="Treatment-form" onSubmit={onSubmit}>
+      <h3>Agregar Tratamiento</h3>
+
+      <div className="Treatment-type-toggle">
+        <button
+          type="button"
+          className={`Type-btn ${type === "vaccination" ? "Type-btn--active" : ""}`}
+          onClick={() => setType("vaccination")}
+        >
+          Vacuna
+        </button>
+        <button
+          type="button"
+          className={`Type-btn ${type === "deworming" ? "Type-btn--active" : ""}`}
+          onClick={() => setType("deworming")}
+        >
+          Desparasitante
+        </button>
+      </div>
+
+      <input
+        className="Treatment-input"
+        type="text"
+        placeholder="Nombre del medicamento..."
+        value={medication}
+        onChange={(e) => setMedication(e.target.value)}
+        autoFocus
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck="false"
+      />
+
+      <input
+        className="Treatment-input"
+        type="date"
+        value={date}
+        onChange={(e) => setDate(e.target.value)}
+      />
+
+      <div className="Treatment-form-actions">
+        <button
+          type="submit"
+          className="Treatment-save-btn"
+          disabled={!medication.trim() || sending}
+        >
+          {sending ? "Guardando..." : "Guardar"}
+        </button>
+        <button type="button" className="Treatment-cancel-btn" onClick={onCancel}>
           Cancelar
         </button>
-        <p>Confirmar Vacuna</p>
-      </header>
-      <section className="Tag-display">
-        <p className={`Tag-Display-${sheep.color}`}>{sheep.tag}</p>
-        <p>Tipo: {sheep.type}</p>
-        <p>Esquilador: {shearer}</p>
-      </section>
-      <section className="Tag-buttons">
-        <button onClick={onConfirm}>Vacunar ✔</button>
-        <button onClick={onCancel}>Cancelar</button>
-      </section>
-    </>
+      </div>
+    </form>
   );
 }
 
-function SuccessScreen() {
-  return (
-    <>
-      <header className="App-header">
-        <p>Vacunado</p>
-      </header>
-      <section className="Tag-display">
-        <p className={`Tag-button-green`}>¡Vacunado!</p>
-      </section>
-    </>
-  );
-}
+function SheepDetailView({ sheep, onBack }) {
+  const [shearingHistory, setShearingHistory] = useState([]);
+  const [treatments, setTreatments] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [deleting, setDeleting] = useState(null);
 
-function FailedScreen() {
-  return (
-    <>
-      <header className="App-header">
-        <p>Error</p>
-      </header>
-      <section className="Tag-display">
-        <p className={`Tag-button-red`}>Error al vacunar</p>
-      </section>
-    </>
-  );
-}
+  const loadData = () => {
+    fetch(`/sheep?tag=${encodeURIComponent(sheep.tag)}`)
+      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(setShearingHistory)
+      .catch(() => setShearingHistory([]));
 
-function SendingScreen() {
+    fetch(`/treatments?tag=${encodeURIComponent(sheep.tag)}`)
+      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
+      .then(setTreatments)
+      .catch(() => setTreatments([]));
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [sheep.tag]);
+
+  const onDeleteTreatment = async (id) => {
+    if (!window.confirm("¿Eliminar este tratamiento?")) return;
+    setDeleting(id);
+    try {
+      await fetch(`/treatments/${id}`, { method: "DELETE" });
+      loadData();
+    } catch {
+      // ignore
+    }
+    setDeleting(null);
+  };
+
+  const shearer =
+    shearers[sheep.station - 1]?.name || `Estación ${sheep.station}`;
+
   return (
     <>
       <header className="App-header">
-        <p>Enviando...</p>
+        <button onClick={onBack} className="Cancel-button">
+          ← Volver
+        </button>
+        <p>Detalle</p>
       </header>
-      <section className="Tag-display">
-        <p className={`Tag-button-white`}>Enviando...</p>
+
+      <section className="Detail-info">
+        <div className="Detail-tag-row">
+          <span className={`Color-dot Color-dot--${sheep.color} Color-dot--lg`} />
+          <span className="Detail-tag">{sheep.tag}</span>
+        </div>
+        <p className="Detail-meta">
+          {sheep.type} · Esquilador: {shearer}
+        </p>
+        <div className="Detail-fields">
+          <div className="Detail-field">
+            <span className="Detail-field-label">Lana</span>
+            <span className="Detail-field-value">{sheep.woolQuality ?? "—"}</span>
+          </div>
+          <div className="Detail-field">
+            <span className="Detail-field-label">Lactancia</span>
+            <span className="Detail-field-value">{sheep.lactation ?? "—"}</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="Detail-section">
+        <h3 className="Detail-section-title">Esquilas</h3>
+        {shearingHistory.length === 0 ? (
+          <p className="Detail-empty">Sin registros</p>
+        ) : (
+          <div className="Detail-list">
+            {shearingHistory.map((s) => (
+              <div key={s.rowid} className="Detail-list-item Detail-list-item--shearing">
+                <div className="Detail-list-left">
+                  <span className="Detail-list-primary">
+                    Esquilador: {shearers[s.station - 1]?.name || `Estación ${s.station}`}
+                  </span>
+                  <span className="Detail-list-secondary">
+                    Lana: {s.woolQuality ?? "—"} · Lact: {s.lactation ?? "—"}
+                  </span>
+                </div>
+                <span className="Detail-list-secondary">
+                  {formatDate(s.date)}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="Detail-section">
+        <div className="Detail-section-header">
+          <h3 className="Detail-section-title">Tratamientos</h3>
+          {!showForm && (
+            <button
+              className="Detail-add-btn"
+              onClick={() => setShowForm(true)}
+            >
+              + Agregar
+            </button>
+          )}
+        </div>
+
+        {showForm && (
+          <TreatmentForm
+            tag={sheep.tag}
+            onSave={() => {
+              setShowForm(false);
+              loadData();
+            }}
+            onCancel={() => setShowForm(false)}
+          />
+        )}
+
+        {treatments.length === 0 && !showForm ? (
+          <p className="Detail-empty">Sin tratamientos</p>
+        ) : (
+          <div className="Detail-list">
+            {treatments.map((t) => (
+              <div key={t.id} className="Detail-list-item Detail-list-item--treatment">
+                <div className="Detail-list-left">
+                  <span
+                    className={`Treatment-badge Treatment-badge--${t.type}`}
+                  >
+                    {t.type === "vaccination" ? "Vacuna" : "Desparasitante"}
+                  </span>
+                  <span className="Detail-list-primary">{t.medication}</span>
+                </div>
+                <div className="Detail-list-right">
+                  <span className="Detail-list-secondary">
+                    {formatDate(t.date)}
+                  </span>
+                  <button
+                    className="Detail-delete-btn"
+                    onClick={() => onDeleteTreatment(t.id)}
+                    disabled={deleting === t.id}
+                    title="Eliminar"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
     </>
   );
@@ -133,10 +333,10 @@ function SendingScreen() {
 
 function EsquilaDBApp() {
   const [allSheep, setAllSheep] = useState([]);
+  const [treatmentCounts, setTreatmentCounts] = useState({});
   const [filter, setFilter] = useState("");
   const [selectedSheep, setSelectedSheep] = useState(null);
   const [highlightedSheep, setHighlightedSheep] = useState(null);
-  const [message, setMessage] = useState(null);
 
   const loadSheep = () => {
     fetch("/sheep")
@@ -145,52 +345,29 @@ function EsquilaDBApp() {
       .catch(() => setAllSheep([]));
   };
 
-  useEffect(() => {
-    loadSheep();
-  }, []);
-
-  const onCancel = () => {
-    setSelectedSheep(null);
-    setHighlightedSheep(null);
-    setMessage(null);
+  const loadTreatmentCounts = () => {
+    fetch("/treatment-counts")
+      .then((res) => res.json())
+      .then((data) => setTreatmentCounts(data))
+      .catch(() => setTreatmentCounts({}));
   };
 
-  const onConfirmVaccinate = async () => {
-    try {
-      setMessage("sending");
-      await fetch("/vaccinate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ rowid: selectedSheep.rowid }),
-      });
-      setMessage("success");
-    } catch (err) {
-      setMessage("failed");
-    }
-    setTimeout(() => {
-      loadSheep();
-      onCancel();
-    }, 1500);
+  useEffect(() => {
+    loadSheep();
+    loadTreatmentCounts();
+  }, []);
+
+  const onBack = () => {
+    setSelectedSheep(null);
+    setHighlightedSheep(null);
+    loadSheep();
+    loadTreatmentCounts();
   };
 
   let screen = null;
 
-  if (message === "success") {
-    screen = <SuccessScreen />;
-  } else if (message === "failed") {
-    screen = <FailedScreen />;
-  } else if (message === "sending") {
-    screen = <SendingScreen />;
-  } else if (selectedSheep) {
-    screen = (
-      <ConfirmScreen
-        sheep={selectedSheep}
-        onCancel={onCancel}
-        onConfirm={onConfirmVaccinate}
-      />
-    );
+  if (selectedSheep) {
+    screen = <SheepDetailView sheep={selectedSheep} onBack={onBack} />;
   } else {
     screen = (
       <>
@@ -234,7 +411,7 @@ function EsquilaDBApp() {
               <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
               <path d="m15 5 4 4" />
             </svg>
-            Editar
+            Ver Detalle
           </button>
         </div>
         <SheepTable
@@ -242,6 +419,7 @@ function EsquilaDBApp() {
           filter={filter}
           highlightedId={highlightedSheep?.rowid ?? null}
           onHighlight={setHighlightedSheep}
+          treatmentCounts={treatmentCounts}
         />
       </>
     );
