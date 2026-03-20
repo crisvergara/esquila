@@ -450,8 +450,8 @@ function VaccinationReport({ onBack, onPresetsChanged }) {
 
   return (
     <>
-      <header className="App-header Vacc-header">
-        <button onClick={onBack} className="Cancel-button Vacc-back-btn">
+      <header className="App-header">
+        <button onClick={onBack} className="Cancel-button">
           ← Volver
         </button>
         <p>Vacunaciones</p>

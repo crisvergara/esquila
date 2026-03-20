@@ -467,13 +467,10 @@
 
 .App-header {
   position: relative;
-}
-
-.Vacc-header {
   justify-content: center;
 }
 
-.Vacc-back-btn {
+.App-header .Cancel-button {
   position: absolute;
   left: 12px;
   top: 50%;
