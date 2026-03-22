@@ -55,8 +55,9 @@ Tags consist of a **letter prefix** (A, B, C, S, L, X — representing ranch/ori
 The EsquilaDB interface (`/esquiladb`) lets you browse all sheep records, view shearing history, and manage treatments (vaccinations and dewormings). Selecting a sheep shows its full detail view with:
 
 - **Shearing history** — dates and which shearer handled the animal
-- **Treatment history** — vaccinations and deworming medications with dates
-- **Add treatment** — record a new vaccination or deworming with the medication name and date
+- **Treatment history** — vaccinations and deworming medications with dates and dosages
+- **Treatment presets** — save reusable medication + dose combinations and apply them to sheep with a single tap
+- **Vaccination report** — overview of vaccination counts per day
 
 Tracking medication names is important because brands need to be rotated periodically to prevent resistance.
 
