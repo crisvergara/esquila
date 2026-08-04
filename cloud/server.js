@@ -28,7 +28,19 @@ if (!process.env.ADMIN_TOKEN) {
   process.exit(1);
 }
 
-const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+  // Recycle idle clients quickly: Neon's pooler drops idle connections
+  // (scale-to-zero), and a dropped idle client emits a pool-level error.
+  idleTimeoutMillis: 30_000,
+  max: 5,
+});
+
+// An idle client dying (e.g. Neon suspending) must not crash the server;
+// the pool replaces it on the next query.
+pool.on("error", (err) => {
+  console.error("Idle Postgres client error (ignored):", err.message);
+});
 
 const schema = await readFile(path.join(__dirname, "schema.sql"), "utf8");
 await pool.query(schema);
