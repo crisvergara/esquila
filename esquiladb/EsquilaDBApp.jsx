@@ -1,29 +1,128 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 
 import "./EsquilaDB.css";
 import shearers from "../shearers.json";
+import { uuidv7 } from "../shared/uuidv7.js";
+import { ranchDay } from "../shared/ranchdate.js";
+import {
+  AuthError,
+  enqueue,
+  loadPending,
+  loadSnapshot,
+  drainOutbox,
+  refreshSnapshot,
+  getEnrollment,
+  saveEnrollment,
+  clearEnrollment,
+} from "./sync.js";
 
 function formatDate(iso) {
   if (!iso) return "—";
   const d = new Date(iso);
-  return d.toLocaleDateString("es-MX", {
+  return d.toLocaleDateString("es-CL", {
     year: "numeric",
     month: "short",
     day: "numeric",
   });
 }
 
-function SheepTable({
-  sheep,
-  filter,
-  highlightedId,
-  onHighlight,
-  treatmentCounts,
-}) {
+// occurred_on is a plain YYYY-MM-DD ranch-local day; pin it to noon so the
+// browser's timezone can't shift it to a neighboring day.
+function formatDay(day) {
+  if (!day) return "—";
+  return formatDate(day + "T12:00:00");
+}
+
+function timeAgo(iso) {
+  if (!iso) return null;
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "ahora";
+  if (mins < 60) return `hace ${mins} min`;
+  const hours = Math.round(mins / 60);
+  if (hours < 48) return `hace ${hours} h`;
+  return `hace ${Math.round(hours / 24)} días`;
+}
+
+// Overlay pending (not-yet-synced) rows onto the server snapshot: pending
+// tombstones hide rows, pending inserts appear flagged with `pending: true`.
+function mergeRows(baseRows, pending, table) {
+  const byId = new Map(baseRows.map((r) => [r.id, r]));
+  for (const entry of pending) {
+    if (entry.table !== table) continue;
+    if (entry.row.deleted_at) {
+      byId.delete(entry.row.id);
+    } else {
+      byId.set(entry.row.id, { ...entry.row, pending: true });
+    }
+  }
+  return [...byId.values()];
+}
+
+function SyncStatusBar({ online, pendingCount, fetchedAt, syncing, onSync }) {
+  let dotClass, label;
+  if (!online) {
+    dotClass = "offline";
+    label = fetchedAt ? `Sin conexión · datos ${timeAgo(fetchedAt)}` : "Sin conexión";
+  } else if (pendingCount > 0) {
+    dotClass = "pending";
+    label = `${pendingCount} por sincronizar`;
+  } else {
+    dotClass = "ok";
+    label = syncing ? "Sincronizando..." : "Sincronizado";
+  }
+  return (
+    <button className="Sync-bar" onClick={onSync} title="Sincronizar ahora">
+      <span className={`Sync-dot Sync-dot--${dotClass}`} />
+      <span className="Sync-label">{label}</span>
+    </button>
+  );
+}
+
+function EnrollScreen({ onEnroll }) {
+  const [token, setToken] = useState("");
+  const [name, setName] = useState("");
+  return (
+    <>
+      <header className="App-header">
+        <p>EsquilaDB</p>
+      </header>
+      <section className="Detail-section Enroll-screen">
+        <h3 className="Detail-section-title">Vincular este teléfono</h3>
+        <p className="Enroll-help">
+          Escanea el código QR de invitación con la cámara, o pega el token aquí:
+        </p>
+        <input
+          className="Treatment-input"
+          type="text"
+          placeholder="Token de invitación..."
+          value={token}
+          onChange={(e) => setToken(e.target.value)}
+          autoComplete="off"
+          autoCorrect="off"
+          spellCheck="false"
+        />
+        <input
+          className="Treatment-input"
+          type="text"
+          placeholder="Nombre del dispositivo (ej. Teléfono de Papá)"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <button
+          className="Treatment-save-btn"
+          disabled={!token.trim()}
+          onClick={() => onEnroll(token.trim(), name.trim() || "phone")}
+        >
+          Vincular
+        </button>
+      </section>
+    </>
+  );
+}
+
+function SheepTable({ sheep, filter, highlightedTag, onHighlight, treatmentCounts }) {
   const query = filter.toUpperCase();
-  const filtered = query
-    ? sheep.filter((s) => s.tag.includes(query))
-    : sheep;
+  const filtered = query ? sheep.filter((s) => s.tag.includes(query)) : sheep;
 
   return (
     <section className="Sheep-list">
@@ -53,7 +152,7 @@ function SheepTable({
                 shearers[s.station - 1]?.name || `Estación ${s.station}`;
               const counts = treatmentCounts[s.tag];
               const hasTreatments = counts && (counts.vaccinations > 0 || counts.dewormings > 0);
-              const isHighlighted = highlightedId === s.rowid;
+              const isHighlighted = highlightedTag === s.tag;
               const rowClass = [
                 "Sheep-row",
                 isHighlighted && "Sheep-row--selected",
@@ -71,7 +170,7 @@ function SheepTable({
 
               return (
                 <tr
-                  key={s.rowid}
+                  key={s.tag}
                   className={rowClass}
                   onClick={() => onHighlight(s)}
                 >
@@ -96,34 +195,21 @@ function SheepTable({
   );
 }
 
-function TreatmentForm({ tag, onSave, onCancel }) {
+function TreatmentForm({ onSave, onCancel }) {
   const [type, setType] = useState("vaccination");
   const [medication, setMedication] = useState("");
   const [dose, setDose] = useState("");
-  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [sending, setSending] = useState(false);
+  const [date, setDate] = useState(() => ranchDay());
 
-  const onSubmit = async (e) => {
+  const onSubmit = (e) => {
     e.preventDefault();
     if (!medication.trim()) return;
-    setSending(true);
-    try {
-      const res = await fetch("/treatments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tag,
-          type,
-          medication: medication.trim(),
-          dose: dose.trim(),
-          date: new Date(date + "T12:00:00").toISOString(),
-        }),
-      });
-      if (!res.ok) throw new Error("save failed");
-      onSave();
-    } catch {
-      setSending(false);
-    }
+    onSave({
+      type,
+      medication: medication.trim(),
+      dose: dose.trim(),
+      occurredOn: date,
+    });
   };
 
   return (
@@ -181,9 +267,9 @@ function TreatmentForm({ tag, onSave, onCancel }) {
         <button
           type="submit"
           className="Treatment-save-btn"
-          disabled={!medication.trim() || sending}
+          disabled={!medication.trim()}
         >
-          {sending ? "Guardando..." : "Guardar"}
+          Guardar
         </button>
         <button type="button" className="Treatment-cancel-btn" onClick={onCancel}>
           Cancelar
@@ -193,60 +279,22 @@ function TreatmentForm({ tag, onSave, onCancel }) {
   );
 }
 
-function SheepDetailView({ sheep, presets, onBack }) {
-  const [shearingHistory, setShearingHistory] = useState([]);
-  const [treatments, setTreatments] = useState([]);
-  const [deleting, setDeleting] = useState(null);
-  const [applying, setApplying] = useState(null);
+function SheepDetailView({ sheep, shearingHistory, treatments, presets, actions, onBack }) {
+  const [showForm, setShowForm] = useState(false);
 
-  const loadData = () => {
-    fetch(`/sheep?tag=${encodeURIComponent(sheep.tag)}`)
-      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
-      .then(setShearingHistory)
-      .catch(() => setShearingHistory([]));
-
-    fetch(`/treatments?tag=${encodeURIComponent(sheep.tag)}`)
-      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
-      .then(setTreatments)
-      .catch(() => setTreatments([]));
-  };
-
-  useEffect(() => {
-    loadData();
-  }, [sheep.tag]);
-
-  const onDeleteTreatment = async (id) => {
+  const onDeleteTreatment = (t) => {
     if (!window.confirm("¿Eliminar este tratamiento?")) return;
-    setDeleting(id);
-    try {
-      await fetch(`/treatments/${id}`, { method: "DELETE" });
-      loadData();
-    } catch {
-      // ignore
-    }
-    setDeleting(null);
+    actions.deleteTreatment(t);
   };
 
-  const onApplyPreset = async (preset) => {
-    setApplying(preset.id);
-    try {
-      const res = await fetch("/treatments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          tag: sheep.tag,
-          type: preset.type,
-          medication: preset.medication,
-          dose: preset.dose,
-          date: new Date().toISOString(),
-        }),
-      });
-      if (!res.ok) throw new Error("save failed");
-      loadData();
-    } catch {
-      // ignore
-    }
-    setApplying(null);
+  const onApplyPreset = (preset) => {
+    actions.addTreatment({
+      tag: sheep.tag,
+      type: preset.type,
+      medication: preset.medication,
+      dose: preset.dose ?? "",
+      occurredOn: ranchDay(),
+    });
   };
 
   const shearer =
@@ -272,7 +320,7 @@ function SheepDetailView({ sheep, presets, onBack }) {
         <div className="Detail-fields">
           <div className="Detail-field">
             <span className="Detail-field-label">Lana</span>
-            <span className="Detail-field-value">{sheep.woolQuality ?? "—"}</span>
+            <span className="Detail-field-value">{sheep.wool_quality ?? "—"}</span>
           </div>
           <div className="Detail-field">
             <span className="Detail-field-label">Lactancia</span>
@@ -288,17 +336,17 @@ function SheepDetailView({ sheep, presets, onBack }) {
         ) : (
           <div className="Detail-list">
             {shearingHistory.map((s) => (
-              <div key={s.rowid} className="Detail-list-item Detail-list-item--shearing">
+              <div key={s.id} className="Detail-list-item Detail-list-item--shearing">
                 <div className="Detail-list-left">
                   <span className="Detail-list-primary">
                     Esquilador: {shearers[s.station - 1]?.name || `Estación ${s.station}`}
                   </span>
                   <span className="Detail-list-secondary">
-                    Lana: {s.woolQuality ?? "—"} · Lact: {s.lactation ?? "—"}
+                    Lana: {s.wool_quality ?? "—"} · Lact: {s.lactation ?? "—"}
                   </span>
                 </div>
                 <span className="Detail-list-secondary">
-                  {formatDate(s.date)}
+                  {formatDate(s.occurred_at)}
                 </span>
               </div>
             ))}
@@ -307,7 +355,22 @@ function SheepDetailView({ sheep, presets, onBack }) {
       </section>
 
       <section className="Detail-section">
-        <h3 className="Detail-section-title">Tratamientos</h3>
+        <div className="Detail-section-header">
+          <h3 className="Detail-section-title">Tratamientos</h3>
+          <button className="Detail-add-btn" onClick={() => setShowForm(!showForm)}>
+            {showForm ? "Cerrar" : "+ Manual"}
+          </button>
+        </div>
+
+        {showForm && (
+          <TreatmentForm
+            onSave={(t) => {
+              actions.addTreatment({ tag: sheep.tag, ...t });
+              setShowForm(false);
+            }}
+            onCancel={() => setShowForm(false)}
+          />
+        )}
 
         {presets.length > 0 && (
           <div className="Quick-apply-row">
@@ -315,10 +378,9 @@ function SheepDetailView({ sheep, presets, onBack }) {
               <button
                 key={p.id}
                 className={`Quick-apply-btn Quick-apply-btn--${p.type}`}
-                disabled={applying === p.id}
                 onClick={() => onApplyPreset(p)}
               >
-                {applying === p.id ? "..." : (p.medication + (p.dose ? ` ${p.dose}` : ""))}
+                {p.medication + (p.dose ? ` ${p.dose}` : "")}
               </button>
             ))}
           </div>
@@ -339,15 +401,15 @@ function SheepDetailView({ sheep, presets, onBack }) {
                   <span className="Detail-list-primary">
                     {t.medication}{t.dose ? ` · ${t.dose}` : ""}
                   </span>
+                  {t.pending && <span className="Pending-badge">pendiente</span>}
                 </div>
                 <div className="Detail-list-right">
                   <span className="Detail-list-secondary">
-                    {formatDate(t.date)}
+                    {formatDay(t.occurred_on)}
                   </span>
                   <button
                     className="Detail-delete-btn"
-                    onClick={() => onDeleteTreatment(t.id)}
-                    disabled={deleting === t.id}
+                    onClick={() => onDeleteTreatment(t)}
                     title="Eliminar"
                   >
                     ✕
@@ -362,87 +424,55 @@ function SheepDetailView({ sheep, presets, onBack }) {
   );
 }
 
-function todayStr() {
-  return new Date().toISOString().slice(0, 10);
-}
-
 function mondayOfWeek() {
   const d = new Date();
   const day = d.getDay();
   const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  return new Date(d.getFullYear(), d.getMonth(), diff).toISOString().slice(0, 10);
+  return ranchDay(new Date(d.getFullYear(), d.getMonth(), diff));
 }
 
-function VaccinationReport({ onBack, onPresetsChanged }) {
-  const [start, setStart] = useState(todayStr);
-  const [end, setEnd] = useState(todayStr);
-  const [data, setData] = useState({ days: [], total: 0 });
-  const [loading, setLoading] = useState(true);
+function VaccinationReport({ treatments, presets, actions, onBack }) {
+  const [start, setStart] = useState(() => ranchDay());
+  const [end, setEnd] = useState(() => ranchDay());
 
-  const [presets, setPresets] = useState([]);
   const [showPresetForm, setShowPresetForm] = useState(false);
   const [presetType, setPresetType] = useState("vaccination");
   const [medication, setMedication] = useState("");
   const [dose, setDose] = useState("");
-  const [sending, setSending] = useState(false);
-  const [deleting, setDeleting] = useState(null);
 
-  const loadSummary = () => {
-    setLoading(true);
-    const params = new URLSearchParams({ start, end });
-    fetch(`/vaccination-summary?${params}`)
-      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
-      .then(setData)
-      .catch(() => setData({ days: [], total: 0 }))
-      .finally(() => setLoading(false));
-  };
+  // Report is computed from local data, so it works fully offline.
+  const summary = useMemo(() => {
+    const byDay = new Map();
+    for (const t of treatments) {
+      if (t.type !== "vaccination") continue;
+      if (t.occurred_on < start || t.occurred_on > end) continue;
+      byDay.set(t.occurred_on, (byDay.get(t.occurred_on) ?? 0) + 1);
+    }
+    const days = [...byDay.entries()]
+      .map(([day, count]) => ({ day, count }))
+      .sort((a, b) => b.day.localeCompare(a.day));
+    return { days, total: days.reduce((sum, d) => sum + d.count, 0) };
+  }, [treatments, start, end]);
 
-  const loadPresets = () => {
-    fetch("/treatment-presets")
-      .then((r) => { if (!r.ok) throw new Error(); return r.json(); })
-      .then(setPresets)
-      .catch(() => setPresets([]));
-  };
+  const setToday = () => { setStart(ranchDay()); setEnd(ranchDay()); };
+  const setThisWeek = () => { setStart(mondayOfWeek()); setEnd(ranchDay()); };
 
-  useEffect(() => { loadSummary(); }, [start, end]);
-  useEffect(() => { loadPresets(); }, []);
-
-  const setToday = () => { setStart(todayStr()); setEnd(todayStr()); };
-  const setThisWeek = () => { setStart(mondayOfWeek()); setEnd(todayStr()); };
-
-  const onSubmitPreset = async (e) => {
+  const onSubmitPreset = (e) => {
     e.preventDefault();
     if (!medication.trim()) return;
-    setSending(true);
-    try {
-      const res = await fetch("/treatment-presets", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ type: presetType, medication: medication.trim(), dose: dose.trim() }),
-      });
-      if (!res.ok) throw new Error();
-      setMedication("");
-      setDose("");
-      setShowPresetForm(false);
-      loadPresets();
-      onPresetsChanged();
-    } catch {
-      // ignore
-    }
-    setSending(false);
+    actions.addPreset({
+      type: presetType,
+      medication: medication.trim(),
+      dose: dose.trim(),
+    });
+    setMedication("");
+    setDose("");
+    setShowPresetForm(false);
   };
 
-  const onDeletePreset = async (id) => {
+  const onDeletePreset = (p) => {
     if (!window.confirm("¿Eliminar este preset?")) return;
-    setDeleting(id);
-    try {
-      await fetch(`/treatment-presets/${id}`, { method: "DELETE" });
-      loadPresets();
-      onPresetsChanged();
-    } catch {
-      // ignore
-    }
-    setDeleting(null);
+    actions.deletePreset(p);
   };
 
   const vaccinations = presets.filter((p) => p.type === "vaccination");
@@ -520,9 +550,9 @@ function VaccinationReport({ onBack, onPresetsChanged }) {
               <button
                 type="submit"
                 className="Treatment-save-btn"
-                disabled={!medication.trim() || sending}
+                disabled={!medication.trim()}
               >
-                {sending ? "Guardando..." : "Guardar Preset"}
+                Guardar Preset
               </button>
             </form>
           </section>
@@ -540,11 +570,11 @@ function VaccinationReport({ onBack, onPresetsChanged }) {
                       <span className="Detail-list-primary">
                         {p.medication}{p.dose ? ` · ${p.dose}` : ""}
                       </span>
+                      {p.pending && <span className="Pending-badge">pendiente</span>}
                     </div>
                     <button
                       className="Detail-delete-btn"
-                      onClick={() => onDeletePreset(p.id)}
-                      disabled={deleting === p.id}
+                      onClick={() => onDeletePreset(p)}
                       title="Eliminar"
                     >
                       ✕
@@ -568,11 +598,11 @@ function VaccinationReport({ onBack, onPresetsChanged }) {
                       <span className="Detail-list-primary">
                         {p.medication}{p.dose ? ` · ${p.dose}` : ""}
                       </span>
+                      {p.pending && <span className="Pending-badge">pendiente</span>}
                     </div>
                     <button
                       className="Detail-delete-btn"
-                      onClick={() => onDeletePreset(p.id)}
-                      disabled={deleting === p.id}
+                      onClick={() => onDeletePreset(p)}
                       title="Eliminar"
                     >
                       ✕
@@ -599,19 +629,19 @@ function VaccinationReport({ onBack, onPresetsChanged }) {
           </section>
 
           <section className="Vaccination-summary">
-            <span className="Vaccination-summary-count">{loading ? "..." : data.total}</span>
+            <span className="Vaccination-summary-count">{summary.total}</span>
             <span className="Vaccination-summary-label">vacunaciones</span>
           </section>
 
           <section className="Detail-section" style={{ flex: 1, overflowY: "auto" }}>
             <h3 className="Detail-section-title">Desglose por día</h3>
-            {data.days.length === 0 && !loading ? (
+            {summary.days.length === 0 ? (
               <p className="Detail-empty">Sin vacunaciones en este rango</p>
             ) : (
               <div className="Detail-list">
-                {data.days.map((d) => (
+                {summary.days.map((d) => (
                   <div key={d.day} className="Vaccination-day-row">
-                    <span className="Vaccination-day-date">{formatDate(d.day + "T12:00:00")}</span>
+                    <span className="Vaccination-day-date">{formatDay(d.day)}</span>
                     <span className="Vaccination-day-count">{d.count}</span>
                   </div>
                 ))}
@@ -625,59 +655,200 @@ function VaccinationReport({ onBack, onPresetsChanged }) {
 }
 
 function EsquilaDBApp() {
-  const [allSheep, setAllSheep] = useState([]);
-  const [treatmentCounts, setTreatmentCounts] = useState({});
+  const [enrollment, setEnrollment] = useState(undefined); // undefined=loading, null=not enrolled
+  const [snapshot, setSnapshot] = useState(null);
+  const [pending, setPending] = useState([]);
+  const [online, setOnline] = useState(() => navigator.onLine);
+  const [syncing, setSyncing] = useState(false);
+
   const [filter, setFilter] = useState("");
-  const [selectedSheep, setSelectedSheep] = useState(null);
-  const [highlightedSheep, setHighlightedSheep] = useState(null);
+  const [selectedTag, setSelectedTag] = useState(null);
+  const [highlightedTag, setHighlightedTag] = useState(null);
   const [showVaccinationReport, setShowVaccinationReport] = useState(false);
-  const [presets, setPresets] = useState([]);
 
-  const loadSheep = () => {
-    fetch("/sheep")
-      .then((res) => res.json())
-      .then((data) => setAllSheep(data))
-      .catch(() => setAllSheep([]));
-  };
-
-  const loadTreatmentCounts = () => {
-    fetch("/treatment-counts")
-      .then((res) => res.json())
-      .then((data) => setTreatmentCounts(data))
-      .catch(() => setTreatmentCounts({}));
-  };
-
-  const loadPresets = () => {
-    fetch("/treatment-presets")
-      .then((res) => res.json())
-      .then((data) => setPresets(data))
-      .catch(() => setPresets([]));
-  };
-
-  useEffect(() => {
-    loadSheep();
-    loadTreatmentCounts();
-    loadPresets();
+  const syncNow = useCallback(async () => {
+    if (!navigator.onLine) return;
+    setSyncing(true);
+    try {
+      await drainOutbox();
+      setPending(await loadPending());
+      setSnapshot(await refreshSnapshot());
+    } catch (err) {
+      if (err instanceof AuthError && err.message === "token rejected") {
+        await clearEnrollment();
+        setEnrollment(null);
+      }
+      // Anything else (offline, server hiccup): outbox is intact, retry later.
+    } finally {
+      setSyncing(false);
+    }
   }, []);
 
-  const onBack = () => {
-    setSelectedSheep(null);
-    setHighlightedSheep(null);
-    loadSheep();
-    loadTreatmentCounts();
-  };
+  // Boot: pick up an enrollment token from the QR link hash, then load
+  // everything from IndexedDB so the app renders instantly, even offline.
+  useEffect(() => {
+    (async () => {
+      const hash = new URLSearchParams(window.location.hash.slice(1));
+      if (hash.get("token")) {
+        await saveEnrollment(hash.get("token"), hash.get("name"));
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+      setSnapshot((await loadSnapshot()) ?? null);
+      setPending(await loadPending());
+      setEnrollment((await getEnrollment()) ?? null);
+    })();
+  }, []);
+
+  // Background sync: on enroll, on reconnect, on app focus, every 60s.
+  useEffect(() => {
+    if (!enrollment) return;
+    syncNow();
+    const onOnline = () => { setOnline(true); syncNow(); };
+    const onOffline = () => setOnline(false);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") syncNow();
+    };
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    document.addEventListener("visibilitychange", onVisible);
+    const timer = setInterval(syncNow, 60 * 1000);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+      document.removeEventListener("visibilitychange", onVisible);
+      clearInterval(timer);
+    };
+  }, [enrollment, syncNow]);
+
+  const applyLocal = useCallback(async (table, row) => {
+    await enqueue(table, row);
+    setPending(await loadPending());
+    syncNow();
+  }, [syncNow]);
+
+  const actions = useMemo(() => ({
+    addTreatment: ({ tag, type, medication, dose, occurredOn }) => {
+      const now = new Date().toISOString();
+      return applyLocal("treatments", {
+        id: uuidv7(),
+        tag,
+        type,
+        medication,
+        dose: dose ?? "",
+        occurred_on: occurredOn ?? ranchDay(),
+        recorded_at: now,
+        updated_at: now,
+        deleted_at: null,
+        origin: enrollment?.deviceName ?? "phone",
+      });
+    },
+    deleteTreatment: (t) => {
+      const now = new Date().toISOString();
+      const { pending: _pending, ...row } = t;
+      return applyLocal("treatments", { ...row, deleted_at: now, updated_at: now });
+    },
+    addPreset: ({ type, medication, dose }) => {
+      const now = new Date().toISOString();
+      return applyLocal("treatment_presets", {
+        id: uuidv7(),
+        type,
+        medication,
+        dose: dose ?? "",
+        updated_at: now,
+        deleted_at: null,
+      });
+    },
+    deletePreset: (p) => {
+      const now = new Date().toISOString();
+      const { pending: _pending, ...row } = p;
+      return applyLocal("treatment_presets", { ...row, deleted_at: now, updated_at: now });
+    },
+  }), [applyLocal, enrollment]);
+
+  // Derived, offline-capable views over snapshot + pending outbox.
+  const events = snapshot?.shearing_events ?? [];
+
+  const sheep = useMemo(() => {
+    // Events arrive sorted by occurred_at DESC, so the first per tag is the
+    // sheep's latest status.
+    const latest = new Map();
+    for (const e of events) {
+      if (!latest.has(e.tag)) latest.set(e.tag, e);
+    }
+    return [...latest.values()];
+  }, [events]);
+
+  const treatments = useMemo(
+    () => mergeRows(snapshot?.treatments ?? [], pending, "treatments"),
+    [snapshot, pending]
+  );
+
+  const presets = useMemo(
+    () =>
+      mergeRows(snapshot?.presets ?? [], pending, "treatment_presets").sort(
+        (a, b) => a.type.localeCompare(b.type) || a.medication.localeCompare(b.medication)
+      ),
+    [snapshot, pending]
+  );
+
+  const treatmentCounts = useMemo(() => {
+    const counts = {};
+    for (const t of treatments) {
+      const c = (counts[t.tag] ??= { vaccinations: 0, dewormings: 0 });
+      if (t.type === "vaccination") c.vaccinations += 1;
+      else c.dewormings += 1;
+    }
+    return counts;
+  }, [treatments]);
+
+  if (enrollment === undefined) {
+    return <div className="App" />;
+  }
+
+  if (enrollment === null) {
+    return (
+      <div className="App">
+        <EnrollScreen
+          onEnroll={async (token, name) => {
+            await saveEnrollment(token, name);
+            setEnrollment({ deviceName: name });
+          }}
+        />
+      </div>
+    );
+  }
+
+  const selectedSheep = selectedTag
+    ? sheep.find((s) => s.tag === selectedTag)
+    : null;
 
   let screen = null;
 
   if (showVaccinationReport) {
     screen = (
       <VaccinationReport
-        onBack={() => { setShowVaccinationReport(false); loadPresets(); }}
-        onPresetsChanged={loadPresets}
+        treatments={treatments}
+        presets={presets}
+        actions={actions}
+        onBack={() => setShowVaccinationReport(false)}
       />
     );
   } else if (selectedSheep) {
-    screen = <SheepDetailView sheep={selectedSheep} presets={presets} onBack={onBack} />;
+    screen = (
+      <SheepDetailView
+        sheep={selectedSheep}
+        shearingHistory={events.filter((e) => e.tag === selectedSheep.tag)}
+        treatments={treatments
+          .filter((t) => t.tag === selectedSheep.tag)
+          .sort((a, b) => b.recorded_at.localeCompare(a.recorded_at))}
+        presets={presets}
+        actions={actions}
+        onBack={() => {
+          setSelectedTag(null);
+          setHighlightedTag(null);
+        }}
+      />
+    );
   } else {
     screen = (
       <>
@@ -707,7 +878,7 @@ function EsquilaDBApp() {
             value={filter}
             onChange={(e) => {
               setFilter(e.target.value);
-              setHighlightedSheep(null);
+              setHighlightedTag(null);
             }}
             autoCapitalize="characters"
             autoComplete="off"
@@ -718,9 +889,9 @@ function EsquilaDBApp() {
         <div className="Edit-bar">
           <button
             className="Edit-button"
-            disabled={!highlightedSheep}
+            disabled={!highlightedTag}
             onClick={() => {
-              if (highlightedSheep) setSelectedSheep(highlightedSheep);
+              if (highlightedTag) setSelectedTag(highlightedTag);
             }}
           >
             <svg
@@ -739,17 +910,28 @@ function EsquilaDBApp() {
           </button>
         </div>
         <SheepTable
-          sheep={allSheep}
+          sheep={sheep}
           filter={filter}
-          highlightedId={highlightedSheep?.rowid ?? null}
-          onHighlight={setHighlightedSheep}
+          highlightedTag={highlightedTag}
+          onHighlight={(s) => setHighlightedTag(s.tag)}
           treatmentCounts={treatmentCounts}
         />
       </>
     );
   }
 
-  return <div className="App">{screen}</div>;
+  return (
+    <div className="App">
+      <SyncStatusBar
+        online={online}
+        pendingCount={pending.length}
+        fetchedAt={snapshot?.fetchedAt}
+        syncing={syncing}
+        onSync={syncNow}
+      />
+      {screen}
+    </div>
+  );
 }
 
 export default EsquilaDBApp;

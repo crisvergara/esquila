@@ -1,0 +1,21 @@
+# Fly.io config for esquila-cloud.
+# First deploy:
+#   fly launch --no-deploy   (accept this file when prompted)
+#   fly secrets set DATABASE_URL="<neon-connection-string>" ADMIN_TOKEN="<long-random-string>"
+#   fly deploy
+app = "esquila-cloud"
+primary_region = "iad"   # co-locate with the Neon project region (US East)
+
+[build]
+  dockerfile = "cloud/Dockerfile"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

@@ -9,6 +9,7 @@
     "better-sqlite3": "^12.2.0",
     "body-parser": "^2.2.0",
     "express": "^5.1.0",
+    "idb": "^8.0.3",
     "nodemailer": "^7.0.6",
     "qrcode": "^1.5.4",
     "react": "^19.1.1",
@@ -17,10 +18,13 @@
   "scripts": {
     "start": "node countserver.js",
     "build": "vite build",
+    "build:cloud": "vite build --config vite.cloud.config.js",
+    "dev:cloud": "vite --config vite.cloud.config.js",
     "preview": "vite preview"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.0.2",
-    "vite": "^7.1.5"
+    "vite": "^7.1.5",
+    "vite-plugin-pwa": "^1.0.2"
   }
 }

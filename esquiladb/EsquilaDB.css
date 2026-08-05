@@ -673,3 +673,56 @@
   font-weight: 700;
   color: #25d342;
 }
+
+/* Sync status bar */
+
+.Sync-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #aaa;
+  background-color: #1a1e24;
+  border: none;
+  border-bottom: 1px solid #3a3f4b;
+  cursor: pointer;
+}
+
+.Sync-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.Sync-dot--ok { background-color: #25d342; }
+.Sync-dot--pending { background-color: #f5d542; }
+.Sync-dot--offline { background-color: #888; }
+
+.Pending-badge {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: #f5d542;
+  color: #000;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Enrollment screen */
+
+.Enroll-screen {
+  flex: 1;
+}
+
+.Enroll-help {
+  color: #aaa;
+  font-size: 15px;
+  margin: 0 0 14px;
+}

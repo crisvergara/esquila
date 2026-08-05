@@ -13,6 +13,8 @@ esquila
 
 # production
 /build
+/build-cloud
+/cloud/node_modules
 
 # misc
 .DS_Store
