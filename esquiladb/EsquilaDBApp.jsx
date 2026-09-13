@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 
 import "./EsquilaDB.css";
-import shearers from "../shearers.json";
 import { uuidv7 } from "../shared/uuidv7.js";
 import { ranchDay } from "../shared/ranchdate.js";
 import {
@@ -142,14 +141,13 @@ function SheepTable({ sheep, filter, highlightedTag, onHighlight, treatmentCount
               <th></th>
               <th>Tag</th>
               <th>Tipo</th>
-              <th>Esquilador</th>
+              <th>Estación</th>
               <th>Tratam.</th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((s) => {
-              const shearer =
-                shearers[s.station - 1]?.name || `Estación ${s.station}`;
+              const shearer = `Estación ${s.station}`;
               const counts = treatmentCounts[s.tag];
               const hasTreatments = counts && (counts.vaccinations > 0 || counts.dewormings > 0);
               const isHighlighted = highlightedTag === s.tag;
@@ -297,8 +295,7 @@ function SheepDetailView({ sheep, shearingHistory, treatments, presets, actions,
     });
   };
 
-  const shearer =
-    shearers[sheep.station - 1]?.name || `Estación ${sheep.station}`;
+  const shearer = `Estación ${sheep.station}`;
 
   return (
     <>
@@ -315,7 +312,7 @@ function SheepDetailView({ sheep, shearingHistory, treatments, presets, actions,
           <span className="Detail-tag">{sheep.tag}</span>
         </div>
         <p className="Detail-meta">
-          {sheep.type} · Esquilador: {shearer}
+          {sheep.type} · {shearer}
         </p>
         <div className="Detail-fields">
           <div className="Detail-field">
@@ -339,7 +336,7 @@ function SheepDetailView({ sheep, shearingHistory, treatments, presets, actions,
               <div key={s.id} className="Detail-list-item Detail-list-item--shearing">
                 <div className="Detail-list-left">
                   <span className="Detail-list-primary">
-                    Esquilador: {shearers[s.station - 1]?.name || `Estación ${s.station}`}
+                    Estación: {s.station}
                   </span>
                   <span className="Detail-list-secondary">
                     Lana: {s.wool_quality ?? "—"} · Lact: {s.lactation ?? "—"}

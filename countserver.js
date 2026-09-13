@@ -5,7 +5,10 @@ import QRCode from "qrcode";
 import os from "os";
 import process from "process";
 import { PassThrough } from "node:stream";
-import { createReadStream } from "node:fs";
+import { createReadStream, readFileSync, writeFileSync, existsSync, copyFileSync } from "node:fs";
+import { execFile } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import nodemailer from "nodemailer";
 import { SESv2Client, SendEmailCommand } from "@aws-sdk/client-sesv2";
@@ -15,11 +18,71 @@ import { uuidv7 } from "./shared/uuidv7.js";
 import { ranchDay } from "./shared/ranchdate.js";
 
 const modeEmitter = new EventEmitter();
+const countEmitter = new EventEmitter();
 
 const app = express();
-const port = 3001;
+const port = Number(process.env.PORT) || 3001;
 
 const db = new Database("esquila", {});
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const taggingModes = JSON.parse(
+  readFileSync(path.join(__dirname, "tagger", "modeschema.json"), "utf8")
+);
+const taggingModesByType = new Map(
+  taggingModes.map((taggingMode) => [taggingMode.type, taggingMode])
+);
+
+const taggerConnectionInfo = () => {
+  const candidates = Object.entries(os.networkInterfaces()).flatMap(
+    ([interfaceName, addresses]) =>
+      (addresses ?? [])
+        .filter((address) =>
+          !address.internal &&
+          (address.family === "IPv4" || address.family === 4) &&
+          !address.address.startsWith("169.254.")
+        )
+        .map((address) => {
+          let score = 0;
+          if (/^(en0|en1|wlan0|eth0)$/i.test(interfaceName)) score += 100;
+          if (/^(utun|tun|tap|bridge|docker|vbox|vmnet)/i.test(interfaceName)) score -= 100;
+          if (
+            address.address.startsWith("10.") ||
+            address.address.startsWith("192.168.") ||
+            /^172\.(1[6-9]|2\d|3[01])\./.test(address.address)
+          ) score += 20;
+          return { address: address.address, score };
+        })
+  );
+  candidates.sort((a, b) => b.score - a.score);
+  const localName = os.hostname().split(".")[0];
+  const friendlyUrl = `http://${localName}.local:${port}/tagger/`;
+  const url = candidates[0]
+    ? `http://${candidates[0].address}:${port}/tagger/`
+    : friendlyUrl;
+  return { url, friendlyUrl };
+};
+
+// Shearer names are editable at runtime (Mac/Pi onboarding wizard). The live
+// copy lives in the data directory (CWD); the repo file only seeds it.
+const SHEARERS_FILE = path.resolve("shearers.json");
+if (!existsSync(SHEARERS_FILE)) {
+  copyFileSync(path.join(__dirname, "shearers.json"), SHEARERS_FILE);
+}
+
+const readShearers = () => {
+  try {
+    const parsed = JSON.parse(readFileSync(SHEARERS_FILE, "utf8"));
+    if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+  } catch (e) {
+    // fall through to repo default
+  }
+  return JSON.parse(readFileSync(path.join(__dirname, "shearers.json"), "utf8"));
+};
+
+const hasAwsCredentials = Boolean(
+  process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
+);
 
 const s3Client = new S3Client({
   region: "us-east-1",
@@ -254,6 +317,16 @@ if (db.pragma("user_version", { simple: true }) < 1) {
   console.log("Database migrated to sync-safe schema (v1)");
 }
 
+// A phone keeps the same submission id while retrying an uncertain request.
+// Recording it in the same transaction as the count makes retries idempotent.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS count_submissions (
+    id TEXT PRIMARY KEY,
+    kind TEXT NOT NULL,
+    created_at TEXT NOT NULL
+  )
+`);
+
 const getSettingsFromDb = db.prepare(`
   SELECT mode, email FROM settings
 `);
@@ -278,6 +351,7 @@ if (!settings) {
 }
 
 const backupDb = async () => {
+  if (!hasAwsCredentials) return;
   const backupName = `esquila-${new Date().toISOString()}.sqlite`;
   try {
     await db.backup(backupName);
@@ -295,16 +369,20 @@ const backupDb = async () => {
   }
 };
 
-setInterval(backupDb, 1000 * 60 * 10); // 10 minutes
+if (hasAwsCredentials) {
+  setInterval(backupDb, 1000 * 60 * 10); // 10 minutes
+} else {
+  console.log("S3 backups disabled — no AWS credentials configured");
+}
 
 process.on("SIGTERM", async () => {
-  console.log(`Received SIGTERM, backing up database and exiting...`);
+  console.log(`Received SIGTERM, exiting...`);
   await backupDb();
   process.exit(0);
 });
 
 process.on("SIGINT", async () => {
-  console.log(`Received SIGINT, backing up database and exiting...`);
+  console.log(`Received SIGINT, exiting...`);
   await backupDb();
   process.exit(0);
 });
@@ -399,38 +477,32 @@ let lambs = db
   )
   .get().max;
 
-let countStatsByStation = {
-  1: {
-    lastRowId: 0,
-    lastTag: "",
-    lastTagColor: "none",
-    counted: 0,
-    oveja: 0,
-    borrega: 0,
-    carnero: 0,
-  },
-  2: {
-    lastRowId: 0,
-    lastTag: "",
-    lastTagColor: "none",
-    counted: 0,
-    oveja: 0,
-    borrega: 0,
-    carnero: 0,
-  },
-  3: {
-    lastRowId: 0,
-    lastTag: "",
-    lastTagColor: "none",
-    counted: 0,
-    oveja: 0,
-    borrega: 0,
-    carnero: 0,
-  },
+// One stats entry per station; station count follows the shearers list,
+// which is editable at runtime via the Pi onboarding wizard.
+const emptyStationStats = () => ({
+  lastRowId: 0,
+  lastTag: "",
+  lastTagColor: "none",
+  lastScanTime: null,
+  counted: 0,
+  oveja: 0,
+  borrega: 0,
+  carnero: 0,
+});
+
+const defaultStatsByStation = () => {
+  const stats = {};
+  for (let station = 1; station <= readShearers().length; ++station) {
+    stats[station] = emptyStationStats();
+  }
+  return stats;
 };
+
+let countStatsByStation = defaultStatsByStation();
 
 const refreshCounts = async () => {
   countStatsByStation = await getStatsFromDb();
+  countEmitter.emit("update", countStatsByStation);
 };
 
 setInterval(async () => {
@@ -442,7 +514,16 @@ const writeTagToDb = db.prepare(`
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
-const insertCountTxn = db.transaction((row) => {
+const findCountSubmission = db.prepare(`
+  SELECT id FROM count_submissions WHERE id = ?
+`);
+
+const recordCountSubmission = db.prepare(`
+  INSERT INTO count_submissions (id, kind, created_at) VALUES (?, ?, ?)
+`);
+
+const insertCountTxn = db.transaction((row, submissionId) => {
+  if (submissionId && findCountSubmission.get(submissionId)) return false;
   writeTagToDb.run(
     row.id,
     row.tag,
@@ -455,6 +536,8 @@ const insertCountTxn = db.transaction((row) => {
     row.updated_at
   );
   queueSyncRow.run("counts", row.id);
+  if (submissionId) recordCountSubmission.run(submissionId, "single", row.date);
+  return true;
 });
 
 const writeTag = async (
@@ -463,11 +546,12 @@ const writeTag = async (
   color,
   lactation = "idk",
   type = "oveja",
-  woolQuality = "IDK"
+  woolQuality = "IDK",
+  submissionId = null
 ) => {
   const dateString = new Date().toISOString();
 
-  insertCountTxn({
+  const created = insertCountTxn({
     id: uuidv7(),
     tag,
     station,
@@ -477,78 +561,137 @@ const writeTag = async (
     woolQuality,
     date: dateString,
     updated_at: dateString,
-  });
+  }, submissionId);
 
   await refreshCounts();
+  return created;
 };
 
-const writeBulkTags = async (station, quantity) => {
+const insertBulkCountTxn = db.transaction((station, quantity, submissionId) => {
+  if (submissionId && findCountSubmission.get(submissionId)) return false;
+  const dateString = new Date().toISOString();
   for (let i = 0; i < quantity; ++i) {
     lambs += 1;
-    let tag = "L" + String(lambs).padStart(4, "0");
-
-    await writeTag(tag, station, "none", "idk", "borrega");
+    const row = {
+      id: uuidv7(),
+      tag: "L" + String(lambs).padStart(4, "0"),
+      station,
+      color: "none",
+      lactation: "idk",
+      type: "borrega",
+      woolQuality: "IDK",
+      date: dateString,
+      updated_at: dateString,
+    };
+    writeTagToDb.run(
+      row.id,
+      row.tag,
+      row.station,
+      row.color,
+      row.lactation,
+      row.type,
+      row.woolQuality,
+      row.date,
+      row.updated_at
+    );
+    queueSyncRow.run("counts", row.id);
   }
+  if (submissionId) recordCountSubmission.run(submissionId, "bulk", dateString);
+  return true;
+});
+
+const writeBulkTags = async (station, quantity, submissionId = null) => {
+  const created = insertBulkCountTxn(station, quantity, submissionId);
+  await refreshCounts();
+  return created;
+};
+
+const readSubmissionId = (body) => {
+  const value = body?.submissionId;
+  return typeof value === "string" && /^[A-Za-z0-9_-]{16,100}$/.test(value)
+    ? value
+    : null;
+};
+
+const readStation = (body) => {
+  const station = Number(body?.station);
+  return Number.isInteger(station) && station >= 1 && station <= readShearers().length
+    ? station
+    : null;
+};
+
+const validateTagSubmission = (body) => {
+  const type = body?.type ?? "oveja";
+  const taggingMode = taggingModesByType.get(type);
+  if (!taggingMode?.tagSchema || taggingMode.bulk) {
+    return { error: "invalid sheep type" };
+  }
+
+  const station = readStation(body);
+  if (!station) return { error: "invalid station" };
+
+  const color = body?.color;
+  if (!taggingMode.tagSchema.colors.some((entry) => entry.value === color)) {
+    return { error: "invalid tag color" };
+  }
+
+  const tag = body?.tag;
+  if (typeof tag !== "string") return { error: "invalid tag" };
+  const [codeSchema, digitsSchema] = taggingMode.tagSchema.textSchema;
+  const matchingCode = [...codeSchema.options]
+    .sort((a, b) => b.value.length - a.value.length)
+    .find((option) => tag.startsWith(option.value));
+  const digits = matchingCode ? tag.slice(matchingCode.value.length) : "";
+  if (
+    !matchingCode ||
+    !/^\d+$/.test(digits) ||
+    digits.length < digitsSchema.min ||
+    digits.length > digitsSchema.max
+  ) {
+    return { error: "tag must contain a valid prefix and 5-6 digits" };
+  }
+
+  for (const survey of taggingMode.surveySchema ?? []) {
+    if (!survey.options.some((option) => option.value === body?.[survey.field])) {
+      return { error: `invalid ${survey.field}` };
+    }
+  }
+
+  return { value: { type, station, color, tag } };
 };
 
 const getStatsFromDb = async () => {
   const tags = readTagsFromDb.iterate();
-  const stats = {
-    1: {
-      lastRowId: 0,
-      lastTag: "",
-      lastTagColor: "none",
-      lastTagScanTime: null,
-      counted: 0,
-      oveja: 0,
-      borrega: 0,
-      carnero: 0,
-    },
-    2: {
-      lastRowId: 0,
-      lastTag: "",
-      lastTagColor: "none",
-      lastTagScanTime: null,
-      counted: 0,
-      oveja: 0,
-      borrega: 0,
-      carnero: 0,
-    },
-    3: {
-      lastRowId: 0,
-      lastTag: "",
-      lastTagColor: "none",
-      lastTagScanTime: null,
-      counted: 0,
-      oveja: 0,
-      borrega: 0,
-      carnero: 0,
-    },
-  };
+  const stats = defaultStatsByStation();
   for (let tag of tags) {
-    stats[tag.station].lastRowId = tag.rowid;
-    stats[tag.station].lastTag = tag.tag;
-    stats[tag.station].lastTagColor = tag.color;
-    stats[tag.station].lastScanTime = tag.date;
-    stats[tag.station].counted += 1;
-    stats[tag.station][tag.type] += 1;
+    const s = (stats[tag.station] ??= emptyStationStats());
+    s.lastRowId = tag.rowid;
+    s.lastTag = tag.tag;
+    s.lastTagColor = tag.color;
+    s.lastScanTime = tag.date;
+    s.counted += 1;
+    s[tag.type] = (s[tag.type] ?? 0) + 1;
   }
   return stats;
 };
 
 app.post("/count", bodyParser.json(), (req, res) => {
-  if (!req.body.tag || !req.body.station || !req.body.color) {
-    return res.sendStatus(400);
+  const validation = validateTagSubmission(req.body);
+  if (validation.error) return res.status(400).json({ error: validation.error });
+  const submissionId = readSubmissionId(req.body);
+  if (req.body.submissionId && !submissionId) {
+    return res.status(400).json({ error: "invalid submissionId" });
   }
   writeTag(
-    req.body.tag,
-    req.body.station,
-    req.body.color,
+    validation.value.tag,
+    validation.value.station,
+    validation.value.color,
     req.body.lactation,
-    req.body.type ?? "oveja",
-    req.body.woolQuality ?? "IDK"
+    validation.value.type,
+    req.body.woolQuality ?? "IDK",
+    submissionId
   )
-    .then(() => res.sendStatus(200))
+    .then((created) => res.json({ ok: true, created, counts: countStatsByStation }))
     .catch((err) => {
       console.error(err);
       res.sendStatus(500);
@@ -556,13 +699,19 @@ app.post("/count", bodyParser.json(), (req, res) => {
 });
 
 app.post("/bulk", bodyParser.json(), (req, res) => {
-  if (!req.body.station || !req.body.quantity) {
-    return res.sendStatus(400);
+  const station = readStation(req.body);
+  if (!station) return res.status(400).json({ error: "invalid station" });
+  const quantity = Number(req.body?.quantity);
+  const submissionId = readSubmissionId(req.body);
+  if (!Number.isInteger(quantity) || quantity < 1 || quantity > 1000) {
+    return res.status(400).json({ error: "quantity must be between 1 and 1000" });
   }
-  const quantity = parseInt(req.body.quantity);
+  if (req.body.submissionId && !submissionId) {
+    return res.status(400).json({ error: "invalid submissionId" });
+  }
 
-  writeBulkTags(req.body.station, quantity)
-    .then(() => res.sendStatus(200))
+  writeBulkTags(station, quantity, submissionId)
+    .then((created) => res.json({ ok: true, created, counts: countStatsByStation }))
     .catch((err) => {
       console.error(err);
       res.sendStatus(500);
@@ -573,19 +722,40 @@ app.get("/count", (req, res) => {
   res.json(countStatsByStation);
 });
 
+app.get("/count/events", (req, res) => {
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.flushHeaders();
+  res.write(`data: ${JSON.stringify(countStatsByStation)}\n\n`);
+
+  const sendCounts = (counts) => {
+    res.write(`data: ${JSON.stringify(counts)}\n\n`);
+  };
+  countEmitter.on("update", sendCounts);
+  res.on("close", () => countEmitter.off("update", sendCounts));
+});
+
 app.get("/qr.png", (req, res) => {
-  const url = `http://${
-    Object.values(os.networkInterfaces())
-      .flat()
-      .find((addr) => !addr.internal && addr.family === "IPv4")?.address
-  }:3001/tagger`;
-  QRCode.toFileStream(res, url);
+  res.type("png");
+  // The Mac's address can change after reconnecting to WiFi. Never let the
+  // setup window reuse a QR code cached for an earlier address.
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  QRCode.toFileStream(res, taggerConnectionInfo().url, {
+    errorCorrectionLevel: "M",
+    margin: 4,
+    width: 512,
+  });
 });
 
 app.post("/mode", bodyParser.json(), (req, res) => {
-  updateSettingsFromDb.run(req.body.mode);
-  mode = req.body.mode;
-  modeEmitter.emit("modeswitch", req.body.mode);
+  const nextMode = req.body?.mode;
+  if (!taggingModesByType.has(nextMode)) {
+    return res.status(400).json({ error: "invalid mode" });
+  }
+  updateSettingsFromDb.run(nextMode);
+  mode = nextMode;
+  modeEmitter.emit("modeswitch", nextMode);
   res.sendStatus(200);
 });
 
@@ -800,6 +970,130 @@ app.delete("/treatment-presets/:id", (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
+// Onboarding wizard (Pi appliance): WiFi + shearer names, shown fullscreen on
+// the barn TV at first boot. The Mac app uses its own native shell for cloud
+// configuration and the normal macOS WiFi controls.
+// ---------------------------------------------------------------------------
+
+const ONBOARD_MARKER = path.resolve(".onboarded");
+
+const nmcli = (args, timeoutMs = 60000) =>
+  new Promise((resolve, reject) => {
+    execFile("sudo", ["-n", "nmcli", ...args], { timeout: timeoutMs }, (err, stdout, stderr) => {
+      if (err) reject(new Error((stderr || err.message).trim()));
+      else resolve(stdout);
+    });
+  });
+
+app.get("/shearers", (req, res) => {
+  res.json(readShearers());
+});
+
+app.get("/setup", (req, res) => {
+  res.sendFile(path.join(__dirname, "setup", "index.html"));
+});
+
+app.get("/tagger-setup", (req, res) => {
+  res.sendFile(path.join(__dirname, "setup", "tagger.html"));
+});
+
+app.get("/tagger-setup.js", (req, res) => {
+  res.sendFile(path.join(__dirname, "setup", "tagger.js"));
+});
+
+app.get("/tagger-info", (req, res) => {
+  res.json(taggerConnectionInfo());
+});
+
+app.get("/setup/state", async (req, res) => {
+  let wifiAvailable = false;
+  let currentSsid = null;
+  let connectivity = null;
+  try {
+    const active = await nmcli(["-t", "-f", "ACTIVE,SSID", "dev", "wifi"], 15000);
+    wifiAvailable = true;
+    for (const line of active.split("\n")) {
+      if (line.startsWith("yes" + ":")) currentSsid = line.slice(4).replaceAll("\\:", ":");
+    }
+    connectivity = (await nmcli(["networking", "connectivity", "check"], 15000)).trim();
+  } catch (e) {
+    // No nmcli / no sudo rule (e.g. dev machine): wizard hides the WiFi step.
+  }
+  res.json({
+    onboarded: existsSync(ONBOARD_MARKER),
+    wifiAvailable,
+    currentSsid,
+    online: connectivity === null ? null : connectivity === "full",
+    shearers: readShearers(),
+  });
+});
+
+app.post("/setup/wifi/scan", async (req, res) => {
+  try {
+    const out = await nmcli(
+      ["-t", "-f", "SSID,SIGNAL,SECURITY", "dev", "wifi", "list", "--rescan", "yes"],
+      45000
+    );
+    const bySsid = new Map();
+    for (const line of out.split("\n")) {
+      if (!line.trim()) continue;
+      const parts = line.split(/(?<!\\):/);
+      const ssid = (parts[0] ?? "").replaceAll("\\:", ":");
+      const signal = parseInt(parts[1] ?? "0", 10) || 0;
+      const secured = (parts[2] ?? "").trim() !== "";
+      if (!ssid) continue;
+      const existing = bySsid.get(ssid);
+      if (!existing || signal > existing.signal) bySsid.set(ssid, { ssid, signal, secured });
+    }
+    const networks = [...bySsid.values()].sort((a, b) => b.signal - a.signal);
+    res.json({ networks });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post("/setup/wifi/connect", bodyParser.json(), async (req, res) => {
+  const { ssid, password } = req.body ?? {};
+  if (!ssid) {
+    return res.status(400).json({ error: "ssid required" });
+  }
+  try {
+    // Drop any stale profile for this SSID so a corrected password takes.
+    await nmcli(["connection", "delete", "id", ssid], 15000).catch(() => {});
+    const args = ["dev", "wifi", "connect", ssid];
+    if (password) args.push("password", password);
+    await nmcli(args, 90000);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post("/setup/shearers", bodyParser.json(), (req, res) => {
+  const names = req.body?.names;
+  if (
+    !Array.isArray(names) ||
+    names.length < 1 ||
+    names.length > 6 ||
+    names.some((n) => typeof n !== "string" || !n.trim())
+  ) {
+    return res.status(400).json({ error: "names must be 1-6 non-empty strings" });
+  }
+  writeFileSync(SHEARERS_FILE, JSON.stringify(names.map((n) => ({ name: n.trim() })), null, 2));
+  refreshCounts();
+  res.json({ ok: true });
+});
+
+app.post("/setup/complete", (req, res) => {
+  writeFileSync(ONBOARD_MARKER, new Date().toISOString());
+  res.json({ ok: true });
+});
+
+app.get("/healthz", (_req, res) => {
+  res.json({ ok: true });
+});
+
 // EsquilaDB now lives on the cloud origin (it needs HTTPS for offline
 // support). Redirect anyone who still has the old LAN URL.
 app.get(["/esquiladb", "/esquiladb/*splat"], (req, res) => {
@@ -812,7 +1106,7 @@ app.get(["/esquiladb", "/esquiladb/*splat"], (req, res) => {
   }
 });
 
-app.use(express.static("build"));
+app.use(express.static(path.join(__dirname, "build")));
 
 // ---------------------------------------------------------------------------
 // Cloud sync agent: drains sync_outbox to the esquila-cloud service.
@@ -936,19 +1230,15 @@ if (CLOUD_SYNC_URL && CLOUD_SYNC_TOKEN) {
 }
 
 app.listen(port, async () => {
-  const taggerUrl = `http://${
-    Object.values(os.networkInterfaces())
-      .flat()
-      .find((addr) => !addr.internal && addr.family === "IPv4")?.address
-  }:3001/tagger`;
+  const taggerUrl = taggerConnectionInfo().url;
 
   const mobileMonitorUrl = `http://${
     Object.values(os.networkInterfaces())
       .flat()
       .find((addr) => !addr.internal && addr.family === "IPv4")?.address
-  }:3001/mobilemonitor`;
+  }:${port}/mobilemonitor`;
 
-  try {
+  if (hasAwsCredentials) try {
     // Create a PassThrough stream to collect QR code data
     const pass = new PassThrough();
     const chunks = [];

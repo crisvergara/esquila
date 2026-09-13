@@ -82,6 +82,8 @@ const useTagEditor = (tagSchema) => {
   const nextTagStepIndex = tagState.textComponent.filter(
     (tc) => tc.valid
   ).length;
+  const currentTagComponentValue =
+    tagState.textComponent[nextTagStepIndex]?.value ?? "";
   const tagCompleted = nextTagStepIndex === tagSchema?.textSchema.length;
 
   const setColor = (color) => {
@@ -116,6 +118,7 @@ const useTagEditor = (tagSchema) => {
     tag,
     needsColor,
     nextTagStepIndex,
+    currentTagComponentValue,
     tagCompleted,
   };
 };

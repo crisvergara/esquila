@@ -108,8 +108,9 @@ All deletes are soft deletes (tombstones), and every row carries a UUIDv7 `id`, 
 |--------|------|------|-------------|
 | `POST` | `/api/sync/push` | device token | Batched last-write-wins upserts `{batches: [{table, rows}]}` |
 | `GET` | `/api/snapshot` | device token | Full flock: latest shearing events, all treatments, presets |
-| `GET/POST/DELETE` | `/api/admin/devices` | admin token | Device lifecycle; POST returns the token + enrollment QR |
-| `GET` | `/admin` | — (page prompts for admin token) | Device enrollment UI |
+| `POST` | `/api/admin/login`, `/api/admin/logout` | admin password/session | Start or end an HttpOnly admin session |
+| `GET/POST/DELETE` | `/api/admin/devices` | admin session | Device lifecycle; POST returns the token + enrollment QR |
+| `GET` | `/admin` | login required | Device enrollment UI |
 | `GET` | `/healthz` | — | Health check |
 
 ## Setup & Running
@@ -124,6 +125,14 @@ All deletes are soft deletes (tombstones), and every row carries a UUIDv7 `id`, 
   - `CLOUD_SYNC_URL` — the esquila-cloud origin, e.g. `https://esquila-cloud.fly.dev`
   - `CLOUD_SYNC_TOKEN` — a `server`-role device token from the cloud `/admin` page
   - `CLOUD_APP_URL` — where `/esquiladb` should redirect (the cloud origin)
+
+> **Barn Mac app (recommended)**: to install this as a normal Mac application
+> that runs in the background and opens the monitor fullscreen, see
+> [`mac/README.md`](mac/README.md).
+>
+> The earlier Raspberry Pi appliance remains documented in
+> [`pi/README.md`](pi/README.md) as a fallback.
+> Cloud deployment steps live in [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 ### Install & run the on-prem server
 
@@ -140,7 +149,7 @@ The server starts on port **3001**. On first boot after this upgrade it migrates
 ```bash
 npm run build:cloud                  # builds the EsquilaDB PWA into build-cloud/
 cd cloud && npm install
-DATABASE_URL=<neon-url> ADMIN_TOKEN=<long-random-string> node server.js
+DATABASE_URL=<neon-url> ADMIN_PASSWORD=<strong-password> node server.js
 ```
 
 To deploy on Fly.io, see `fly.toml` (the app builds from `cloud/Dockerfile`). After deploying, open `https://<app>/admin`, create a `server` device, and set its token as `CLOUD_SYNC_TOKEN` on the ranch machine. Create a `phone` device per family phone and scan the QR to enroll.
@@ -152,6 +161,7 @@ For local frontend development: `npm run dev:cloud` proxies `/api` to a local cl
 | URL | Description |
 |-----|-------------|
 | `http://<host>:3001/tagger` | Tagger UI — for shearers on their phones (LAN) |
+| `http://<host>:3001/tagger-setup` | QR code and phone setup instructions |
 | `http://<host>:3001/monitor` | Desktop monitor — shows all stations at a glance (LAN) |
 | `http://<host>:3001/mobilemonitor` | Mobile monitor — same info, phone-friendly (LAN) |
 | `https://<cloud-host>/` | EsquilaDB PWA — sheep records & treatment tracking (offline-capable) |

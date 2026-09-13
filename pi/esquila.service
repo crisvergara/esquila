@@ -1,0 +1,20 @@
+[Unit]
+Description=Esquila ranch count server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=esquila
+Group=esquila
+# SQLite DB, pre-migration safety copies, and S3 backup temp files all land
+# in the working directory. StateDirectory creates/owns /var/lib/esquila.
+StateDirectory=esquila
+WorkingDirectory=/var/lib/esquila
+EnvironmentFile=/etc/esquila/esquila.env
+ExecStart=/usr/bin/node /opt/esquila/countserver.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

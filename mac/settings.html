@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'self'" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Configurar Esquila</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 32px; background: #282c34; color: #fff; font: 18px system-ui, sans-serif; }
+    main { max-width: 640px; margin: auto; }
+    h1 { color: #61dafb; margin: 0 0 6px; }
+    h2 { font-size: 20px; margin: 0 0 14px; }
+    .sub { color: #aaa; margin: 0 0 24px; }
+    .card { background: #1a1e24; border-radius: 14px; padding: 22px; margin-bottom: 18px; }
+    label { display: block; margin: 13px 0 6px; font-weight: 600; }
+    input { width: 100%; padding: 11px; border-radius: 8px; border: 2px solid #454b57; background: #282c34; color: white; font-size: 17px; }
+    input:focus { outline: none; border-color: #61dafb; }
+    .name { display: grid; grid-template-columns: 32px 1fr 38px; gap: 8px; align-items: center; margin: 8px 0; }
+    .num { color: #61dafb; font-weight: 700; }
+    button { border: 0; border-radius: 8px; padding: 11px 18px; font-size: 17px; font-weight: 700; cursor: pointer; background: #61dafb; color: #1a1e24; }
+    button.secondary { background: #454b57; color: white; }
+    button.danger { padding: 8px; background: #563038; color: #ffc2cb; }
+    .actions { display: flex; justify-content: flex-end; gap: 10px; }
+    .check { display: flex; gap: 10px; align-items: center; font-weight: normal; }
+    .check input { width: auto; }
+    .hint { color: #999; font-size: 14px; margin: 6px 0; }
+    #status { min-height: 24px; color: #ffcc66; margin: 12px 0; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Esquila 🐑</h1>
+  <p class="sub">Configuración del servidor del galpón</p>
+  <form id="form">
+    <section class="card">
+      <h2>Esquiladores</h2>
+      <p class="hint">Un nombre por estación, en el mismo orden de las mesas.</p>
+      <div id="names"></div>
+      <button type="button" class="secondary" id="add">+ Agregar estación</button>
+    </section>
+    <section class="card">
+      <h2>Sincronización en Internet</h2>
+      <label for="sync-url">Dirección del servicio</label>
+      <input id="sync-url" type="url" placeholder="https://esquila-cloud.fly.dev" />
+      <label for="sync-token">Token del servidor</label>
+      <input id="sync-token" type="password" autocomplete="off" placeholder="Sin cambios" />
+      <p class="hint" id="token-hint"></p>
+      <label for="app-url">Dirección de la app de vacunación</label>
+      <input id="app-url" type="url" placeholder="https://esquila-cloud.fly.dev" />
+    </section>
+    <section class="card">
+      <label class="check"><input id="login" type="checkbox" /> Iniciar Esquila automáticamente al encender el Mac</label>
+      <p class="hint">Al cerrar el monitor, el servidor continúa funcionando en la barra de menús.</p>
+    </section>
+    <div id="status"></div>
+    <div class="actions"><button id="save" type="submit">Guardar y abrir monitor</button></div>
+  </form>
+</main>
+<script src="settings.js"></script>
+</body>
+</html>

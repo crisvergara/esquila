@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Esquila — Configuración</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #282c34;
+      color: #fff;
+      font-size: 22px;
+      display: flex;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    main { width: 100%; max-width: 860px; padding: 40px 24px; }
+    h1 { color: #61dafb; font-size: 34px; margin: 0 0 6px; }
+    .subtitle { color: #999; margin: 0 0 28px; font-size: 20px; }
+    .step { display: none; }
+    .step.active { display: block; }
+    .card {
+      background: #1a1e24;
+      border-radius: 14px;
+      padding: 26px;
+      margin-bottom: 20px;
+    }
+    h2 { margin: 0 0 16px; font-size: 26px; }
+    button {
+      font-size: 22px;
+      padding: 14px 26px;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      background: #61dafb;
+      color: #282c34;
+      font-weight: 700;
+    }
+    button.secondary { background: #3a3f4b; color: #fff; }
+    button.small { font-size: 18px; padding: 8px 16px; }
+    button:disabled { opacity: 0.4; cursor: default; }
+    input {
+      font-size: 22px;
+      padding: 14px;
+      border-radius: 10px;
+      border: 2px solid #3a3f4b;
+      background: #282c34;
+      color: #fff;
+      width: 100%;
+    }
+    input:focus { border-color: #61dafb; outline: none; }
+    .row { display: flex; gap: 12px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+    .net-list { display: flex; flex-direction: column; gap: 8px; max-height: 320px; overflow-y: auto; margin-top: 14px; }
+    .net {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #282c34;
+      border: 2px solid #3a3f4b;
+      border-radius: 10px;
+      padding: 12px 18px;
+      cursor: pointer;
+      font-size: 22px;
+      color: #fff;
+      font-weight: 400;
+      width: 100%;
+      text-align: left;
+    }
+    .net.selected { border-color: #61dafb; }
+    .net .signal { color: #999; font-size: 18px; }
+    .status { margin-top: 14px; font-size: 20px; min-height: 28px; }
+    .status.ok { color: #25d342; }
+    .status.err { color: #ef7373; }
+    .status.busy { color: #f5d542; }
+    .pill {
+      display: inline-block;
+      padding: 4px 14px;
+      border-radius: 999px;
+      font-size: 18px;
+      background: #3a3f4b;
+    }
+    .pill.ok { background: #1d5c2a; color: #7df59a; }
+    .shearer-row { display: flex; gap: 10px; margin-bottom: 10px; align-items: center; }
+    .shearer-row .num { width: 34px; color: #61dafb; font-weight: 700; font-size: 24px; }
+    .nav { display: flex; justify-content: space-between; margin-top: 26px; }
+    .done-icon { font-size: 90px; text-align: center; margin: 10px 0; }
+    .hint { color: #777; font-size: 16px; margin-top: 30px; text-align: center; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>Esquila 🐑</h1>
+  <p class="subtitle">Configuración del equipo</p>
+
+  <!-- Paso 1: WiFi -->
+  <section class="step active" id="step-wifi">
+    <div class="card">
+      <h2>1 · Conectar a Internet</h2>
+      <p id="wifi-current"><span class="pill">Comprobando conexión...</span></p>
+      <div id="wifi-controls">
+        <div class="row">
+          <button id="btn-scan">Buscar redes WiFi</button>
+        </div>
+        <div class="net-list" id="net-list"></div>
+        <div class="row" id="password-row" style="display:none">
+          <input type="password" id="wifi-password" placeholder="Contraseña de la red..." />
+          <button id="btn-connect">Conectar</button>
+        </div>
+        <div class="status" id="wifi-status"></div>
+      </div>
+      <p id="wifi-unavailable" style="display:none; color:#999">
+        Este equipo no controla el WiFi desde aquí (o ya está conectado por cable).
+      </p>
+    </div>
+    <div class="nav">
+      <span></span>
+      <button id="btn-wifi-next" class="secondary">Continuar →</button>
+    </div>
+  </section>
+
+  <!-- Paso 2: Esquiladores -->
+  <section class="step" id="step-shearers">
+    <div class="card">
+      <h2>2 · Nombres de los esquiladores</h2>
+      <p style="color:#999; margin-top:0">Un nombre por estación, en orden.</p>
+      <div id="shearer-list"></div>
+      <div class="row">
+        <button class="small secondary" id="btn-add-shearer">+ Agregar estación</button>
+      </div>
+      <div class="status" id="shearer-status"></div>
+    </div>
+    <div class="nav">
+      <button class="secondary" id="btn-back-wifi">← Atrás</button>
+      <button id="btn-save-shearers">Guardar y continuar →</button>
+    </div>
+  </section>
+
+  <!-- Paso 3: Listo -->
+  <section class="step" id="step-done">
+    <div class="card" style="text-align:center">
+      <h2>3 · ¡Listo!</h2>
+      <div class="done-icon">✅</div>
+      <p id="summary"></p>
+      <button id="btn-finish" style="font-size:26px; padding:18px 40px">Comenzar</button>
+    </div>
+    <div class="nav">
+      <button class="secondary" id="btn-back-shearers">← Atrás</button>
+      <span></span>
+    </div>
+  </section>
+
+  <p class="hint">Para volver a esta pantalla: http://esquila.local:3001/setup</p>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  let selectedSsid = null;
+  let selectedSecured = true;
+
+  function show(stepId) {
+    document.querySelectorAll(".step").forEach((s) => s.classList.remove("active"));
+    $(stepId).classList.add("active");
+  }
+
+  async function api(method, path, body) {
+    const res = await fetch(path, {
+      method,
+      headers: body ? { "Content-Type": "application/json" } : {},
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || ("Error " + res.status));
+    return data;
+  }
+
+  // ---- Paso 1: WiFi ----
+  async function refreshState() {
+    try {
+      const state = await api("GET", "/setup/state");
+      if (!state.wifiAvailable) {
+        $("wifi-controls").style.display = "none";
+        $("wifi-unavailable").style.display = "block";
+        $("wifi-current").innerHTML = state.online === true
+          ? '<span class="pill ok">Conectado a Internet</span>'
+          : '<span class="pill">Estado de red desconocido</span>';
+      } else if (state.currentSsid) {
+        $("wifi-current").innerHTML =
+          '<span class="pill ok">Conectado a: ' + state.currentSsid + "</span>" +
+          (state.online === false ? ' <span class="pill">sin salida a Internet</span>' : "");
+      } else {
+        $("wifi-current").innerHTML = '<span class="pill">Sin conexión WiFi</span>';
+      }
+      renderShearers(state.shearers.map((s) => s.name));
+    } catch (e) {
+      $("wifi-current").innerHTML = '<span class="pill">No se pudo leer el estado</span>';
+      renderShearers(["", "", ""]);
+    }
+  }
+
+  $("btn-scan").onclick = async () => {
+    const st = $("wifi-status");
+    st.className = "status busy";
+    st.textContent = "Buscando redes (puede tardar unos segundos)...";
+    $("btn-scan").disabled = true;
+    try {
+      const { networks } = await api("POST", "/setup/wifi/scan");
+      const list = $("net-list");
+      list.innerHTML = "";
+      if (networks.length === 0) {
+        st.className = "status err";
+        st.textContent = "No se encontraron redes. Intenta de nuevo.";
+      } else {
+        st.textContent = "";
+        for (const n of networks) {
+          const b = document.createElement("button");
+          b.className = "net";
+          b.innerHTML = "<span>" + (n.secured ? "🔒 " : "") + n.ssid +
+            '</span><span class="signal">' + n.signal + "%</span>";
+          b.onclick = () => {
+            document.querySelectorAll(".net").forEach((x) => x.classList.remove("selected"));
+            b.classList.add("selected");
+            selectedSsid = n.ssid;
+            selectedSecured = n.secured;
+            $("password-row").style.display = "flex";
+            $("wifi-password").style.display = n.secured ? "block" : "none";
+            if (n.secured) $("wifi-password").focus();
+          };
+          list.appendChild(b);
+        }
+      }
+    } catch (e) {
+      st.className = "status err";
+      st.textContent = "Error al buscar: " + e.message;
+    }
+    $("btn-scan").disabled = false;
+  };
+
+  $("btn-connect").onclick = async () => {
+    if (!selectedSsid) return;
+    const st = $("wifi-status");
+    st.className = "status busy";
+    st.textContent = "Conectando a " + selectedSsid + "...";
+    $("btn-connect").disabled = true;
+    try {
+      await api("POST", "/setup/wifi/connect", {
+        ssid: selectedSsid,
+        password: selectedSecured ? $("wifi-password").value : "",
+      });
+      st.className = "status ok";
+      st.textContent = "✓ Conectado a " + selectedSsid;
+      $("btn-wifi-next").className = "";
+      refreshState();
+    } catch (e) {
+      st.className = "status err";
+      st.textContent = "No se pudo conectar. Revisa la contraseña e intenta de nuevo.";
+    }
+    $("btn-connect").disabled = false;
+  };
+
+  // ---- Paso 2: Esquiladores ----
+  function renderShearers(names) {
+    const list = $("shearer-list");
+    list.innerHTML = "";
+    names.forEach((name, i) => {
+      const row = document.createElement("div");
+      row.className = "shearer-row";
+      row.innerHTML = '<span class="num">' + (i + 1) + "</span>";
+      const input = document.createElement("input");
+      input.value = name;
+      input.placeholder = "Nombre del esquilador...";
+      row.appendChild(input);
+      const del = document.createElement("button");
+      del.className = "small secondary";
+      del.textContent = "✕";
+      del.onclick = () => {
+        if (list.children.length > 1) row.remove();
+        renumber();
+      };
+      row.appendChild(del);
+      list.appendChild(row);
+    });
+  }
+
+  function renumber() {
+    [...$("shearer-list").children].forEach((row, i) => {
+      row.querySelector(".num").textContent = i + 1;
+    });
+  }
+
+  $("btn-add-shearer").onclick = () => {
+    if ($("shearer-list").children.length >= 6) return;
+    const names = currentNames();
+    names.push("");
+    renderShearers(names);
+    const inputs = $("shearer-list").querySelectorAll("input");
+    inputs[inputs.length - 1].focus();
+  };
+
+  function currentNames() {
+    return [...$("shearer-list").querySelectorAll("input")].map((i) => i.value);
+  }
+
+  $("btn-save-shearers").onclick = async () => {
+    const names = currentNames().map((n) => n.trim()).filter(Boolean);
+    const st = $("shearer-status");
+    if (names.length === 0) {
+      st.className = "status err";
+      st.textContent = "Escribe al menos un nombre.";
+      return;
+    }
+    try {
+      await api("POST", "/setup/shearers", { names });
+      $("summary").textContent =
+        "Estaciones: " + names.join(", ") + ". El monitor aparecerá en esta pantalla.";
+      show("step-done");
+    } catch (e) {
+      st.className = "status err";
+      st.textContent = "Error al guardar: " + e.message;
+    }
+  };
+
+  // ---- Navegación ----
+  $("btn-wifi-next").onclick = () => show("step-shearers");
+  $("btn-back-wifi").onclick = () => show("step-wifi");
+  $("btn-back-shearers").onclick = () => show("step-shearers");
+
+  $("btn-finish").onclick = async () => {
+    try { await api("POST", "/setup/complete"); } catch (e) {}
+    location.href = "/monitor";
+  };
+
+  refreshState();
+</script>
+</body>
+</html>

@@ -1,16 +1,19 @@
-import mode from "../tagger/modeschema.json";
+import modes from "../tagger/modeschema.json";
 import { useState, useEffect } from "react";
 
-const eventSource = new EventSource("/sse");
-
 const useTaggingMode = () => {
-  const [currentMode, setCurrentMode] = useState(mode[0]);
+  const [currentMode, setCurrentMode] = useState(modes[0]);
 
   useEffect(() => {
+    const eventSource = new EventSource("/sse");
     eventSource.onmessage = (event) => {
-      const nextMode = JSON.parse(event.data).mode;
-      const nextModeObject = mode.find((m) => m.type === nextMode) || mode[0];
-      setCurrentMode(nextModeObject);
+      try {
+        const nextMode = JSON.parse(event.data).mode;
+        const nextModeObject = modes.find((mode) => mode.type === nextMode);
+        if (nextModeObject) setCurrentMode(nextModeObject);
+      } catch (error) {
+        console.error("Invalid mode update", error);
+      }
     };
     return () => {
       eventSource.close();
