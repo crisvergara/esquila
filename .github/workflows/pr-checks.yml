@@ -35,8 +35,8 @@ jobs:
       CI: true
       TEST_DATABASE_URL: postgresql://esquila_test:esquila_test_password@127.0.0.1:5432/esquila_test
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -65,9 +65,13 @@ jobs:
     name: Apple Silicon installer
     runs-on: macos-14
     timeout-minutes: 20
+    env:
+      # electron-builder skips even ad-hoc signing for pull-request builds unless
+      # this is set. This job uses identity "-" and receives no signing secrets.
+      CSC_FOR_PULL_REQUEST: true
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
