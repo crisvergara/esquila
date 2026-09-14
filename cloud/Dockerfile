@@ -5,8 +5,9 @@
 # Stage 1: build the EsquilaDB PWA with the repo-root toolchain.
 FROM node:22-slim AS build
 WORKDIR /app
+ENV ELECTRON_SKIP_BINARY_DOWNLOAD=1
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --ignore-scripts
 COPY . .
 RUN npm run build:cloud
 

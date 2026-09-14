@@ -1,8 +1,10 @@
 .App {
   text-align: center;
   display: flex;
-  height: 90vh;
+  min-height: 100vh;
+  min-height: 100dvh;
   flex-direction: column;
+  background: #f3f5f7;
 }
 
 .App-header {
@@ -267,4 +269,113 @@
   align-items: center;
   justify-content: space-evenly;
   font-size: 24pt;
+}
+
+.Submission-screen {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: max(24px, env(safe-area-inset-top)) 24px
+    max(24px, env(safe-area-inset-bottom));
+  background: #eef1f4;
+}
+
+.Submission-card {
+  width: min(100%, 520px);
+  padding: 36px 28px;
+  border: 3px solid;
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 12px 32px rgb(20 30 45 / 14%);
+}
+
+.Submission-card h1 {
+  margin: 18px 0 10px;
+  font-size: clamp(30px, 8vw, 48px);
+  line-height: 1.05;
+}
+
+.Submission-card p {
+  margin: 0;
+  font-size: clamp(18px, 4.5vw, 24px);
+  line-height: 1.4;
+}
+
+.Submission-card-success {
+  border-color: #238636;
+  color: #155724;
+}
+
+.Submission-card-failed {
+  border-color: #c62828;
+  color: #721c24;
+}
+
+.Submission-card-sending {
+  border-color: #1976a3;
+  color: #124f6b;
+}
+
+.Submission-icon,
+.Submission-spinner {
+  display: inline-grid;
+  width: 86px;
+  height: 86px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 58px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.Submission-card-success .Submission-icon {
+  background: #238636;
+}
+
+.Submission-card-failed .Submission-icon {
+  background: #c62828;
+}
+
+.Submission-spinner {
+  border: 10px solid #c8e5f2;
+  border-top-color: #1976a3;
+  animation: submission-spin 0.8s linear infinite;
+}
+
+.Submission-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-top: 28px;
+}
+
+.Submission-actions button {
+  min-height: 62px;
+  padding: 12px;
+  border: 2px solid #282c34;
+  border-radius: 12px;
+  background: #282c34;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.Submission-actions .Secondary-button {
+  background: #fff;
+  color: #282c34;
+}
+
+@keyframes submission-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 420px) {
+  .Submission-actions { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .Submission-spinner { animation: none; }
 }

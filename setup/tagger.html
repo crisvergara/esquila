@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Configurar teléfonos — Esquila</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 28px; background: #1d2129; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-align: center; }
+      main { max-width: 620px; margin: 0 auto; }
+      h1 { margin: 0 0 8px; font-size: 30px; }
+      .intro { margin: 0 auto 20px; color: #c7ccd5; line-height: 1.45; }
+      .qr { display: block; width: min(380px, 80vw); height: auto; margin: 0 auto 18px; padding: 14px; border-radius: 16px; background: #fff; }
+      .url { display: block; padding: 13px 16px; border: 1px solid #576174; border-radius: 10px; background: #282e39; color: #7edcff; font-size: 18px; font-weight: 650; overflow-wrap: anywhere; }
+      .alternative { min-height: 22px; margin: 9px 0 22px; color: #aeb6c5; font-size: 14px; overflow-wrap: anywhere; }
+      ol { margin: 0 auto; padding-left: 26px; max-width: 500px; color: #e3e6eb; text-align: left; line-height: 1.55; }
+      li + li { margin-top: 8px; }
+      .status { color: #ffcf70; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Configurar un teléfono</h1>
+      <p class="intro">El teléfono y este Mac deben estar conectados al mismo WiFi del galpón.</p>
+      <img class="qr" id="tagger-qr" src="/qr.png" alt="Código QR para abrir Esquila Tagger" />
+      <a class="url" id="tagger-url">Buscando la dirección del tagger…</a>
+      <p class="alternative" id="alternative"></p>
+      <ol>
+        <li>Abre la cámara del teléfono y escanea el código.</li>
+        <li>Comprueba que aparezcan los nombres de los esquiladores.</li>
+        <li>En iPhone, toca Compartir y luego <strong>Agregar a inicio</strong>. En Android, abre el menú del navegador y toca <strong>Agregar a pantalla principal</strong>.</li>
+        <li>Abre el nuevo icono <strong>Esquila Tagger</strong> y elige el esquilador de ese teléfono.</li>
+      </ol>
+      <p class="alternative">Si el teléfono dice que no puede conectarse, confirma que no esté usando una red de invitados o una VPN. Algunas redes impiden que dos dispositivos WiFi se comuniquen entre sí.</p>
+      <p class="status" id="status"></p>
+    </main>
+    <script src="/tagger-setup.js"></script>
+  </body>
+</html>

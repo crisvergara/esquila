@@ -2,10 +2,19 @@ import { useState, useEffect, useReducer } from "react";
 
 import "./Tagger.css";
 import StationSelect from "./StationSelect";
-import shearers from "../shearers.json";
 import useCounts from "../hooks/useCounts";
+import useShearers from "../hooks/useShearers";
 import useTagEditor from "../hooks/useTagEditor";
 import useTaggingMode from "../hooks/useTaggingMode";
+
+const createSubmissionId = () => {
+  const bytes = new Uint8Array(16);
+  if (globalThis.crypto?.getRandomValues) {
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}-tagger`;
+};
 
 function TagColorSelect({ tagSchema, onCancel, setColor }) {
   const colors = tagSchema.colors;
@@ -13,13 +22,14 @@ function TagColorSelect({ tagSchema, onCancel, setColor }) {
     <>
       <header className="App-header">
         <button onClick={onCancel} className="Cancel-button">
-          Cancela
+          Cambiar esquilador
         </button>
         <p>Elija un color</p>
       </header>
       <section className="Tag-color-buttons">
         {colors.map((color) => (
           <button
+            key={color.value}
             style={{ backgroundColor: color.color, color: color.text }}
             onClick={() => setColor(color)}
           >
@@ -38,12 +48,14 @@ function CodeSelect({ codeSchema, onCancel, setCode }) {
         <button onClick={onCancel} className="Cancel-button">
           Cancela
         </button>
-        <p>Elija el primer letre</p>
+        <p>Elija la primera letra</p>
       </header>
       <section className="Tag-buttons">
         {codeSchema.options.map((option) => {
           return (
-            <button onClick={() => setCode(option.value)}>{option.name}</button>
+            <button key={option.value} onClick={() => setCode(option.value)}>
+              {option.name}
+            </button>
           );
         })}
       </section>
@@ -61,7 +73,9 @@ function SurveySelect({ surveySchema, onCancel, setSurvey }) {
       </header>
       <section className="Tag-buttons">
         {surveySchema.options.map((option) => (
-          <button onClick={() => setSurvey(option.value)}>{option.name}</button>
+          <button key={option.value} onClick={() => setSurvey(option.value)}>
+            {option.name}
+          </button>
         ))}
       </section>
     </>
@@ -147,8 +161,8 @@ function DigitSelect({
   );
 }
 
-function QuantityConfirmScreen({ quantity, station, onCancel, onSubmit }) {
-  const name = shearers[station - 1].name;
+function QuantityConfirmScreen({ quantity, station, shearers, onCancel, onSubmit }) {
+  const name = shearers[station - 1]?.name ?? `Estación ${station}`;
 
   return (
     <>
@@ -173,19 +187,20 @@ function QuantityConfirmScreen({ quantity, station, onCancel, onSubmit }) {
 function ConfirmScreen({
   tag,
   station,
+  shearers,
   color,
   surveyResponses,
   surveySchema,
   onCancel,
   onSubmit,
 }) {
-  const name = shearers[station - 1].name;
+  const name = shearers[station - 1]?.name ?? `Estación ${station}`;
 
   const displaySurveyResponses = Object.entries(surveyResponses).map(
     ([field, response]) => {
-      const schema = surveySchema.find((schema) => schema.field === field);
-      const fieldDisplay = schema.display;
-      const optionName = schema.options.find(
+      const schema = (surveySchema ?? []).find((schema) => schema.field === field);
+      const fieldDisplay = schema?.display ?? field;
+      const optionName = schema?.options.find(
         (option) => option.value === response
       )?.name;
       return {
@@ -214,7 +229,7 @@ function ConfirmScreen({
         </p>
         <>
           {displaySurveyResponses.map((response) => (
-            <p>
+            <p key={response.display}>
               {response.display}: {response.optionName}
             </p>
           ))}
@@ -230,39 +245,43 @@ function ConfirmScreen({
 
 function SuccessScreen() {
   return (
-    <>
-      <header className="App-header">
-        <p>Success</p>
-      </header>
-      <section className="Tag-display">
-        <p className={`Tag-button-yellow`}>Success</p>
-      </section>
-    </>
+    <section className="Submission-screen" role="status" aria-live="polite">
+      <div className="Submission-card Submission-card-success">
+        <span className="Submission-icon" aria-hidden="true">✓</span>
+        <h1>Conteo registrado</h1>
+        <p>El conteo fue guardado y el monitor se actualizará automáticamente.</p>
+      </div>
+    </section>
   );
 }
 
-function FailedScreen() {
+function FailedScreen({ message, onRetry, onDiscard }) {
   return (
-    <>
-      <header className="App-header">
-        <p>Failed</p>
-      </header>
-      <section className="Tag-display">
-        <p className={`Tag-button-pink`}>Failed</p>
-      </section>
-    </>
+    <section className="Submission-screen" role="alert">
+      <div className="Submission-card Submission-card-failed">
+        <span className="Submission-icon" aria-hidden="true">!</span>
+        <h1>No se pudo guardar</h1>
+        <p>{message}</p>
+        <div className="Submission-actions">
+          <button type="button" onClick={onRetry}>Reintentar</button>
+          <button type="button" className="Secondary-button" onClick={onDiscard}>
+            Descartar
+          </button>
+        </div>
+      </div>
+    </section>
   );
 }
+
 function SendingScreen() {
   return (
-    <>
-      <header className="App-header">
-        <p>Sending</p>
-      </header>
-      <section className="Tag-display">
-        <p className={`Tag-button-white`}>Sending</p>
-      </section>
-    </>
+    <section className="Submission-screen" role="status" aria-live="polite">
+      <div className="Submission-card Submission-card-sending">
+        <span className="Submission-spinner" aria-hidden="true" />
+        <h1>Guardando…</h1>
+        <p>No cierres esta pantalla.</p>
+      </div>
+    </section>
   );
 }
 
@@ -282,7 +301,11 @@ function SendingScreen() {
 */
 
 function TaggingApp() {
-  const [station, setStation] = useState(0);
+  const { shearers, loaded: shearersLoaded } = useShearers();
+  const [station, setStation] = useState(() => {
+    const saved = Number.parseInt(localStorage.getItem("esquila-tagger-station") ?? "", 10);
+    return Number.isInteger(saved) && saved > 0 ? saved : 0;
+  });
   const [quantity, setQuantity] = useState("");
   const [quantitySubmitted, setQuantitySubmitted] = useState(false);
 
@@ -298,6 +321,8 @@ function TaggingApp() {
   };
 
   const [showMessage, setShowMessage] = useState(null);
+  const [submissionId, setSubmissionId] = useState(null);
+  const [submissionError, setSubmissionError] = useState("");
   const mode = useTaggingMode();
 
   const {
@@ -311,6 +336,7 @@ function TaggingApp() {
     tag,
     needsColor,
     nextTagStepIndex,
+    currentTagComponentValue,
     tagCompleted,
   } = useTagEditor(mode.tagSchema);
 
@@ -351,90 +377,127 @@ function TaggingApp() {
 
   const { counts, refreshCounts } = useCounts();
 
-  const onCancel = () => {
-    setStation(0);
+  const resetEntry = () => {
     resetTag();
     resetSurvey();
     setQuantity("");
     setQuantitySubmitted(false);
     setShowMessage(null);
+    setSubmissionId(null);
+    setSubmissionError("");
   };
 
-  const onSubmit = async (ev) => {
-    ev.preventDefault();
-    try {
-      setShowMessage("sending");
-
-      await fetch("/count", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          type: mode.type,
-          station,
-          tag,
-          color: color.value,
-          ...surveyResponses,
-        }),
-      });
-      setShowMessage("success");
-    } catch (err) {
-      setShowMessage("failed");
-    }
-    setTimeout(async () => {
-      try {
-        await refreshCounts();
-      } catch (error) {
-        console.error(error);
-      }
-      onCancel();
-    }, 1000);
+  const selectStation = (nextStation) => {
+    localStorage.setItem("esquila-tagger-station", String(nextStation));
+    setStation(nextStation);
   };
 
-  const onBulkSubmit = async (ev) => {
-    ev.preventDefault();
+  const onCancel = () => {
+    localStorage.removeItem("esquila-tagger-station");
+    setStation(0);
+    resetEntry();
+  };
+
+  const postSubmission = async (path, payload) => {
+    const currentSubmissionId = submissionId ?? createSubmissionId();
+    if (!submissionId) setSubmissionId(currentSubmissionId);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
     try {
-      setShowMessage("sending");
-      await fetch("/bulk", {
+      const response = await fetch(path, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          quantity,
-          station,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, submissionId: currentSubmissionId }),
+        signal: controller.signal,
       });
+      if (!response.ok) {
+        if (response.status >= 500) {
+          throw new Error("El servidor del galpón tuvo un problema. Intenta nuevamente.");
+        }
+        throw new Error("Los datos no fueron aceptados. Revisa la información e intenta nuevamente.");
+      }
+      const result = await response.json();
+      if (result?.ok !== true) throw new Error("El servidor no confirmó el conteo.");
+      return result;
+    } catch (error) {
+      if (error.name === "AbortError") {
+        throw new Error("El servidor tardó demasiado en responder. Puedes reintentar sin duplicar el conteo.");
+      }
+      if (error instanceof TypeError) {
+        throw new Error("No se pudo comunicar con el servidor del galpón. Revisa el WiFi y vuelve a intentar.");
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
+  };
+
+  const submit = async (path, payload) => {
+    setSubmissionError("");
+    setShowMessage("sending");
+    try {
+      await postSubmission(path, payload);
       setShowMessage("success");
-    } catch (err) {
+      refreshCounts().catch((error) => console.error(error));
+    } catch (error) {
+      setSubmissionError(error.message || "Ocurrió un error inesperado.");
       setShowMessage("failed");
     }
-    setTimeout(async () => {
-      try {
-        await refreshCounts();
-      } catch (error) {
-        console.error(error);
-      }
-      onCancel();
-    }, 1000);
+  };
+
+  const onSubmit = (event) => {
+    event?.preventDefault();
+    return submit("/count", {
+      type: mode.type,
+      station,
+      tag,
+      color: color.value,
+      ...surveyResponses,
+    });
+  };
+
+  const onBulkSubmit = (event) => {
+    event?.preventDefault();
+    return submit("/bulk", { quantity, station });
   };
 
   useEffect(() => {
-    onCancel();
+    resetEntry();
   }, [mode]);
+
+  useEffect(() => {
+    if (shearersLoaded && station > shearers.length) onCancel();
+  }, [shearersLoaded, shearers.length, station]);
+
+  useEffect(() => {
+    if (showMessage !== "success") return undefined;
+    const timeout = setTimeout(resetEntry, 1600);
+    return () => clearTimeout(timeout);
+  }, [showMessage]);
 
   let screen = null;
 
   if (station === 0) {
     screen = (
       <StationSelect
-        setStation={setStation}
+        setStation={selectStation}
         counts={counts}
         shearers={shearers}
       />
     );
-  } else if (mode.tagSchema) {
+  } else if (showMessage === "success") {
+    screen = <SuccessScreen />;
+  } else if (showMessage === "failed") {
+    screen = (
+      <FailedScreen
+        message={submissionError}
+        onRetry={mode.bulk ? onBulkSubmit : onSubmit}
+        onDiscard={resetEntry}
+      />
+    );
+  } else if (showMessage === "sending") {
+    screen = <SendingScreen />;
+  } else if (mode.tagSchema && (needsColor || !tagCompleted)) {
     if (needsColor && !color) {
       screen = (
         <TagColorSelect
@@ -462,9 +525,9 @@ function TaggingApp() {
         screen = (
           <DigitSelect
             display={tag}
-            headerText={"Elija los numeros"}
-            canSubmit={tag.length >= textSchema.min}
-            disableDigits={tag.length >= textSchema.max}
+            headerText={"Elija los números"}
+            canSubmit={currentTagComponentValue.length >= textSchema.min}
+            disableDigits={currentTagComponentValue.length >= textSchema.max}
             onCancel={onCancel}
             addDigit={(digit) =>
               addDigitToTagComponent(nextTagStepIndex, digit)
@@ -497,17 +560,12 @@ function TaggingApp() {
         setSurvey={(value) => respondToSurvey(surveySchema.field, value)}
       />
     );
-  } else if (showMessage === "success") {
-    screen = <SuccessScreen />;
-  } else if (showMessage === "failed") {
-    screen = <FailedScreen />;
-  } else if (showMessage === "sending") {
-    screen = <SendingScreen />;
   } else if (mode.bulk) {
     screen = (
       <QuantityConfirmScreen
         quantity={quantity}
         station={station}
+        shearers={shearers}
         onCancel={onCancel}
         onSubmit={onBulkSubmit}
       />
@@ -517,6 +575,7 @@ function TaggingApp() {
       <ConfirmScreen
         tag={tag}
         station={station}
+        shearers={shearers}
         color={color}
         mode={mode}
         quantity={quantity}

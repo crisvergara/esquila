@@ -1,0 +1,93 @@
+#!/bin/bash
+# Interactive configuration for the Esquila ranch server.
+# Re-run any time: sudo esquila-setup
+set -euo pipefail
+
+if [ "$(id -u)" -ne 0 ]; then
+  echo "Run with sudo: sudo esquila-setup" >&2
+  exit 1
+fi
+
+ENV_FILE=/etc/esquila/esquila.env
+KIOSK_FILE=/etc/esquila/kiosk.conf
+mkdir -p /etc/esquila
+
+# Load current values as defaults so re-running only changes what you want.
+[ -f "$ENV_FILE" ] && . "$ENV_FILE"
+[ -f "$KIOSK_FILE" ] && . "$KIOSK_FILE"
+
+ask() { # ask <prompt> <current-value> -> echoes chosen value
+  local prompt="$1" current="$2" reply
+  if [ -n "$current" ]; then
+    read -r -p "$prompt [$current]: " reply
+    echo "${reply:-$current}"
+  else
+    read -r -p "$prompt: " reply
+    echo "$reply"
+  fi
+}
+
+echo "=== Esquila ranch server setup ==="
+echo "(leave blank to keep the value shown in brackets)"
+echo
+
+CLOUD_SYNC_URL=$(ask "Cloud sync URL (e.g. https://esquila-cloud.fly.dev, blank = sync disabled)" "${CLOUD_SYNC_URL:-}")
+if [ -n "$CLOUD_SYNC_URL" ]; then
+  CLOUD_SYNC_URL="${CLOUD_SYNC_URL%/}"
+  CLOUD_SYNC_TOKEN=$(ask "Cloud sync token (from the cloud /admin page, role 'server')" "${CLOUD_SYNC_TOKEN:-}")
+  CLOUD_APP_URL=$(ask "EsquilaDB app URL (for the /esquiladb redirect)" "${CLOUD_APP_URL:-$CLOUD_SYNC_URL}")
+else
+  CLOUD_SYNC_TOKEN=""
+  CLOUD_APP_URL="${CLOUD_APP_URL:-}"
+fi
+
+echo
+echo "--- AWS (optional: S3 database backups + startup QR email; blank to skip) ---"
+AWS_ACCESS_KEY_ID=$(ask "AWS_ACCESS_KEY_ID" "${AWS_ACCESS_KEY_ID:-}")
+if [ -n "$AWS_ACCESS_KEY_ID" ]; then
+  AWS_SECRET_ACCESS_KEY=$(ask "AWS_SECRET_ACCESS_KEY" "${AWS_SECRET_ACCESS_KEY:-}")
+else
+  AWS_SECRET_ACCESS_KEY=""
+fi
+
+echo
+KIOSK_URL=$(ask "Barn TV kiosk URL" "${KIOSK_URL:-http://localhost:3001/monitor}")
+
+umask 077
+cat > "$ENV_FILE" <<EOF
+# Esquila ranch server configuration. Edit via: sudo esquila-setup
+CLOUD_SYNC_URL=$CLOUD_SYNC_URL
+CLOUD_SYNC_TOKEN=$CLOUD_SYNC_TOKEN
+CLOUD_APP_URL=$CLOUD_APP_URL
+AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID
+AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY
+EOF
+chmod 600 "$ENV_FILE"
+
+cat > "$KIOSK_FILE" <<EOF
+KIOSK_URL=$KIOSK_URL
+EOF
+chmod 644 "$KIOSK_FILE"
+
+echo
+echo "Configuration written to $ENV_FILE"
+
+if [ -n "$CLOUD_SYNC_URL" ]; then
+  echo -n "Checking cloud connectivity... "
+  if curl -fs --max-time 10 "$CLOUD_SYNC_URL/healthz" > /dev/null 2>&1; then
+    echo "OK ($CLOUD_SYNC_URL/healthz reachable)"
+  else
+    echo "UNREACHABLE (fine if the ranch is offline right now — the server queues and retries)"
+  fi
+fi
+
+if systemctl list-unit-files esquila.service > /dev/null 2>&1; then
+  echo "Restarting esquila service..."
+  systemctl restart esquila
+  sleep 2
+  systemctl --no-pager --lines=5 status esquila || true
+  echo
+  echo "Watch sync activity with: journalctl -fu esquila"
+fi
+
+echo "Done. Reboot to (re)start the barn TV kiosk: sudo reboot"

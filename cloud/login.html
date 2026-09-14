@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" />
+  <title>Esquila — Iniciar sesión</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 1rem; font-family: system-ui, sans-serif; background: #1a1a1a; color: #eee; }
+    main { width: 100%; max-width: 420px; background: #242424; border-radius: 14px; padding: 2rem; box-shadow: 0 18px 50px #0008; }
+    h1 { margin: 0 0 .4rem; color: #61dafb; }
+    p { color: #aaa; }
+    label { display: block; margin: 1.5rem 0 .5rem; font-weight: 600; }
+    input, button { width: 100%; font-size: 1rem; padding: .8rem; border-radius: 8px; }
+    input { border: 1px solid #666; background: #161616; color: white; }
+    button { margin-top: 1rem; border: 0; background: #3a6ea5; color: white; font-weight: 700; cursor: pointer; }
+    button:disabled { opacity: .6; }
+    #error { color: #ff8c8c; min-height: 1.4rem; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Esquila 🐑</h1>
+    <p>Administración de dispositivos</p>
+    <form id="login-form">
+      <label for="password">Contraseña de administración</label>
+      <input id="password" type="password" autocomplete="current-password" autofocus required />
+      <button id="submit" type="submit">Iniciar sesión</button>
+      <p id="error" role="alert"></p>
+    </form>
+  </main>
+  <script src="/login.js"></script>
+</body>
+</html>

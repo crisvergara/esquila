@@ -1,9 +1,10 @@
-import shearers from "../shearers.json";
-
 import "./MonitorApp.css";
 import useCounts from "../hooks/useCounts";
 import useCurrentTime from "../hooks/useCurrentTime";
+import useShearers from "../hooks/useShearers";
 import useTimeSince from "../hooks/useTimeSince";
+
+const EMPTY_COUNT = { lastTag: "", lastTagColor: "none", counted: 0 };
 
 function EsquiladorRow({ shearer, count }) {
   const timeSince = useTimeSince(count.lastScanTime);
@@ -22,9 +23,15 @@ function EsquiladorRow({ shearer, count }) {
 
 function MonitorApp() {
   const { counts } = useCounts();
+  const { shearers } = useShearers();
   const currentTime = useCurrentTime();
+  const rowCount = Math.max(shearers.length, 1);
+  const rowFontHeight = Math.min(18, 62 / rowCount);
   return (
-    <div className="Monitor-app">
+    <div
+      className="Monitor-app"
+      style={{ "--row-font-vh": `${rowFontHeight}vh` }}
+    >
       <header className="Monitor-app-header">
         {/*<img src="/qr.png" alt="QR Code" />*/}
         <p>{currentTime}</p>
@@ -34,7 +41,7 @@ function MonitorApp() {
           <EsquiladorRow
             key={index}
             shearer={shearer}
-            count={counts[index + 1]}
+            count={counts[index + 1] ?? EMPTY_COUNT}
           />
         ))}
       </section>

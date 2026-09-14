@@ -1,0 +1,86 @@
+name: PR checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  application:
+    name: Application and offline E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: esquila_test
+          POSTGRES_PASSWORD: esquila_test_password
+          POSTGRES_DB: esquila_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U esquila_test -d esquila_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CI: true
+      TEST_DATABASE_URL: postgresql://esquila_test:esquila_test_password@127.0.0.1:5432/esquila_test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            cloud/package-lock.json
+      - run: npm ci
+      - run: npm ci --prefix cloud
+      - name: Audit production dependencies
+        run: |
+          npm audit --omit=dev --audit-level=high
+          npm audit --prefix cloud --omit=dev --audit-level=high
+      - run: npx playwright install --with-deps chromium
+      - run: npm run check
+      - name: Upload browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
+
+  mac-installer:
+    name: Apple Silicon installer
+    runs-on: macos-14
+    timeout-minutes: 20
+    env:
+      # electron-builder skips even ad-hoc signing for pull-request builds unless
+      # this is set. This job uses identity "-" and receives no signing secrets.
+      CSC_FOR_PULL_REQUEST: true
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build:mac:arm64
+      - name: Verify installer and local-network entitlement metadata
+        run: |
+          file dist-mac/mac-arm64/Esquila.app/Contents/MacOS/Esquila | grep -q arm64
+          codesign --verify --deep --strict dist-mac/mac-arm64/Esquila.app
+          hdiutil verify dist-mac/Esquila-*-arm64.dmg
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NSBonjourServices:0' dist-mac/mac-arm64/Esquila.app/Contents/Info.plist)" = "_http._tcp"
+          /usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' dist-mac/mac-arm64/Esquila.app/Contents/Info.plist | grep -q WiFi

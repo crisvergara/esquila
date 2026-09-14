@@ -10,18 +10,24 @@ esquila
 
 # testing
 /coverage
+/playwright-report
+/test-results
 
 # production
 /build
 /build-cloud
+/dist-mac
 /cloud/node_modules
 
 # misc
 .DS_Store
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+
+# env files hold real tokens — never commit any of them
+.env
+.env.*
+
+# runtime artifacts if the server is ever run from the repo directory
+.onboarded
 
 npm-debug.log*
 yarn-debug.log*

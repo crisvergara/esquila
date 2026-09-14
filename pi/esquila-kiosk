@@ -1,0 +1,30 @@
+#!/bin/bash
+# Fullscreen browser kiosk for the barn TV. Waits for the count server,
+# then launches Chromium in kiosk mode on the monitor app.
+
+CONF=/etc/esquila/kiosk.conf
+[ -f "$CONF" ] && . "$CONF"
+URL="${KIOSK_URL:-http://localhost:3001/monitor}"
+
+# First boot: show the onboarding wizard (WiFi + shearer names) until it has
+# been completed once. The wizard's "Comenzar" button writes this marker.
+if [ ! -f /var/lib/esquila/.onboarded ]; then
+  URL="http://localhost:3001/setup"
+fi
+
+# Wait for the count server to come up (it starts in parallel at boot).
+for _ in $(seq 1 60); do
+  curl -fs --max-time 2 http://localhost:3001/count > /dev/null 2>&1 && break
+  sleep 2
+done
+
+BROWSER=$(command -v chromium-browser || command -v chromium)
+exec "$BROWSER" \
+  --kiosk \
+  --incognito \
+  --noerrdialogs \
+  --disable-infobars \
+  --disable-session-crashed-bubble \
+  --disable-features=TranslateUI \
+  --check-for-update-interval=31536000 \
+  "$URL"

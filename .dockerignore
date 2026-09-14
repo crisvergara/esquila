@@ -1,0 +1,36 @@
+# Secrets and VCS must never enter the Docker build context
+.env
+.env.*
+.git
+
+# flyctl launch added from .gitignore
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+**/counts/*
+**/esquila
+**/*.sqlite
+
+# dependencies
+node_modules
+.pnp
+**/.pnp.js
+
+# testing
+coverage
+
+# production
+build
+build-cloud
+dist-mac
+cloud/node_modules
+
+# misc
+**/.DS_Store
+**/.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
+
+**/npm-debug.log*
+**/yarn-debug.log*
+**/yarn-error.log*
+fly.toml

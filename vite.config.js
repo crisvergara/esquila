@@ -24,6 +24,8 @@ export default defineConfig(() => {
         '/mode': 'http://localhost:3001',
         '/sse': 'http://localhost:3001',
         '/bulk': 'http://localhost:3001',
+        '/shearers': 'http://localhost:3001',
+        '/setup': 'http://localhost:3001',
       },
     },
   };

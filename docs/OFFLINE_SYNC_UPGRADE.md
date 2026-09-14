@@ -90,7 +90,7 @@ create view sheep_latest as             -- sheep status is derived, not stored
 | `POST /api/sync/push` | ranch server + phones | Batch `{table, rows:[…]}`; idempotent LWW upsert by `id`; returns `{applied:[ids]}` |
 | `GET /api/snapshot` | phones | One JSON: `sheep_latest`, treatment history/counts per tag, presets, `server_time` (few hundred KB at this scale — no pagination) |
 | `GET /api/vaccination-summary?start&end` | phones | Same shape as today, grouped by `occurred_on` |
-| `POST /admin/enroll`, `DELETE /admin/devices/:id` | admin (env `ADMIN_TOKEN`) | Device lifecycle + QR enrollment page |
+| `/admin`, `/api/admin/*` | admin login (env `ADMIN_PASSWORD`) | Session-protected device lifecycle + QR enrollment page |
 | `GET /*` | phones | Static esquiladb build, SW, manifest |
 
 ## On-prem SQLite changes (countserver.js)
@@ -148,7 +148,7 @@ create view sheep_latest as             -- sheep status is derived, not stored
 
 All phases are **implemented and verified end-to-end locally**: legacy-DB migration, outbox backfill push, lamb-counter restart safety, ranch-timezone date normalization, tombstone replication both directions of origin (on-prem delete and phone delete), LWW replay safety, device auth, and the PWA UI (enrollment via hash URL, snapshot rendering, one-tap preset write synced to Neon).
 
-**Cloud database**: the existing Neon project **`chile-farm`** (`muddy-surf-12021054`, `aws-us-east-2`, Postgres 17) was reused; the schema is applied. Note: it currently holds **test data** from verification. Before going live, clear it:
+**Cloud database**: the existing Neon project **`chile-farm`** (`aws-us-east-2`, Postgres 17) was reused; the schema is applied. Note: it currently holds **test data** from verification. Before going live, clear it:
 
 ```sql
 TRUNCATE shearing_events, treatments, treatment_presets;
@@ -158,7 +158,7 @@ DELETE FROM devices;  -- test devices: ranch-server, test-phone
 ### Go-live checklist (the remaining manual steps)
 
 1. `fly launch --no-deploy` in the repo root (uses `fly.toml` → `cloud/Dockerfile`), then
-   `fly secrets set DATABASE_URL=<neon-pooler-url> ADMIN_TOKEN=<long-random-string>` and `fly deploy`.
+   `fly secrets set DATABASE_URL=<neon-pooler-url> ADMIN_PASSWORD=<strong-password>` and `fly deploy`.
 2. Clear the Neon test data (SQL above).
 3. Open `https://<app>/admin` → create a **server** device → set `CLOUD_SYNC_URL` + `CLOUD_SYNC_TOKEN` (and `CLOUD_APP_URL`) in the ranch server's environment.
 4. `git pull && npm install && npm run build && npm start` on the ranch machine. First boot migrates SQLite (writes a local `esquila-pre-v1-*.sqlite` safety copy) and uploads all history.
