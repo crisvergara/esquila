@@ -95,6 +95,40 @@ fly ips list
 If a dedicated v4 snuck in: `fly ips release <addr>` (the shared v4 + free
 IPv6 are all an HTTPS-only app needs).
 
+## Automatic deployment and Mac builds
+
+Pushes to the default branch, **`main`**, run the `Checks and delivery` workflow.
+Pull requests run the same required checks without deploying or receiving the
+Fly token.
+
+1. `Application and offline E2E` runs the builds, audits, and regression suite.
+2. `Apple Silicon installer` builds and verifies the ARM64 DMG/ZIP, then uploads
+   them as `Esquila-mac-arm64-<commit SHA>` under the workflow run's **Artifacts**.
+   Downloads are retained for 30 days. Install these ad-hoc signed packages
+   manually on the ranch Mac.
+3. After both checks succeed, `Deploy cloud to Fly.io` deploys the same commit
+   using `fly.toml` and verifies `/healthz`. The Docker build includes the cloud
+   service and vaccination PWA. `--ha=false` prevents creating extra standby
+   machines; it does not remove any machines already provisioned.
+
+Production runs are serialized and are not canceled midway through deployment.
+Superseded PR checks may still be canceled. A failed check blocks deployment;
+a failed deployment or health check marks the workflow red. Fix the failure and
+rerun failed jobs, or push a correction to `main`.
+
+GitHub requires the repository Actions secret `FLY_API_TOKEN`. Use an app-scoped
+token, never a broad personal Fly token. With Fly and GitHub CLI authenticated,
+this sends the token directly to the GitHub secret store:
+
+```sh
+set -o pipefail
+fly tokens create deploy --app esquila-cloud --name github-actions --expiry 8760h | gh secret set FLY_API_TOKEN --repo crisvergara/esquila
+```
+
+Renew the token before its one-year expiry. Existing `DATABASE_URL`,
+`ADMIN_PASSWORD`, and `PUBLIC_URL` remain in Fly secrets; GitHub does not need
+copies. See the [Fly continuous deployment guide](https://fly.io/docs/launch/continuous-deployment-with-github-actions/).
+
 ## 4. Enroll the ranch server
 
 1. Open `https://esquila-cloud.fly.dev/admin` in a browser.

@@ -327,6 +327,19 @@ db.exec(`
   )
 `);
 
+// Additive migration: durable receipts protect editor retries after response loss.
+if (db.pragma("user_version", { simple: true }) < 2) {
+  db.transaction(() => {
+    db.exec(`CREATE TABLE record_mutations (
+      id TEXT PRIMARY KEY, request TEXT NOT NULL, result TEXT NOT NULL
+    );
+      CREATE INDEX idx_sync_outbox_row ON sync_outbox (tbl, row_id);
+      CREATE TABLE lamb_sequence (singleton INTEGER PRIMARY KEY CHECK (singleton = 1), value INTEGER NOT NULL);
+      INSERT INTO lamb_sequence VALUES (1, 0)`);
+    db.pragma("user_version = 2");
+  })();
+}
+
 const getSettingsFromDb = db.prepare(`
   SELECT mode, email FROM settings
 `);
@@ -476,6 +489,9 @@ let lambs = db
      FROM counts WHERE tag LIKE 'L%'`
   )
   .get().max;
+lambs = Math.max(lambs, db.prepare("SELECT value FROM lamb_sequence WHERE singleton = 1").get().value);
+const reserveLambSequence = db.prepare("UPDATE lamb_sequence SET value = MAX(value, ?) WHERE singleton = 1");
+reserveLambSequence.run(lambs);
 
 // One stats entry per station; station count follows the shearers list,
 // which is editable at runtime via the Pi onboarding wizard.
@@ -596,6 +612,7 @@ const insertBulkCountTxn = db.transaction((station, quantity, submissionId) => {
     );
     queueSyncRow.run("counts", row.id);
   }
+  reserveLambSequence.run(lambs);
   if (submissionId) recordCountSubmission.run(submissionId, "bulk", dateString);
   return true;
 });
@@ -716,6 +733,83 @@ app.post("/bulk", bodyParser.json(), (req, res) => {
       console.error(err);
       res.sendStatus(500);
     });
+});
+
+const recentRecords = db.prepare(`
+  SELECT c.*, EXISTS(SELECT 1 FROM sync_outbox o WHERE o.tbl = 'counts' AND o.row_id = c.id) AS pending
+  FROM counts c WHERE c.deleted_at IS NULL AND c.tag LIKE ?
+  ORDER BY c.date DESC, c.id DESC LIMIT 200
+`);
+app.get("/api/records", (req, res) => {
+  const filter = typeof req.query.tag === "string" ? req.query.tag.slice(0, 40) : "";
+  res.json({ rows: recentRecords.all(`%${filter}%`),
+    pending: db.prepare("SELECT COUNT(DISTINCT row_id) AS n FROM sync_outbox WHERE tbl = 'counts'").get().n,
+    syncConfigured: Boolean(process.env.CLOUD_SYNC_URL && process.env.CLOUD_SYNC_TOKEN) });
+});
+
+const mutateRecord = db.transaction((body) => {
+  const signature = JSON.stringify([body.action, body.id, body.updated_at, body.tag,
+    body.station, body.type, body.color, body.woolQuality, body.lactation]);
+  const receipt = db.prepare("SELECT * FROM record_mutations WHERE id = ?").get(body.submissionId);
+  const fail = (status, message) => { throw Object.assign(new Error(message), { status }); };
+  if (receipt) {
+    if (receipt.request !== signature) fail(409, "Este intento ya se usó para otro cambio.");
+    return { ...JSON.parse(receipt.result), duplicate: true };
+  }
+  const old = body.action === "add" ? null : db.prepare("SELECT * FROM counts WHERE id = ?").get(body.id);
+  if (body.action !== "add") {
+    if (!old || old.deleted_at) fail(404, "El registro ya no existe. Actualiza la tabla.");
+    if (old.updated_at !== body.updated_at) fail(409, "El registro cambió. Cierra el formulario y vuelve a abrirlo.");
+  }
+  const now = new Date(Math.max(Date.now(), old ? Date.parse(old.updated_at) + 1 : 0)).toISOString();
+  const id = old?.id ?? uuidv7();
+  if (body.action === "delete") {
+    db.prepare("UPDATE counts SET deleted_at = ?, updated_at = ? WHERE id = ?").run(now, now, id);
+  } else {
+    if (!["oveja", "carnero", "borrega"].includes(body.type)) fail(400, "Tipo de animal inválido.");
+    if (body.type === "borrega") {
+      if (!readStation(body) || !/^L[0-9]{4,10}$/.test(body.tag) || body.color !== "none" ||
+          body.woolQuality !== "IDK" || body.lactation !== "idk") fail(400, "Datos de cordero inválidos.");
+    } else {
+      const validation = validateTagSubmission(body);
+      if (validation.error) fail(400, "Revisa el código, estación, color y respuestas del animal.");
+      if (body.type === "carnero" && (body.woolQuality !== "IDK" || body.lactation !== "idk")) {
+        fail(400, "El carnero no requiere respuestas de lana ni lactancia.");
+      }
+    }
+    if (old) {
+      db.prepare(`UPDATE counts SET tag = ?, station = ?, color = ?, lactation = ?,
+        type = ?, woolQuality = ?, updated_at = ? WHERE id = ?`).run(
+        body.tag, Number(body.station), body.color, body.lactation, body.type, body.woolQuality, now, id);
+    } else {
+      writeTagToDb.run(id, body.tag, Number(body.station), body.color, body.lactation,
+        body.type, body.woolQuality, now, now);
+    }
+  }
+  if (body.action !== "delete" && /^L[0-9]+$/.test(body.tag)) {
+    reserveLambSequence.run(Number(body.tag.slice(1)));
+  }
+  queueSyncRow.run("counts", id);
+  const result = { ok: true, id, updated_at: now, duplicate: false };
+  db.prepare("INSERT INTO record_mutations VALUES (?, ?, ?)").run(body.submissionId, signature, JSON.stringify(result));
+  return result;
+});
+
+app.post("/api/records", bodyParser.json(), async (req, res) => {
+  const body = req.body;
+  if (!readSubmissionId(body) || !["add", "edit", "delete"].includes(body?.action) ||
+      (body.action !== "add" && (typeof body.id !== "string" || typeof body.updated_at !== "string"))) {
+    return res.status(400).json({ error: "Solicitud inválida." });
+  }
+  try {
+    const result = mutateRecord(body);
+    // Manual L tags must also reserve their number before the next bulk submission.
+    lambs = Math.max(lambs, db.prepare("SELECT value FROM lamb_sequence WHERE singleton = 1").get().value);
+    await refreshCounts();
+    res.json(result);
+  } catch (error) {
+    res.status(error.status ?? 500).json({ error: error.status ? error.message : "No se pudo guardar. Reintenta el mismo cambio." });
+  }
 });
 
 app.get("/count", (req, res) => {

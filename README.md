@@ -92,6 +92,7 @@ Phones are enrolled by scanning a QR code generated on the cloud's `/admin` page
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/count` | Log a single animal (tag, station, color, type, woolQuality, lactation) |
+| `GET/POST` | `/api/records` | List recent shearing records; retry-safe additions, edits, and tombstone deletions |
 | `POST` | `/bulk` | Log a batch of lambs by quantity and station |
 | `GET` | `/count` | Get current per-station stats (counted, last tag, breakdown by type) |
 | `POST` | `/mode` | Switch the active tagging mode |
@@ -161,6 +162,7 @@ For local frontend development: `npm run dev:cloud` proxies `/api` to a local cl
 | URL | Description |
 |-----|-------------|
 | `http://<host>:3001/tagger` | Tagger UI — for shearers on their phones (LAN) |
+| `http://<host>:3001/records/` | Recent-record editor, also opened from the Mac sheep menu |
 | `http://<host>:3001/tagger-setup` | QR code and phone setup instructions |
 | `http://<host>:3001/monitor` | Desktop monitor — shows all stations at a glance (LAN) |
 | `http://<host>:3001/mobilemonitor` | Mobile monitor — same info, phone-friendly (LAN) |

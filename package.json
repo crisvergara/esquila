@@ -55,6 +55,7 @@
     },
     "files": [
       "countserver.js",
+      "tagger/modeschema.json",
       "build/**/*",
       "mac/**/*",
       "setup/**/*",

@@ -10,6 +10,7 @@ export default defineConfig(() => {
       rollupOptions: {
         input: {
           main: './index.html',
+          records: './records/index.html',
           tagger: './tagger/index.html',
           monitor: './monitor/index.html',
           mobilemonitor: './mobilemonitor/index.html',
@@ -20,6 +21,7 @@ export default defineConfig(() => {
     plugins: [react()],
     server: {
       proxy: {
+        '/api/records': 'http://localhost:3001',
         '/count': 'http://localhost:3001',
         '/mode': 'http://localhost:3001',
         '/sse': 'http://localhost:3001',

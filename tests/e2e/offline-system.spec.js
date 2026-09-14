@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import Database from "better-sqlite3";
 import crypto from "node:crypto";
+import { createServer } from "node:http";
 import { existsSync, readdirSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
@@ -142,7 +143,7 @@ test("migrates a legacy ranch database once and backs it up", async () => {
   await stopService(service);
 
   const migrated = new Database(legacyPath, { readonly: true });
-  expect(migrated.pragma("user_version", { simple: true })).toBe(1);
+  expect(migrated.pragma("user_version", { simple: true })).toBe(2);
   expect(migrated.prepare("SELECT COUNT(*) AS n FROM counts").get().n).toBe(1);
   expect(migrated.prepare("SELECT COUNT(*) AS n FROM treatments").get().n).toBe(1);
   expect(migrated.prepare("SELECT COUNT(*) AS n FROM sync_outbox").get().n).toBe(2);
@@ -393,6 +394,166 @@ test("restart preserves lamb numbering and sync resumes", async () => {
     current.close();
     return count === 0;
   }, { description: "post-restart outbox to drain" });
+});
+
+test("record editor retries offline mutations across restart and reconciles edits and tombstones", async ({ page }) => {
+  const editorPrefix = `A${testDigits.slice(0, 5)}`;
+  const rows = async () => (await jsonRequest(`${ranchBase}/api/records?tag=${editorPrefix}`)).data.rows;
+  const before = totalCount((await jsonRequest(`${ranchBase}/count`)).data);
+  await page.goto(`${ranchBase}/records/`);
+  await page.getByRole("button", { name: "Agregar registro" }).click();
+  await page.getByLabel("Código", { exact: true }).fill(`${editorPrefix}0`);
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
+  await expect(page.getByText("Cambio guardado en el galpón.", { exact: false })).toBeVisible();
+  const original = (await rows())[0];
+  await waitFor(async () => {
+    const snapshot = (await jsonRequest(`${cloudBase}/api/snapshot`, { token: serverToken })).data;
+    return snapshot.shearing_events.some(r => r.id === original.id);
+  }, { description: "editor addition to sync" });
+  const stale = (await jsonRequest(`${cloudBase}/api/snapshot`, { token: serverToken })).data.shearing_events.find(r => r.id === original.id);
+  await stopService(cloudService); cloudService = undefined;
+
+  await page.getByLabel("Buscar código").fill(editorPrefix);
+  await page.getByRole("row").filter({ hasText: `${editorPrefix}0` }).getByRole("button", { name: "Editar", exact: true }).click();
+  await page.getByLabel("Código", { exact: true }).fill(`${editorPrefix}1`);
+  await page.getByLabel("Estación", { exact: true }).selectOption("2");
+  await page.getByLabel("Color", { exact: true }).selectOption("pink");
+  await page.getByLabel("Calidad", { exact: true }).selectOption("EXCELLENT");
+  await page.getByLabel("Lactante", { exact: true }).selectOption("dry");
+  let lost = false;
+  const loseResponse = async route => {
+    if (!lost && route.request().method() === "POST") {
+      lost = true; await route.fetch(); await route.abort("failed");
+    } else await route.continue();
+  };
+  await page.route(`${ranchBase}/api/records`, loseResponse);
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Reintentar", exact: true })).toBeVisible();
+  const edited = (await rows())[0];
+  expect(edited).toMatchObject({ id: original.id, tag: `${editorPrefix}1`, station: 2, color: "pink", woolQuality: "EXCELLENT", lactation: "dry", date: original.date, pending: 1 });
+  expect(edited.updated_at > original.updated_at).toBe(true);
+
+  await stopService(ranchService); ranchService = startRanch(ranchDir); await waitForHealth(ranchBase, ranchService);
+  await page.unroute(`${ranchBase}/api/records`, loseResponse);
+  await page.reload();
+  await page.getByRole("button", { name: "Reintentar", exact: true }).click();
+  await expect(page.getByText("El cambio ya estaba guardado. No se duplicó.")).toBeVisible();
+  expect((await rows())[0].updated_at).toBe(edited.updated_at);
+  expect(totalCount((await jsonRequest(`${ranchBase}/count`)).data)).toBe(before + 1);
+
+  // A stale editor and invalid fields cannot change either domain data or outbox.
+  const staleEdit = await ranchPost("/api/records", { ...original, action: "edit", submissionId: crypto.randomUUID() });
+  expect(staleEdit.response.status).toBe(409);
+  for (const fields of [{ station: 0 }, { tag: "Z1" }, { color: "unknown" }, { woolQuality: "bad" }, { lactation: "bad" }]) {
+    expect((await ranchPost("/api/records", { ...edited, ...fields, action: "edit", submissionId: crypto.randomUUID() })).response.status).toBe(400);
+  }
+  expect((await rows())[0]).toEqual(edited);
+
+  // Add then delete a separate row while entirely disconnected.
+  await page.getByRole("button", { name: "Agregar registro" }).click();
+  await page.getByLabel("Código", { exact: true }).fill(`${editorPrefix}2`);
+  lost = false; await page.route(`${ranchBase}/api/records`, loseResponse);
+  await page.getByRole("button", { name: "Guardar", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Reintentar", exact: true })).toBeVisible();
+  await page.unroute(`${ranchBase}/api/records`, loseResponse);
+  await page.getByRole("button", { name: "Reintentar", exact: true }).click();
+  await expect(page.getByText("El cambio ya estaba guardado. No se duplicó.")).toBeVisible();
+  const added = (await rows()).find(r => r.tag === `${editorPrefix}2`);
+  await page.getByLabel("Buscar código").fill(editorPrefix);
+  await page.getByRole("row").filter({ hasText: `${editorPrefix}2` }).getByRole("button", { name: "Eliminar", exact: true }).click();
+  lost = false; await page.route(`${ranchBase}/api/records`, loseResponse);
+  await page.getByRole("button", { name: "Confirmar eliminación" }).click();
+  await expect(page.getByRole("button", { name: "Reintentar", exact: true })).toBeVisible();
+  await page.unroute(`${ranchBase}/api/records`, loseResponse);
+  await page.reload();
+  await page.getByRole("button", { name: "Reintentar", exact: true }).click();
+  await expect(page.getByText("El cambio ya estaba guardado. No se duplicó.")).toBeVisible();
+  expect((await rows()).map(r => r.id)).toEqual([edited.id]);
+  expect(totalCount((await jsonRequest(`${ranchBase}/count`)).data)).toBe(before + 1);
+
+  cloudService = startCloud(); await waitForHealth(cloudBase, cloudService);
+  await waitFor(async () => (await rows())[0].pending === 0, { timeoutMs: 45_000, description: "offline edit to sync" });
+  const snapshot = (await jsonRequest(`${cloudBase}/api/snapshot`, { token: serverToken })).data;
+  expect(snapshot.shearing_events.find(r => r.id === edited.id)).toMatchObject({ tag: `${editorPrefix}1`, station: 2, color: "pink", wool_quality: "EXCELLENT", lactation: "dry" });
+  expect(snapshot.shearing_events.some(r => r.id === added.id)).toBe(false);
+  expect(snapshot.shearing_events.some(r => r.tag === `${editorPrefix}0`)).toBe(false);
+
+  // Delete an already-synchronized record, then replay its old cloud payload.
+  const deletion = { ...edited, action: "delete", submissionId: crypto.randomUUID() };
+  expect((await ranchPost("/api/records", deletion)).response.status).toBe(200);
+  expect((await ranchPost("/api/records", deletion)).data.duplicate).toBe(true);
+  await waitFor(async () => !(await jsonRequest(`${cloudBase}/api/snapshot`, { token: serverToken })).data.shearing_events.some(r => r.id === edited.id));
+  expect((await jsonRequest(`${cloudBase}/api/sync/push`, { method: "POST", token: serverToken, body: { batches: [{ table: "shearing_events", rows: [stale] }] } })).response.status).toBe(200);
+  expect((await jsonRequest(`${cloudBase}/api/snapshot`, { token: serverToken })).data.shearing_events.some(r => r.id === edited.id)).toBe(false);
+  expect(totalCount((await jsonRequest(`${ranchBase}/count`)).data)).toBe(before);
+  const db = new Database(path.join(ranchDir, "esquila"), { readonly: true });
+  expect(db.prepare("SELECT deleted_at FROM counts WHERE id = ?").get(added.id).deleted_at).toBeTruthy();
+  expect(db.prepare("SELECT COUNT(*) AS n FROM record_mutations").get().n).toBe(5);
+  db.close();
+});
+
+test("edits made during an ambiguous cloud push remain queued and reconcile", async () => {
+  const directory = path.join(tempRoot, "inflight");
+  await import("node:fs/promises").then(({ mkdir }) => mkdir(directory));
+  const isolatedBase = `http://127.0.0.1:${RANCH_PORT + 3}`;
+  let first = true;
+  let rowId;
+  let proxyError;
+  const proxy = createServer(async (req, res) => {
+    try {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const raw = Buffer.concat(chunks).toString();
+      const pushed = await jsonRequest(`${cloudBase}/api/sync/push`, { method: "POST", token: serverToken, raw });
+      if (first) {
+        first = false;
+        // The cloud has committed, but the barn has not received its receipt.
+        const row = (await jsonRequest(`${isolatedBase}/api/records`)).data.rows[0];
+        rowId = row.id;
+        const edited = await jsonRequest(`${isolatedBase}/api/records`, { method: "POST", body: {
+          ...row, action: "edit", tag: "B87654", submissionId: crypto.randomUUID(),
+        } });
+        expect(edited.response.status).toBe(200);
+        res.destroy();
+      } else {
+        res.writeHead(pushed.response.status, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(pushed.data));
+      }
+    } catch (error) { proxyError = error; res.destroy(); }
+  });
+  await new Promise(resolve => proxy.listen(0, "127.0.0.1", resolve));
+  const launch = () => startNodeService("inflight ranch", path.join(ROOT, "countserver.js"), {
+    cwd: directory, env: { PORT: String(RANCH_PORT + 3), CLOUD_SYNC_URL: `http://127.0.0.1:${proxy.address().port}`,
+      CLOUD_SYNC_TOKEN: serverToken, CLOUD_SYNC_INTERVAL_MS: "100", AWS_ACCESS_KEY_ID: "", AWS_SECRET_ACCESS_KEY: "" },
+  });
+  let service = launch();
+  try {
+    await waitForHealth(isolatedBase, service);
+    expect((await jsonRequest(`${isolatedBase}/api/records`, { method: "POST", body: {
+      action: "add", tag: "B87653", station: 1, color: "none", type: "oveja", woolQuality: "GOOD", lactation: "idk", submissionId: crypto.randomUUID(),
+    } })).response.status).toBe(200);
+    await waitFor(async () => {
+      if (proxyError) throw proxyError;
+      return rowId && (await jsonRequest(`${isolatedBase}/api/records`)).data.pending === 0;
+    }, { description: "ambiguous push retry to drain" });
+    const remote = (await jsonRequest(`${cloudBase}/api/snapshot`, { token: serverToken })).data.shearing_events.filter(r => r.id === rowId);
+    expect(remote).toHaveLength(1);
+    expect(remote[0].tag).toBe("B87654");
+    const manual = await jsonRequest(`${isolatedBase}/api/records`, { method: "POST", body: {
+      action: "add", tag: "L5000", station: 1, color: "none", type: "borrega", woolQuality: "IDK", lactation: "idk", submissionId: crypto.randomUUID(),
+    } });
+    expect(manual.response.status).toBe(200);
+    const lamb = (await jsonRequest(`${isolatedBase}/api/records?tag=L5000`)).data.rows[0];
+    expect((await jsonRequest(`${isolatedBase}/api/records`, { method: "POST", body: {
+      ...lamb, action: "edit", tag: "L4000", submissionId: crypto.randomUUID(),
+    } })).response.status).toBe(200);
+    await stopService(service); service = launch(); await waitForHealth(isolatedBase, service);
+    expect((await jsonRequest(`${isolatedBase}/bulk`, { method: "POST", body: { station: 1, quantity: 1, submissionId: crypto.randomUUID() } })).response.status).toBe(200);
+    expect((await jsonRequest(`${isolatedBase}/api/records?tag=L5001`)).data.rows).toHaveLength(1);
+  } finally {
+    await stopService(service);
+    await new Promise(resolve => proxy.close(resolve));
+  }
 });
 
 test("cloud enforces auth, roles, rollback, admin CSRF, and last-write-wins", async ({ page, request }) => {

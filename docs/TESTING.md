@@ -1,6 +1,6 @@
 # Testing and pull-request checks
 
-Every pull request runs two required jobs from `.github/workflows/pr-checks.yml`.
+Every pull request and push to `main` runs two required jobs from `.github/workflows/pr-checks.yml`.
 
 ## Application and offline E2E
 
@@ -14,6 +14,8 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
 - tag-prefix digit limits, station persistence, and a response-loss retry after the server has already committed the count;
 - all ranch API validation boundaries, maximum bulk payload, and idempotent retries;
 - continued counting with the cloud unavailable, followed by exact row-for-row catch-up;
+- recent-record editor additions, edits, deletion confirmations, response-loss retries across reload/restart, stale-editor rejection, offline reconciliation, and stale tombstone replay;
+- edits made during a cloud upload whose response is lost, plus durable lamb-number reservation after manual corrections and restart;
 - ranch restart safety for lamb numbering and synchronization;
 - cloud device authentication, phone/server role boundaries, malformed requests, transaction rollback, last-write-wins semantics, admin login, CSRF protection, and device revocation;
 - vaccination PWA enrollment, offline writes, offline service-worker reload, direct phone-to-cloud synchronization, and proof that the treatment never passes through the ranch database.
@@ -25,6 +27,14 @@ The E2E suite uses temporary directories and configurable non-production ports. 
 This job runs on macOS and builds only the ARM64 DMG/ZIP. It verifies the executable architecture, ad-hoc signature, DMG checksum, Bonjour service declaration, and local-network permission description.
 
 The Mac window lifecycle is indirectly covered by the same ranch server and browser onboarding contracts. A fully automated macOS GUI test is intentionally omitted because login-item, tray, fullscreen, and local-network permission dialogs are controlled by macOS and are substantially less reliable on headless GitHub runners. Those remain release-candidate smoke tests on a real Mac.
+
+## Delivery on main
+
+On pushes to `main`, the verified Mac DMG/ZIP is uploaded as a workflow artifact
+retained for 30 days. Cloud deployment runs only after both required jobs pass,
+then checks the live health endpoint. PRs never deploy. See
+[DEPLOY.md](DEPLOY.md#automatic-deployment-and-mac-builds) for token setup,
+downloads, and failure recovery. Required check names remain unchanged.
 
 ## Running locally
 
