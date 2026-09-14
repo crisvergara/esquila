@@ -21,7 +21,23 @@ required on the barn computer.
 
 Closing the monitor does **not** stop the server. Esquila remains available
 from the sheep icon in the macOS menu bar. That menu can reopen the monitor,
-change settings, open the tagger, disable launch-at-login, or fully quit.
+change settings, open the tagger, edit recent records, disable launch-at-login, or fully quit.
+
+Choose **Registros recientes…** from the sheep menu to open the record editor.
+It shows the latest 200 live shearing records, with a code search for older rows.
+Use **Agregar registro**, **Editar**, or **Eliminar** (then confirm) to correct
+an animal's code, station, type, color, wool quality, or lactation. Editing keeps
+the original shearing time; dates are displayed in Chile time. For a manually
+added lamb, use `L` followed by at least four digits.
+
+Changes save to the Mac immediately without internet, update monitor totals,
+and show **Pendiente** until the cloud accepts them. Deleted records disappear
+from the table, but their pending deletion remains included in the sync total.
+If a save cannot be confirmed, choose **Reintentar**; the same attempt is kept
+even if you close and reopen the window, so it cannot create a duplicate. If
+another window has changed the row, cancel and reopen it before editing again.
+The editor is also available at `http://<mac-name>.local:3001/records/` on the
+trusted ranch WiFi.
 
 Choose **Configurar teléfonos…** from the sheep menu to display a QR code and
 step-by-step instructions. Each tagger phone scans that code while connected
@@ -77,7 +93,9 @@ configure Electron Builder signing/notarization credentials.
 
 ## Updating the barn Mac
 
-Build a new installer, quit the old Esquila app, and drag the new app over the
+Download the DMG from the latest successful **Checks and delivery** run on
+`main` in GitHub Actions (under **Artifacts → Esquila-mac-arm64-<commit SHA>**),
+or build locally. Quit the old Esquila app and drag the new app over the
 old one in Applications. The database and configuration remain untouched in
 Application Support.
 

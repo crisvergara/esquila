@@ -21,6 +21,7 @@ let suppressServerRestart = false;
 let monitorWindow;
 let settingsWindow;
 let taggerSetupWindow;
+let recordsWindow;
 let tray;
 let bonjour;
 let quitting = false;
@@ -169,7 +170,7 @@ function createMonitorWindow() {
   monitorWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   monitorWindow.on("closed", () => {
     monitorWindow = undefined;
-    if (!settingsWindow && !taggerSetupWindow) app.dock?.hide();
+    if (!settingsWindow && !taggerSetupWindow && !recordsWindow) app.dock?.hide();
   });
 }
 
@@ -198,7 +199,7 @@ function createSettingsWindow() {
   settingsWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   settingsWindow.on("closed", () => {
     settingsWindow = undefined;
-    if (!monitorWindow && !taggerSetupWindow) app.dock?.hide();
+    if (!monitorWindow && !taggerSetupWindow && !recordsWindow) app.dock?.hide();
   });
 }
 
@@ -225,7 +226,27 @@ function createTaggerSetupWindow() {
   });
   taggerSetupWindow.on("closed", () => {
     taggerSetupWindow = undefined;
-    if (!monitorWindow && !settingsWindow) app.dock?.hide();
+    if (!monitorWindow && !settingsWindow && !recordsWindow) app.dock?.hide();
+  });
+}
+
+function createRecordsWindow() {
+  app.dock?.show();
+  if (recordsWindow && !recordsWindow.isDestroyed()) {
+    recordsWindow.show();
+    recordsWindow.focus();
+    return;
+  }
+  recordsWindow = new BrowserWindow({
+    title: "Registros recientes — Esquila", width: 1180, height: 780,
+    minWidth: 640, minHeight: 520,
+    webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
+  });
+  recordsWindow.loadURL(`${SERVER_ORIGIN}/records/`);
+  recordsWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  recordsWindow.on("closed", () => {
+    recordsWindow = undefined;
+    if (!monitorWindow && !settingsWindow && !taggerSetupWindow) app.dock?.hide();
   });
 }
 
@@ -238,6 +259,7 @@ function buildTray() {
   const rebuildMenu = () => {
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: "Abrir monitor", click: createMonitorWindow },
+      { label: "Registros recientes…", click: createRecordsWindow },
       { label: "Configuración…", click: createSettingsWindow },
       { label: "Configurar teléfonos…", click: createTaggerSetupWindow },
       { label: "Abrir tagger en este Mac", click: () => shell.openExternal(`${SERVER_ORIGIN}/tagger`) },

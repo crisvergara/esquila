@@ -70,6 +70,26 @@ A client may lose the response after step 3. Retrying the same submission must
 return success without creating another animal. Bulk quantity must be an integer
 from 1 through 1,000. Lamb numbers must continue monotonically after restart.
 
+## Barn record corrections
+
+The Mac menu opens `/records/`, a LAN-only editor backed by `GET/POST
+/api/records`. It lists the latest 200 live records and supports code filtering.
+Adds, edits, and deletes run in one SQLite transaction with their outbox entry
+and a durable `record_mutations` receipt (additive schema version 2). Receipts
+bind a submission ID to the exact mutation; replay returns the previous result,
+and reusing the ID for different content fails. The editor retains unconfirmed
+requests in browser storage across reloads and window closure.
+
+Edits and deletes require the row's current `updated_at` to reject stale editors.
+Edits retain identity and occurrence time. Each mutation advances `updated_at`
+strictly, even within the same millisecond or after a backwards clock change.
+Deletes retain tombstones; existing cloud LWW rules prevent stale resurrection.
+Manual lamb codes reserve their sequence number durably in `lamb_sequence` for
+subsequent bulk counts, even if the code is later edited or deleted.
+All mutations refresh monitor counts after commit. The pending total includes
+deletions even though the table hides deleted rows. As with counting, the local
+API trusts the ranch WiFi and grants no additional cloud roles to phones.
+
 ## Vaccination and flock lookup flow
 
 1. A phone enrolls from an admin-generated URL/QR and stores its device token in
