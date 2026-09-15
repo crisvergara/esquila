@@ -49,6 +49,11 @@ can be maintained without turning this file into a second README.
    [docs/TESTING.md](docs/TESTING.md). Do not weaken an assertion merely to make a
    change pass.
 
+9. **App updates never interrupt counting automatically.** Cloud update metadata
+   may advertise only a verified, published installer. Check/download failures
+   must leave the barn server running. Quitting to install requires explicit
+   operator action, and application replacement must preserve ranch data.
+
 ## Working agreement for future sessions
 
 Before editing:

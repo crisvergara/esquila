@@ -80,6 +80,22 @@ the phone or QR is lost.
 - Back up before schema migration and test restoration. A backup that has never
   been restored is not considered verified.
 
+## Mac update trust
+
+The update feed is public metadata, contains no device credentials, and is baked
+into the cloud image after CI verifies and publishes the release. The Mac pins
+the feed origin and repository download paths, permits only GitHub HTTPS asset
+redirects, bounds downloads, and verifies their size and SHA-256 before opening.
+Checksums detect corruption but are not independent signatures: GitHub release
+writers and Fly deployers are trusted software distributors. Protect both
+accounts and never place tokens in update URLs or manifests.
+
+Only the main-branch deploy job receives `contents: write` for release publishing.
+PR builds neither publish releases nor receive deployment secrets. No installer
+runs or app replacement happens without an explicit local user confirmation.
+The current ad-hoc signature does not provide Developer ID publisher identity;
+a future unattended updater requires proper signing/notarization infrastructure.
+
 ## Dependency and CI policy
 
 - Lock dependencies with both package lockfiles and use `npm ci` in CI.

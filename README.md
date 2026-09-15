@@ -113,6 +113,7 @@ All deletes are soft deletes (tombstones), and every row carries a UUIDv7 `id`, 
 | `GET/POST/DELETE` | `/api/admin/devices` | admin session | Device lifecycle; POST returns the token + enrollment QR |
 | `GET` | `/admin` | login required | Device enrollment UI |
 | `GET` | `/healthz` | — | Health check |
+| `GET` | `/api/updates/mac` | — | Verified Apple Silicon installer metadata for Mac update checks |
 
 ## Setup & Running
 

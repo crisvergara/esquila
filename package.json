@@ -1,6 +1,6 @@
 {
   "name": "esquila",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Offline-first sheep counting and vaccination tools",
   "author": "Sheep++",
   "private": true,

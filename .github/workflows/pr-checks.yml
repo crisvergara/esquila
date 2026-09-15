@@ -77,6 +77,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Stamp Mac release identity
+        run: node scripts/mac-release.mjs identity
       - run: npm run build:mac:arm64
       - name: Verify installer and local-network entitlement metadata
         run: |
@@ -85,6 +87,10 @@ jobs:
           hdiutil verify dist-mac/Esquila-*-arm64.dmg
           test "$(/usr/libexec/PlistBuddy -c 'Print :NSBonjourServices:0' dist-mac/mac-arm64/Esquila.app/Contents/Info.plist)" = "_http._tcp"
           /usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' dist-mac/mac-arm64/Esquila.app/Contents/Info.plist | grep -q WiFi
+      - name: Generate verified update metadata
+        run: |
+          export RELEASE_PUBLISHED_AT="$(git show -s --format=%cI HEAD)"
+          node scripts/mac-release.mjs manifest
       - name: Upload Apple Silicon installer
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@v4
@@ -93,17 +99,32 @@ jobs:
           path: |
             dist-mac/Esquila-*-arm64.dmg
             dist-mac/Esquila-*-arm64.zip
+            dist-mac/mac-update.json
           if-no-files-found: error
           retention-days: 30
 
   deploy:
     name: Deploy cloud to Fly.io
+    permissions:
+      contents: write # Publish tested installers as permanent GitHub Release assets.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [application, mac-installer]
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Download verified installer and metadata
+        uses: actions/download-artifact@v4
+        with:
+          name: Esquila-mac-arm64-${{ github.sha }}
+          path: release-assets
+      - name: Publish installer and prepare cloud update feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/publish-mac-release.mjs release-assets
       - name: Install Fly CLI
         uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
       - name: Deploy cloud service and PWA
@@ -121,3 +142,10 @@ jobs:
           curl --fail --silent --show-error --retry 5 --retry-all-errors \
             --retry-delay 5 --max-time 30 --retry-max-time 180 \
             https://esquila-cloud.fly.dev/healthz | jq -e '.ok == true'
+      - name: Verify deployed update metadata
+        shell: bash
+        run: |
+          curl --fail --silent --show-error --retry 5 --retry-all-errors \
+            --retry-delay 5 --max-time 30 --retry-max-time 180 \
+            https://esquila-cloud.fly.dev/api/updates/mac > /tmp/deployed-mac-update.json
+          node --input-type=module -e 'import fs from "node:fs"; import assert from "node:assert/strict"; assert.deepEqual(JSON.parse(fs.readFileSync("/tmp/deployed-mac-update.json")), JSON.parse(fs.readFileSync("cloud/mac-update.json")));'
