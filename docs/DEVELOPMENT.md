@@ -10,6 +10,11 @@
 - Never edit generated `build/`, `build-cloud/`, `dist-mac/`, test reports,
   SQLite files, or package contents. They are ignored and must not be committed.
 - Commit lockfile changes whenever dependencies change.
+- `mac/release.json` and `cloud/mac-update.json` are generated CI release inputs,
+  not tracked source. The Mac identity is stamped before packaging; cloud
+  metadata is generated only after installer publication. Keep public download
+  URLs pinned to this repository, and never test publication against GitHub in
+  automated unit tests.
 
 ## Build targets
 

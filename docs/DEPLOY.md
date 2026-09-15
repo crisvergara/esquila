@@ -106,8 +106,10 @@ Fly token.
    them as `Esquila-mac-arm64-<commit SHA>` under the workflow run's **Artifacts**.
    Downloads are retained for 30 days. Install these ad-hoc signed packages
    manually on the ranch Mac.
-3. After both checks succeed, `Deploy cloud to Fly.io` deploys the same commit
-   using `fly.toml` and verifies `/healthz`. The Docker build includes the cloud
+3. After both checks succeed, `Deploy cloud to Fly.io` downloads the verified
+   artifacts and publishes a GitHub Release tagged `mac-<commit SHA>`. It then
+   deploys the same commit using `fly.toml` and verifies `/healthz` and the exact
+   `/api/updates/mac` manifest. The Docker build includes the cloud
    service and vaccination PWA. `--ha=false` prevents creating extra standby
    machines; it does not remove any machines already provisioned.
 
@@ -124,6 +126,20 @@ this sends the token directly to the GitHub secret store:
 set -o pipefail
 fly tokens create deploy --app esquila-cloud --name github-actions --expiry 8760h | gh secret set FLY_API_TOKEN --repo crisvergara/esquila
 ```
+
+The deploy job has `contents: write` to publish releases with `GITHUB_TOKEN`;
+other jobs remain read-only. No additional secret is required for public release
+downloads. Do not remove published installer assets. Failed-job reruns reuse
+an existing published installer and its original hash; incomplete draft releases
+can be completed safely. If publication or asset verification fails, deployment
+is blocked. If Fly deployment fails after publication, the previous cloud feed
+continues to advertise its previous release until a successful deployment.
+
+Manual `fly deploy` from a clean checkout has no generated update manifest and
+therefore disables the update feed (503). Prefer the workflow; for a deliberate
+manual deployment, obtain and verify `mac-update.json` from the intended release
+and place it in `cloud/` first. This generated file is ignored by Git but included
+in the cloud image. No installer binary is embedded in the image.
 
 Renew the token before its one-year expiry. Existing `DATABASE_URL`,
 `ADMIN_PASSWORD`, and `PUBLIC_URL` remain in Fly secrets; GitHub does not need

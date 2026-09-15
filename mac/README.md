@@ -99,8 +99,46 @@ or build locally. Quit the old Esquila app and drag the new app over the
 old one in Applications. The database and configuration remain untouched in
 Application Support.
 
-There is no automatic updater in this first Mac release. Revisit signed and
-automatic updates if more than one ranch computer needs ongoing maintenance.
+Starting with version 0.1.4, the sheep menu includes **Buscar actualizaciones…**.
+The packaged Apple Silicon app also checks 30 seconds after opening and every
+six hours, and displays a macOS notification once per new build (subject to
+macOS notification permissions). The menu offers **Actualizar a <versión>…**
+when the remote server advertises a newer build. Internet failures never stop
+or delay counting; you can retry manually.
+
+The update is downloaded from this repository's public GitHub Releases and
+verified against the size and SHA-256 digest advertised by the cloud. Downloading
+keeps the barn server running. Choose **Seguir contando** to install later; a
+verified download is reused. When ready between shearing sessions, choose
+**Abrir instalador y cerrar Esquila**, drag Esquila into Applications, accept
+**Replace**, and reopen it. This is a guided manual replacement, not unattended
+installation. The old app remains installed until you replace it, and the
+Application Support database/configuration are preserved.
+
+The current 0.1.3 installation needs one manual upgrade to gain these options.
+Local development runs and Intel builds do not check for updates. The feed is
+fixed to `https://esquila-cloud.fly.dev/api/updates/mac`; custom deployments
+must change `shared/mac-release.js` and rebuild.
+
+### Maintenance and tradeoffs
+
+- Builds are distinguished by the CI run number as well as the package version;
+  every successful push can be offered without manually bumping the version.
+  Keep increasing CI build numbers if the workflow is migrated. Older builds
+  and lower package versions are never offered as upgrades after a cloud rollback.
+- Release assets are public and must remain available. Do not delete or replace
+  a published release that the cloud advertises. CI reruns reuse published bytes.
+- Each download can be hundreds of MB. Interrupted downloads restart; completed
+  verified installers are cached in Application Support/Esquila/updates. Old
+  cached installers can be removed manually when disk space is needed.
+- HTTPS, the pinned repository, and checksums protect transport and integrity;
+  the checksum is not an independent publisher signature. Keep GitHub and Fly
+  deployment access secure. Ad-hoc signing may still require macOS's first-open
+  confirmation. Unattended signed updates remain a future option requiring
+  Developer ID signing, notarization, and maintained Apple credentials.
+- Notifications do not force an update. Installation briefly stops LAN counting,
+  so do it between sessions and keep normal backups before upgrading. A rollback
+  of the cloud does not roll back an already-installed Mac database migration.
 
 ## Operational notes
 

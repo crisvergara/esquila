@@ -15,6 +15,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import QRCode from "qrcode";
+import { registerMacUpdates } from "./mac-updates.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BUILD_DIR = path.join(__dirname, "..", "build-cloud");
@@ -49,6 +50,7 @@ await pool.query(schema);
 console.log("Schema applied");
 
 const app = express();
+registerMacUpdates(app);
 // Fly Proxy is the one immediate hop in front of the app. Trusting arbitrary
 // proxy chains would let clients spoof req.ip and bypass login throttling.
 app.set("trust proxy", 1);

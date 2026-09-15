@@ -34,3 +34,6 @@ cloud/node_modules
 **/yarn-debug.log*
 **/yarn-error.log*
 fly.toml
+
+# CI downloads are release inputs, not cloud image contents
+release-assets

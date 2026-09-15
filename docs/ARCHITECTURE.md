@@ -132,6 +132,28 @@ sources of truth.
 | Malformed/oversized input | Server returns a bounded 4xx response and commits no partial data |
 | Monitor event stream drops | Browser reconnects and periodic refresh eventually restores current totals |
 
+## Mac update distribution
+
+The cloud serves a public, non-cacheable `GET /api/updates/mac` manifest baked
+into its image. Missing or invalid metadata returns 503 without breaking other
+cloud endpoints. CI embeds its run number and commit into the Mac package,
+verifies the installer, publishes permanent GitHub Release assets, and only then
+deploys the manifest. Published assets are reused on retries rather than replaced.
+This keeps the cloud advertisement tied to an available, verified installer.
+
+The ARM64 Mac shell checks at startup and every six hours, with a manual menu
+check. It accepts only the supported schema, architecture, increasing build
+number, nondecreasing package version, and an exact HTTPS download URL within
+this repository. Downloads permit only GitHub's known HTTPS asset hosts, impose
+size/time limits, stream into a partial file, verify SHA-256, and rename only
+after success. Cached files are reverified immediately before opening.
+
+Checks and downloads never stop the barn child process or depend on its sync
+credentials. A user explicitly confirms quitting to open the installer; replacing
+the application remains manual because the app is ad-hoc signed. Ranch data stays
+in Application Support outside the application bundle. No remote installation
+command or automatic schema rollback is supported.
+
 ## Intentional current limitations
 
 - One flock and one barn server are assumed.
@@ -139,6 +161,6 @@ sources of truth.
 - A remote live monitor is deferred.
 - The barn LAN API is unauthenticated and uses HTTP; physical/WiFi network trust
   is assumed. See [SECURITY.md](SECURITY.md).
-- Mac releases are ARM64, ad-hoc signed, and manually updated; notarization and
-  auto-update are future distribution work.
+- Mac releases are ARM64 and ad-hoc signed. Update notices and verified downloads
+  are supported; unattended installation and notarization remain future work.
 - S3 SQLite backup is retained, with a more robust backup/restore system deferred.

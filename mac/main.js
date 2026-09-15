@@ -1,9 +1,11 @@
-import { app, BrowserWindow, ipcMain, Menu, nativeImage, safeStorage, shell, Tray } from "electron";
+import { app, dialog, Notification, BrowserWindow, ipcMain, Menu, nativeImage, safeStorage, shell, Tray } from "electron";
 import Bonjour from "bonjour-service";
 import { spawn } from "node:child_process";
 import { appendFile, chmod, mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { createUpdater, verifyInstaller } from "./updater.js";
 
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SERVER_PORT = 3001;
@@ -25,6 +27,10 @@ let recordsWindow;
 let tray;
 let bonjour;
 let quitting = false;
+let updater;
+let refreshTray = () => {};
+let updateDialogOpen = false;
+let downloadInProgress = false;
 
 const dataDir = () => app.getPath("userData");
 const configPath = () => path.join(dataDir(), "config.json");
@@ -250,6 +256,69 @@ function createRecordsWindow() {
   });
 }
 
+async function checkForUpdates(manual = false) {
+  if (!updater || updateDialogOpen || downloadInProgress) return;
+  const state = await updater.check();
+  if (!state) return;
+  if (state.phase === "available") {
+    const label = `${state.release.version} (${state.release.build})`;
+    if (manual) {
+      updateDialogOpen = true;
+      try {
+        const result = await dialog.showMessageBox({ type: "info", title: "Actualización disponible",
+          message: `Esquila ${label} está disponible.`,
+          detail: "Puedes descargarla sin detener el conteo. Para instalarla tendrás que cerrar Esquila y reemplazar la aplicación entre jornadas.",
+          buttons: ["Descargar actualización", "Más tarde"], defaultId: 1, cancelId: 1 });
+        if (result.response === 0) await downloadUpdate();
+      } finally { updateDialogOpen = false; }
+    } else {
+      const marker = path.join(dataDir(), "updates", "notified-build");
+      const previous = await readFile(marker, "utf8").catch(() => "");
+      if (previous !== String(state.release.build) && Notification.isSupported()) {
+        const notice = new Notification({ title: "Actualización de Esquila disponible",
+          body: `Versión ${label}. Abre el menú de la oveja para descargarla cuando te acomode.` });
+        notice.on("click", () => checkForUpdates(true));
+        notice.show();
+        await mkdir(path.dirname(marker), { recursive: true });
+        await writeFile(marker, String(state.release.build)).catch(() => {});
+      }
+    }
+  } else if (manual) {
+    await dialog.showMessageBox({ type: state.error ? "warning" : "info", title: "Actualizaciones de Esquila",
+      message: state.error || "Ya tienes la versión más reciente de Esquila.", buttons: ["Aceptar"] });
+  }
+}
+
+async function downloadUpdate() {
+  if (downloadInProgress) return;
+  downloadInProgress = true;
+  try { await downloadAndOfferInstaller(); }
+  finally { downloadInProgress = false; }
+}
+
+async function downloadAndOfferInstaller() {
+  const state = await updater?.download();
+  if (!state) return;
+  if (state.phase !== "ready") {
+    await dialog.showMessageBox({ type: "warning", message: state.error || "No se pudo descargar la actualización.", buttons: ["Aceptar"] });
+    return;
+  }
+  const result = await dialog.showMessageBox({ type: "info", title: "Actualización lista",
+    message: "El instalador está descargado y verificado.",
+    detail: "Al continuar se abrirá el instalador y se cerrará Esquila: los teléfonos no podrán contar hasta que la abras de nuevo. Arrastra Esquila a Aplicaciones y acepta Reemplazar. Los registros y la configuración se conservan.",
+    buttons: ["Abrir instalador y cerrar Esquila", "Seguir contando"], defaultId: 1, cancelId: 1 });
+  if (result.response !== 0) return;
+  try {
+    await verifyInstaller(state.filename, state.release);
+    const error = await shell.openPath(state.filename);
+    if (error) throw new Error("macOS no pudo abrir el instalador. Reintenta desde el menú.");
+    quitting = true;
+    app.quit();
+  } catch (error) {
+    await dialog.showMessageBox({ type: "warning", message: error.message, buttons: ["Aceptar"] });
+  }
+}
+
 function buildTray() {
   const iconPath = path.join(sourceRoot, "public", "logo192.png");
   const icon = nativeImage.createFromPath(iconPath).resize({ width: 18, height: 18 });
@@ -257,6 +326,8 @@ function buildTray() {
   tray = new Tray(icon);
   tray.setToolTip("Esquila — servidor del galpón");
   const rebuildMenu = () => {
+    const updateState = updater?.state;
+    const updateBusy = ["checking", "downloading"].includes(updateState?.phase);
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: "Abrir monitor", click: createMonitorWindow },
       { label: "Registros recientes…", click: createRecordsWindow },
@@ -274,9 +345,17 @@ function buildTray() {
         },
       },
       { type: "separator" },
+      { label: updateState?.phase === "checking" ? "Buscando actualizaciones…" : "Buscar actualizaciones…",
+        enabled: Boolean(updater) && !updateBusy, click: () => checkForUpdates(true).catch(error => log(error.message)) },
+      ...(updateState?.release ? [{
+        label: updateState.phase === "downloading" ? "Descargando actualización…" : `Actualizar a ${updateState.release.version} (${updateState.release.build})…`,
+        enabled: !updateBusy, click: () => downloadUpdate().catch(error => log(error.message)),
+      }] : []),
+      { type: "separator" },
       { label: "Salir de Esquila", click: () => { quitting = true; app.quit(); } },
     ]));
   };
+  refreshTray = rebuildMenu;
   tray.on("click", createMonitorWindow);
   rebuildMenu();
 }
@@ -355,6 +434,17 @@ app.whenReady().then(async () => {
     await waitForServer();
   } catch (error) {
     log(error.stack || error.message);
+  }
+  if (app.isPackaged && process.arch === "arm64") {
+    let installed = { version: app.getVersion(), build: 0 };
+    try {
+      const identity = JSON.parse(await readFile(path.join(sourceRoot, "mac", "release.json"), "utf8"));
+      if (identity.version === installed.version && Number.isSafeInteger(identity.build) && identity.build > 0) installed = identity;
+    } catch { /* Local/manual builds have no CI identity. */ }
+    updater = createUpdater({ installed, directory: path.join(dataDir(), "updates"), onChange: () => refreshTray() });
+    const check = () => checkForUpdates().catch(error => log(`Update check: ${error.message}`));
+    setTimeout(check, 30_000).unref();
+    setInterval(check, 6 * 60 * 60_000).unref();
   }
   buildTray();
   if (config.configured) createMonitorWindow();

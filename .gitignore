@@ -32,3 +32,8 @@ esquila
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# Generated release identity and cloud update feed (CI only)
+/mac/release.json
+/cloud/mac-update.json
+/release-assets

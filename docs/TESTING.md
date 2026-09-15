@@ -28,11 +28,19 @@ This job runs on macOS and builds only the ARM64 DMG/ZIP. It verifies the execut
 
 The Mac window lifecycle is indirectly covered by the same ranch server and browser onboarding contracts. A fully automated macOS GUI test is intentionally omitted because login-item, tray, fullscreen, and local-network permission dialogs are controlled by macOS and are substantially less reliable on headless GitHub runners. Those remain release-candidate smoke tests on a real Mac.
 
+Updater unit/integration tests cover cloud metadata validation and missing feeds,
+version/build rollback rejection, offline checks, concurrent requests, permitted
+redirects, corrupt/partial/oversized installers, cached-file tampering, generated
+build identity, and release publication/retry behavior using a fake GitHub CLI.
+No publication test writes to GitHub. Native notification permissions, opening a
+DMG, and dragging the replacement application remain real-Mac smoke checks.
+
 ## Delivery on main
 
 On pushes to `main`, the verified Mac DMG/ZIP is uploaded as a workflow artifact
 retained for 30 days. Cloud deployment runs only after both required jobs pass,
-then checks the live health endpoint. PRs never deploy. See
+publishes permanent GitHub Release assets, then deploys and checks the live
+health endpoint and update metadata. PRs never deploy. See
 [DEPLOY.md](DEPLOY.md#automatic-deployment-and-mac-builds) for token setup,
 downloads, and failure recovery. Required check names remain unchanged.
 
