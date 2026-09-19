@@ -186,3 +186,14 @@ in the cloud admin history. No remote edit restarts or updates this application.
 The setup page verifies the advertised address, not a connection from the phone.
 Only seeing the shearer names on the phone confirms that path works. No internet
 connection or cloud sync credential is required for the tagger.
+
+### Repeated tabs can block older releases
+
+Versions through 0.1.5 hold two permanent HTTP connections per tagger tab.
+Several open tabs can exhaust the browser connection limit, making even new
+page loads or count submissions stall. Close all Esquila tabs and reopen one
+as an immediate workaround. Version 0.1.6 replaces these streams with short
+local status requests. After upgrading the Mac, close/reopen or reload existing
+phone/monitor tabs so they load the corrected client. Counts and mode updates
+normally appear within one second; a connection warning appears when status
+cannot be refreshed and clears automatically after recovery.

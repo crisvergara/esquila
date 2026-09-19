@@ -779,6 +779,11 @@ app.post("/api/records", bodyParser.json(), async (req, res) => {
   }
 });
 
+app.get("/api/live", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.json({ counts: countStatsByStation, mode });
+});
+
 app.get("/count", (req, res) => {
   res.json(countStatsByStation);
 });

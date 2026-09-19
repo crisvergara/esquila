@@ -9,7 +9,7 @@ resolved product questions, see [OFFLINE_SYNC_UPGRADE.md](OFFLINE_SYNC_UPGRADE.m
 Barn WiFi (internet optional)
 
   Tagger phones ─┐
-                 ├─ HTTP/SSE ─> Barn server ─> SQLite + durable sync outbox
+                 ├─ HTTP ─> Barn server ─> SQLite + durable sync outbox
   Monitor TV ────┘                    │
                                       │ HTTPS when available
                                       ↕
@@ -22,7 +22,7 @@ Internet                         Cloud service ─> PostgreSQL
 
 | Component | Runtime | Persistent data | Network dependency | Responsibility |
 |---|---|---|---|---|
-| Barn server | `countserver.js` in Electron or Node | SQLite, configuration, shearers | Barn LAN required; internet optional | Accept counts, serve tagger/monitors/setup, stream live changes, queue cloud sync, create backups |
+| Barn server | `countserver.js` in Electron or Node | SQLite, configuration, shearers | Barn LAN required; internet optional | Accept counts, serve tagger/monitors/setup, serve current counts/mode, queue cloud sync, create backups |
 | Tagger | React app under `tagger/` | Selected station in browser storage | Barn server only | Record ewes, rams, and bulk lambs with visible outcome and retry safety |
 | Monitor | React apps under `monitor/` and `mobilemonitor/` | None authoritative | Barn server only | Display current station totals, last tags, active mode, and updates |
 | Mac shell | Electron code under `mac/` | macOS Application Support | None for hosting | Onboard/configure the server, request LAN access, show fullscreen monitor, run from menu bar/login |
@@ -57,20 +57,35 @@ tests for both old and new data.
 
 ## Counting flow
 
-1. The phone selects a station and follows the active mode from `/sse`.
+1. The phone selects a station and follows the active mode from `/api/live`.
 2. It validates and submits a single `/count` or a `/bulk` request with a stable
    `submissionId`.
 3. The barn server validates again. In one SQLite transaction it records the
    submission, creates the row(s), and queues outbox entries.
 4. Only after commit does it return structured success. The UI shows the result.
-5. `/count/events` immediately refreshes monitors; periodic reads remain a
-   reconnect fallback.
+5. Short `/api/live` requests refresh counts and mode once per second while
+   visible (five seconds in background), with bounded retries after failure.
 6. The sync agent later uploads at most 500 queued entries per attempt. Failed
    attempts remain queued and back off to a ten-minute maximum.
 
 A client may lose the response after step 3. Retrying the same submission must
 return success without creating another animal. Bulk quantity must be an integer
 from 1 through 1,000. Lamb numbers must continue monotonically after restart.
+
+## Browser connection budget
+
+Tagger and monitor pages share one polling loop per page for counts and mode.
+Requests have a five-second deadline, never overlap, and back off up to ten
+seconds on failure. Returning online or focusing the page retries immediately.
+A visible error marks stale data; reconnection clears it. Counting writes keep
+independent retry-safe submission IDs and never wait for a status refresh.
+
+Earlier taggers opened two permanent EventSource connections per tab. Several
+open tabs exhausted the browser's HTTP/1 connection pool and blocked navigation
+and writes even while the server was healthy. New clients use short JSON
+requests to avoid that failure. Legacy `/sse` and `/count/events` endpoints remain
+compatible; old tabs must be closed/reloaded after updating the Mac app. The
+tradeoff is up to one second of foreground display/mode propagation latency.
 
 ## Phone connection discovery
 
@@ -195,7 +210,7 @@ sources of truth.
 | Phone reconnects | Pending treatment syncs directly to cloud and pending state clears |
 | Device revoked | Subsequent push and snapshot requests return unauthorized; unsent local work is not silently discarded |
 | Malformed/oversized input | Server returns a bounded 4xx response and commits no partial data |
-| Monitor event stream drops | Browser reconnects and periodic refresh eventually restores current totals |
+| Status request fails | Visible stale-data warning; bounded retries restore counts and mode |
 
 ## Mac update distribution
 

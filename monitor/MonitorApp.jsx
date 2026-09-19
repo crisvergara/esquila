@@ -22,7 +22,7 @@ function EsquiladorRow({ shearer, count }) {
 }
 
 function MonitorApp() {
-  const { counts } = useCounts();
+  const { counts, error: connectionError } = useCounts();
   const { shearers } = useShearers();
   const currentTime = useCurrentTime();
   const rowCount = Math.max(shearers.length, 1);
@@ -36,6 +36,7 @@ function MonitorApp() {
         {/*<img src="/qr.png" alt="QR Code" />*/}
         <p>{currentTime}</p>
       </header>
+      {connectionError && <p role="alert">{connectionError}</p>}
       <section className="Esquilador-monitor">
         {shearers.map((shearer, index) => (
           <EsquiladorRow

@@ -22,13 +22,14 @@ function MobileStationRow({ index, shearer, count }) {
 }
 
 function MobileMonitorApp() {
-  const { counts } = useCounts();
+  const { counts, error: connectionError } = useCounts();
   const { shearers } = useShearers();
   return (
     <>
       <header className="App-header">
         <p>Shearing Monitor</p>
       </header>
+      {connectionError && <p role="alert">{connectionError}</p>}
       <section className="Esquilador-mobile-monitor">
         {shearers.map((shearer, index) => (
           <MobileStationRow
