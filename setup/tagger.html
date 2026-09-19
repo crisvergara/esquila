@@ -15,6 +15,8 @@
       .alternative { min-height: 22px; margin: 9px 0 22px; color: #aeb6c5; font-size: 14px; overflow-wrap: anywhere; }
       ol { margin: 0 auto; padding-left: 26px; max-width: 500px; color: #e3e6eb; text-align: left; line-height: 1.55; }
       li + li { margin-top: 8px; }
+      [hidden] { display: none !important; }
+      select, button { padding: 12px; margin: 8px; font-size: 16px; max-width: 100%; }
       .status { color: #ffcf70; }
     </style>
   </head>
@@ -22,7 +24,10 @@
     <main>
       <h1>Configurar un teléfono</h1>
       <p class="intro">El teléfono y este Mac deben estar conectados al mismo WiFi del galpón.</p>
-      <img class="qr" id="tagger-qr" src="/qr.png" alt="Código QR para abrir Esquila Tagger" />
+      <label for="network">Red del teléfono</label>
+      <select id="network"><option value="">Automática</option></select>
+      <button id="refresh" type="button">Actualizar conexión</button>
+      <img class="qr" id="tagger-qr" hidden alt="Código QR para abrir Esquila Tagger" />
       <a class="url" id="tagger-url">Buscando la dirección del tagger…</a>
       <p class="alternative" id="alternative"></p>
       <ol>
@@ -32,7 +37,7 @@
         <li>Abre el nuevo icono <strong>Esquila Tagger</strong> y elige el esquilador de ese teléfono.</li>
       </ol>
       <p class="alternative">Si el teléfono dice que no puede conectarse, confirma que no esté usando una red de invitados o una VPN. Algunas redes impiden que dos dispositivos WiFi se comuniquen entre sí.</p>
-      <p class="status" id="status"></p>
+      <p class="status" id="status" role="status"></p>
     </main>
     <script src="/tagger-setup.js"></script>
   </body>

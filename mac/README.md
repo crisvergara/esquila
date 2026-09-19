@@ -42,7 +42,11 @@ trusted ranch WiFi.
 Choose **Configurar teléfonos…** from the sheep menu to display a QR code and
 step-by-step instructions. Each tagger phone scans that code while connected
 to the barn WiFi, adds **Esquila Tagger** to its home screen, and selects its
-shearing station once. The station remains selected between sheep and after
+shearing station once. The QR window refreshes its address every five seconds and
+when brought back into focus. If the Mac has multiple network connections, choose
+the address on the phone’s WiFi under **Red del teléfono**. No QR is shown with
+only VPN/loopback connectivity or when the current address cannot be verified.
+The station remains selected between sheep and after
 the phone app is reopened; **Cancelar** returns to station selection.
 
 Shearers open the tagger from another device on the same WiFi at:
@@ -162,3 +166,23 @@ Counting remains local while offline. Remote changes appear after reconnection,
 normally on the next one-minute sync, and refresh the local monitor. Conflicting
 corrections use the later timestamp (cloud wins ties); review retained versions
 in the cloud admin history. No remote edit restarts or updates this application.
+
+### If a phone cannot open the tagger
+
+1. Open **Configurar teléfonos…**, press **Actualizar conexión**, and scan the
+   current QR again. A saved home-screen shortcut using an old IP does not follow
+   DHCP changes. A router DHCP reservation can keep the Mac’s address stable.
+2. Confirm the phone and Mac use the same LAN, not guest WiFi or cellular data.
+   With multiple Mac connections, select the matching WiFi address.
+3. Try the displayed address with the explicit `http://` prefix. The LAN server
+   does not serve HTTPS; `https://` on port 3001 will fail. A browser “cannot reach server”
+   message at the current address means the problem is connectivity, not the QR
+   image. A successful request from the Mac does not prove phone reachability.
+4. Check the phone VPN’s local-network access configuration and the router’s
+   guest/client-isolation settings. Confirm Esquila is enabled in macOS
+   **Privacy & Security → Local Network**, and allow its incoming connections
+   if the Mac firewall is enabled. Keep the Mac awake while counting.
+
+The setup page verifies the advertised address, not a connection from the phone.
+Only seeing the shearer names on the phone confirms that path works. No internet
+connection or cloud sync credential is required for the tagger.

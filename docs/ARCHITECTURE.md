@@ -72,6 +72,16 @@ A client may lose the response after step 3. Retrying the same submission must
 return success without creating another animal. Bulk quantity must be an integer
 from 1 through 1,000. Lamb numbers must continue monotonically after restart.
 
+## Phone connection discovery
+
+The phone-setup page refreshes `/tagger-info` every five seconds and on focus.
+The response includes a QR and text URL generated from the same network snapshot,
+plus alternate LAN interfaces. VPN, loopback, and link-local addresses are not
+advertised. No usable IPv4 address means no QR; an unavailable server clears the
+last QR instead of leaving an obsolete link visible. Operators can select the
+interface on the phone’s LAN. This is address discovery, not proof that a phone
+can connect through router isolation or VPN policies.
+
 ## Barn record corrections
 
 The Mac menu opens `/records/`, a LAN-only editor backed by `GET/POST

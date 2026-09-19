@@ -10,6 +10,8 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
 - UUIDv7 generation and Chile ranch-calendar behavior across summer and winter offsets;
 - legacy SQLite migration, pre-migration backup, vaccination conversion, and outbox backfill;
 - the browser onboarding wizard, including validation and four-station configuration;
+- phone-setup address refresh after network changes, interface selection, recovery,
+  and hiding stale QR codes after failure or loss of LAN connectivity;
 - sheep, ram, and bulk-lamb tagger flows plus live monitor updates;
 - tag-prefix digit limits, station persistence, and a response-loss retry after the server has already committed the count;
 - all ranch API validation boundaries, maximum bulk payload, and idempotent retries;
