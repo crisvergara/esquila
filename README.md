@@ -14,7 +14,7 @@ Three **modes** control what data is collected per animal:
 | `carnero` | Ram | Tag entry only |
 | `carnillero` | Lamb (bulk) | Enter a quantity, no individual tags |
 
-The active mode is changed centrally and pushed to all tagger devices in real time via Server-Sent Events (SSE).
+The active mode is changed centrally and refreshed on tagger devices through short local requests, normally within one second.
 
 ## Architecture
 
@@ -111,7 +111,8 @@ view, not a live LAN feed. Names reflect the latest station configuration.
 | `POST` | `/bulk` | Log a batch of lambs by quantity and station |
 | `GET` | `/count` | Get current per-station stats (counted, last tag, breakdown by type) |
 | `POST` | `/mode` | Switch the active tagging mode |
-| `GET` | `/sse` | Server-Sent Events stream for real-time mode updates |
+| `GET` | `/api/live` | Current counts and mode for short local polling requests |
+| `GET` | `/sse` | Legacy mode stream for older clients |
 | `GET` | `/qr.png` | QR code image pointing to the tagger URL |
 | `GET` | `/sheep` | List all sheep records (or filter by `?tag=X`) |
 | `GET/POST/DELETE` | `/treatments`, `/treatment-presets`, `/treatment-counts`, `/vaccination-summary` | Legacy treatment endpoints kept for the transition; the cloud is the system of record now |

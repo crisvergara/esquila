@@ -375,7 +375,7 @@ function TaggingApp() {
     surveyDispatch({ type: "reset" });
   };
 
-  const { counts, refreshCounts } = useCounts();
+  const { counts, refreshCounts, error: connectionError } = useCounts();
 
   const resetEntry = () => {
     resetTag();
@@ -588,7 +588,7 @@ function TaggingApp() {
     );
   }
 
-  return <div className="App">{screen}</div>;
+  return <div className="App">{connectionError && <p role="alert">{connectionError}</p>}{screen}</div>;
 }
 
 export default TaggingApp;

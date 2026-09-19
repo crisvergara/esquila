@@ -18,6 +18,7 @@ import { uuidv7 } from "./shared/uuidv7.js";
 import { ranchDay } from "./shared/ranchdate.js";
 import { createRanchSync } from "./shared/ranch-sync.js";
 import { validateShearingFields } from "./shared/shearing-validation.js";
+import { taggerConnectionInfo as getTaggerConnectionInfo } from "./shared/tagger-connection.js";
 
 const modeEmitter = new EventEmitter();
 const countEmitter = new EventEmitter();
@@ -35,35 +36,7 @@ const taggingModesByType = new Map(
   taggingModes.map((taggingMode) => [taggingMode.type, taggingMode])
 );
 
-const taggerConnectionInfo = () => {
-  const candidates = Object.entries(os.networkInterfaces()).flatMap(
-    ([interfaceName, addresses]) =>
-      (addresses ?? [])
-        .filter((address) =>
-          !address.internal &&
-          (address.family === "IPv4" || address.family === 4) &&
-          !address.address.startsWith("169.254.")
-        )
-        .map((address) => {
-          let score = 0;
-          if (/^(en0|en1|wlan0|eth0)$/i.test(interfaceName)) score += 100;
-          if (/^(utun|tun|tap|bridge|docker|vbox|vmnet)/i.test(interfaceName)) score -= 100;
-          if (
-            address.address.startsWith("10.") ||
-            address.address.startsWith("192.168.") ||
-            /^172\.(1[6-9]|2\d|3[01])\./.test(address.address)
-          ) score += 20;
-          return { address: address.address, score };
-        })
-  );
-  candidates.sort((a, b) => b.score - a.score);
-  const localName = os.hostname().split(".")[0];
-  const friendlyUrl = `http://${localName}.local:${port}/tagger/`;
-  const url = candidates[0]
-    ? `http://${candidates[0].address}:${port}/tagger/`
-    : friendlyUrl;
-  return { url, friendlyUrl };
-};
+const taggerConnectionInfo = () => getTaggerConnectionInfo(os.networkInterfaces(), os.hostname(), port);
 
 // Shearer names are editable at runtime (Mac/Pi onboarding wizard). The live
 // copy lives in the data directory (CWD); the repo file only seeds it.
@@ -806,6 +779,11 @@ app.post("/api/records", bodyParser.json(), async (req, res) => {
   }
 });
 
+app.get("/api/live", (_req, res) => {
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  res.json({ counts: countStatsByStation, mode });
+});
+
 app.get("/count", (req, res) => {
   res.json(countStatsByStation);
 });
@@ -825,11 +803,13 @@ app.get("/count/events", (req, res) => {
 });
 
 app.get("/qr.png", (req, res) => {
+  const info = taggerConnectionInfo();
+  if (!info.url) return res.status(503).json({ error: "Conecta este equipo al WiFi del galpón." });
   res.type("png");
   // The Mac's address can change after reconnecting to WiFi. Never let the
   // setup window reuse a QR code cached for an earlier address.
   res.setHeader("Cache-Control", "no-store, max-age=0");
-  QRCode.toFileStream(res, taggerConnectionInfo().url, {
+  QRCode.toFileStream(res, info.url, {
     errorCorrectionLevel: "M",
     margin: 4,
     width: 512,
@@ -1090,8 +1070,18 @@ app.get("/tagger-setup.js", (req, res) => {
   res.sendFile(path.join(__dirname, "setup", "tagger.js"));
 });
 
-app.get("/tagger-info", (req, res) => {
-  res.json(taggerConnectionInfo());
+app.get("/tagger-info", async (req, res, next) => {
+  res.setHeader("Cache-Control", "no-store, max-age=0");
+  try {
+    const info = taggerConnectionInfo();
+    const selected = info.addresses.find(entry => entry.address === req.query.address);
+    if (selected) info.url = selected.url;
+    // One snapshot keeps the displayed link and QR identical during WiFi changes.
+    const qrDataUrl = info.url ? await QRCode.toDataURL(info.url, {
+      errorCorrectionLevel: "M", margin: 4, width: 512,
+    }) : null;
+    res.json({ ...info, qrDataUrl });
+  } catch (error) { next(error); }
 });
 
 app.get("/setup/state", async (req, res) => {
@@ -1344,7 +1334,7 @@ app.listen(port, async () => {
       .find((addr) => !addr.internal && addr.family === "IPv4")?.address
   }:${port}/mobilemonitor`;
 
-  if (hasAwsCredentials) try {
+  if (hasAwsCredentials && taggerUrl) try {
     // Create a PassThrough stream to collect QR code data
     const pass = new PassThrough();
     const chunks = [];
