@@ -12,7 +12,7 @@ Barn WiFi (internet optional)
                  ├─ HTTP/SSE ─> Barn server ─> SQLite + durable sync outbox
   Monitor TV ────┘                    │
                                       │ HTTPS when available
-                                      v
+                                      ↕
 Internet                         Cloud service ─> PostgreSQL
                                       ^
                                       │ HTTPS, direct phone sync
@@ -34,8 +34,10 @@ application is the preferred barn deployment.
 
 ## Data ownership and identity
 
-- `counts` in barn SQLite originates shearing records. It maps to
-  `shearing_events` in PostgreSQL.
+- `counts` in barn SQLite and authenticated cloud administrators may originate
+  and correct shearing records. Barn `counts` maps to PostgreSQL
+  `shearing_events`; both replicas reconcile through the cloud. Phone-role
+  devices cannot mutate shearing rows.
 - `treatments` and `treatment_presets` may originate from EsquilaDB. The cloud
   is their shared system of record. Legacy barn endpoints remain transitional.
 - Every synchronized entity has a client-generated UUIDv7 `id` and an
@@ -48,7 +50,7 @@ application is the preferred barn deployment.
 - Current sheep status is derived from the newest live shearing event for a tag;
   it is not a separately mutable sheep row.
 
-Schema definitions are canonical in the migration code in `countserver.js` and
+Schema definitions are canonical in `countserver.js`, `shared/ranch-sync.js`, and
 in `cloud/schema.sql`. A schema change must include migration behavior for
 existing barn databases, fresh-install behavior, synchronization mapping, and
 tests for both old and new data.
@@ -90,6 +92,58 @@ All mutations refresh monitor counts after commit. The pending total includes
 deletions even though the table hides deleted rows. As with counting, the local
 API trusts the ranch WiFi and grants no additional cloud roles to phones.
 
+## Cloud ranch management and bidirectional shearing sync
+
+`/admin` serves a password-protected monitor and paginated record editor in
+addition to device enrollment. `GET /api/admin/ranch` reports the last heartbeat
+per server device, version/hostname/platform, uptime, mode, configured shearers,
+local outbox size, and cloud rows awaiting acknowledgement (including deletes).
+`GET /api/admin/shearing` filters by Chile date and code, returns 100 rows per
+page, and optionally includes tombstones. Monitor totals ignore the code filter
+and exclude deleted records. Both local and cloud monitors use `America/Santiago`.
+Station names come from the most recently reporting server; historical name
+assignments are not stored. Contact older than three minutes is marked stale;
+this is a synchronized monitor, not a cloud dependency in the LAN counting path.
+
+Admin writes use shared field validation, optimistic `updated_at` checks, and a
+transactional submission receipt (`admin_record_mutations`). The browser saves
+the exact request before sending and offers a safe retry after reload or an
+ambiguous response. Adds get UUIDv7 identities, edits preserve occurrence time,
+and deletes retain tombstones. Admin writes require internet and existing admin
+authentication/CSRF checks. A cloud commit is displayed separately from ranch
+receipt; no remote change triggers an application update or restart.
+
+After each successful outbox push (or with an empty outbox), the barn posts its
+last applied cursor and heartbeat to `/api/sync/ranch`. Only server-role devices
+can use this endpoint. It returns at most 500 current shearing versions ordered
+by revision, including tombstones. A PostgreSQL transactional counter lock
+serializes shearing writers, so committed revision order cannot skip a delayed
+transaction as an ordinary sequence could. Revisions may have gaps. Existing
+cloud rows are assigned revisions on migration.
+
+SQLite schema version 3 adds `ranch_sync_state`. Each page is validated before
+applying rows and its cursor in one transaction. Restart/replay is safe. Imported
+rows never enter the outbox; the merge reserves lamb numbers and refreshes local
+monitors. Local timestamps newer than the cloud are retained. Before replacing
+an equal/newer row with pending local writes, the merge stops at that row until
+those writes have been uploaded, preserving the chance to audit a conflict.
+The cloud wins exact timestamp ties. No per-field merge is attempted.
+
+Cloud changes retain before/after versions in `shearing_audit`. Discarded stale
+or equal-timestamp conflicting uploads are also retained with deduplication;
+identical replays add no history. The admin history shows the latest 50 entries
+per record, including deleted records. Unsynchronized intermediate local edits
+may be coalesced by the existing outbox: this is a cloud reconciliation history,
+not a full local keystroke audit. History, receipts, and tombstones are retained
+indefinitely; pruning requires a separate retention/acknowledgement design.
+
+Each network request has a 30-second deadline. Failures preserve local data and
+cursor and use the existing exponential backoff. One page is processed per
+cycle, so initial historical catch-up may take several minutes. A cursor ahead
+of the cloud fails closed to flag a database restore requiring operator review;
+never reset a production cursor or erase tombstones without a recovery plan.
+Treatments continue using their existing ownership and phone snapshot protocol.
+
 ## Vaccination and flock lookup flow
 
 1. A phone enrolls from an admin-generated URL/QR and stores its device token in
@@ -112,6 +166,7 @@ sources of truth.
 - Replaying the same UUID is safe. A row updates only when the incoming
   `updated_at` is later than the stored value.
 - `server` devices may write shearing events, treatments, and presets.
+- Authenticated administrators may add, edit, and soft-delete shearing events.
 - `phone` devices may write treatments and presets, never shearing events.
 - Any enrolled device may read the snapshot. Revocation takes effect by deleting
   its database device row.
@@ -157,8 +212,9 @@ command or automatic schema rollback is supported.
 ## Intentional current limitations
 
 - One flock and one barn server are assumed.
-- The cloud provides full snapshots rather than incremental pull.
-- A remote live monitor is deferred.
+- Vaccination phones receive full snapshots; barns incrementally pull shearing.
+- The remote monitor is as current as the last ranch sync, typically one minute.
+- Accurate computer clocks matter for conflicting offline corrections.
 - The barn LAN API is unauthenticated and uses HTTP; physical/WiFi network trust
   is assumed. See [SECURITY.md](SECURITY.md).
 - Mac releases are ARM64 and ad-hoc signed. Update notices and verified downloads

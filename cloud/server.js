@@ -15,6 +15,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import pg from "pg";
 import QRCode from "qrcode";
+import { registerRanchManagement } from "./ranch-management.js";
 import { registerMacUpdates } from "./mac-updates.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -184,6 +185,8 @@ const adminAuth = (req, res, next) => {
 // Replaying a batch is a no-op; a stale row never overwrites a newer one.
 // --------------------------------------------------------------------------
 
+registerRanchManagement(app, { pool, adminAuth, deviceAuth });
+
 const UPSERTS = {
   shearing_events: {
     columns: [
@@ -270,6 +273,10 @@ app.post("/api/sync/push", deviceAuth, express.json({ limit: "20mb" }), async (r
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // Serialize shearing writers before acquiring row locks; revision order is commit order.
+    if (batches.some(b => b.table === "shearing_events" && b.rows.length)) {
+      await client.query('SELECT revision FROM shearing_sync_clock WHERE singleton FOR UPDATE');
+    }
     const applied = {};
     for (const batch of batches) {
       const spec = UPSERTS[batch.table];
@@ -277,7 +284,18 @@ app.post("/api/sync/push", deviceAuth, express.json({ limit: "20mb" }), async (r
         const values = spec.columns.map((col) =>
           col === "origin" ? (row.origin ?? req.device.name) : (row[col] ?? null)
         );
-        await client.query(spec.sql, values);
+        const result = await client.query(spec.sql, values);
+        if (batch.table === "shearing_events" && result.rowCount === 0) {
+          const existing = (await client.query('SELECT * FROM shearing_events WHERE id = $1', [row.id])).rows[0];
+          const different = spec.columns.some((key, i) => {
+            const current = existing[key] instanceof Date ? existing[key].toISOString() : existing[key];
+            const incoming = ['occurred_at','updated_at','deleted_at'].includes(key) && values[i] ? new Date(values[i]).toISOString() : values[i];
+            return current !== incoming;
+          });
+          if (different) await client.query(`INSERT INTO shearing_audit(row_id,source,before_row,after_row,dedupe)
+            VALUES($1,'stale-push',$2,$3,$4) ON CONFLICT(dedupe) DO NOTHING`,
+            [row.id, existing, row, sha256(JSON.stringify([row.id, values, existing.revision]))]);
+        }
       }
       applied[batch.table] = (applied[batch.table] ?? 0) + batch.rows.length;
     }
@@ -286,7 +304,7 @@ app.post("/api/sync/push", deviceAuth, express.json({ limit: "20mb" }), async (r
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("sync/push failed:", err.message);
-    res.status(400).json({ error: err.message });
+    res.status(400).json({ error: "invalid sync batch" });
   } finally {
     client.release();
   }

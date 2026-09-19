@@ -16,6 +16,8 @@ import { unlink } from "node:fs/promises";
 import EventEmitter from "events";
 import { uuidv7 } from "./shared/uuidv7.js";
 import { ranchDay } from "./shared/ranchdate.js";
+import { createRanchSync } from "./shared/ranch-sync.js";
+import { validateShearingFields } from "./shared/shearing-validation.js";
 
 const modeEmitter = new EventEmitter();
 const countEmitter = new EventEmitter();
@@ -400,9 +402,10 @@ process.on("SIGINT", async () => {
   process.exit(0);
 });
 
+db.function("ranch_day", { varargs: true }, ranchDay);
 const readTagsFromDb = db.prepare(`
   SELECT rowid, tag, station, color, lactation, type, woolQuality, date FROM counts
-  WHERE date > date() AND deleted_at IS NULL
+  WHERE ranch_day(date) = ranch_day() AND deleted_at IS NULL
   ORDER BY date;
 `);
 
@@ -766,17 +769,8 @@ const mutateRecord = db.transaction((body) => {
   if (body.action === "delete") {
     db.prepare("UPDATE counts SET deleted_at = ?, updated_at = ? WHERE id = ?").run(now, now, id);
   } else {
-    if (!["oveja", "carnero", "borrega"].includes(body.type)) fail(400, "Tipo de animal inválido.");
-    if (body.type === "borrega") {
-      if (!readStation(body) || !/^L[0-9]{4,10}$/.test(body.tag) || body.color !== "none" ||
-          body.woolQuality !== "IDK" || body.lactation !== "idk") fail(400, "Datos de cordero inválidos.");
-    } else {
-      const validation = validateTagSubmission(body);
-      if (validation.error) fail(400, "Revisa el código, estación, color y respuestas del animal.");
-      if (body.type === "carnero" && (body.woolQuality !== "IDK" || body.lactation !== "idk")) {
-        fail(400, "El carnero no requiere respuestas de lana ni lactancia.");
-      }
-    }
+    const validationError = validateShearingFields(body, readShearers().length);
+    if (validationError) fail(400, validationError);
     if (old) {
       db.prepare(`UPDATE counts SET tag = ?, station = ?, color = ?, lactation = ?,
         type = ?, woolQuality = ?, updated_at = ? WHERE id = ?`).run(
@@ -1204,7 +1198,7 @@ app.use(express.static(path.join(__dirname, "build")));
 
 // ---------------------------------------------------------------------------
 // Cloud sync agent: drains sync_outbox to the esquila-cloud service.
-// Push-only, batched, idempotent on the remote (LWW upsert by id), so
+// Push then pull, batched, idempotent on the remote (LWW upsert by id), so
 // retrying after days offline is safe. Backs off exponentially while the
 // internet is down — which is the normal state at the ranch, not an error.
 // ---------------------------------------------------------------------------
@@ -1273,6 +1267,8 @@ const remoteTableFor = {
   treatment_presets: "treatment_presets",
 };
 
+const ranchSync = createRanchSync(db);
+const appVersion = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version;
 let syncDelay = SYNC_INTERVAL_MS;
 
 const runSync = async () => {
@@ -1300,6 +1296,7 @@ const runSync = async () => {
             Authorization: `Bearer ${CLOUD_SYNC_TOKEN}`,
           },
           body: JSON.stringify({ batches }),
+          signal: AbortSignal.timeout(30000),
         });
         if (!res.ok) {
           throw new Error(`push returned ${res.status}`);
@@ -1307,6 +1304,21 @@ const runSync = async () => {
       }
       clearOutboxEntries(entries);
       console.log(`Cloud sync: pushed ${entries.length} outbox entries`);
+    }
+    const response = await fetch(`${CLOUD_SYNC_URL}/api/sync/ranch`, {
+      method: "POST", signal: AbortSignal.timeout(30000),
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${CLOUD_SYNC_TOKEN}` },
+      body: JSON.stringify({ cursor: ranchSync.cursor(), information: {
+        shearers: readShearers(), mode, hostname: os.hostname(), platform: os.platform(),
+        version: appVersion, uptime: Math.floor(process.uptime()),
+        pending: db.prepare("SELECT count(*) AS n FROM sync_outbox").get().n,
+      } }),
+    });
+    if (!response.ok) throw new Error(`ranch pull returned ${response.status}`);
+    const result = ranchSync.apply(await response.json());
+    lambs = Math.max(lambs, db.prepare("SELECT value FROM lamb_sequence WHERE singleton=1").get().value);
+    if (result.changed) {
+      await refreshCounts();
     }
     syncDelay = SYNC_INTERVAL_MS;
   } catch (err) {

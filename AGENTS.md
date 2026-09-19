@@ -30,9 +30,11 @@ can be maintained without turning this file into a second README.
    outbox entries belong in one transaction. Client-generated UUIDv7 identifiers,
    submission identifiers, last-write-wins timestamps, and tombstones make replay
    safe. Never acknowledge a write before its durable local transaction commits.
-4. **Data ownership stays explicit.** The barn SQLite database originates
-   shearing events. The remote PostgreSQL database is the shared flock view and
-   system of record for treatments. Phones may write treatments and presets, but
+4. **Data ownership stays explicit.** The barn SQLite database and authenticated
+   cloud administrators may originate and correct shearing events. Shearing
+   changes synchronize in both directions with durable cursors and tombstones.
+   The remote PostgreSQL database is the shared flock view and system of record
+   for treatments. Phone-role devices may write treatments and presets, but
    never shearing events.
 5. **Ranch calendar dates use `America/Santiago`.** Instants are ISO-8601 UTC
    timestamps; treatment/report days are Chilean calendar dates. Do not derive

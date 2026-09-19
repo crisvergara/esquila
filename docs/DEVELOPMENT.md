@@ -87,6 +87,10 @@ Support; do not replace those paths with repository-relative assumptions.
 - Use parameterized SQL only.
 - Validate every batch before beginning writes, then commit all rows or none.
 - Preserve the role/table allowlist and last-write-wins condition.
+- Shearing writers acquire the transactional revision-counter lock before row
+  locks. Preserve atomic revision/audit/receipt writes and commit-order cursors.
+- Barn pull applies data and cursor in one SQLite transaction without outbox
+  echoes. Never overwrite an unuploaded local correction before cloud audit.
 - Keep request sizes bounded. The current sync ceiling is 20 MB because full
   offline catch-up batches are expected.
 - PostgreSQL schema bootstrap must remain idempotent. Production database roles
