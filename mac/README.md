@@ -150,3 +150,15 @@ must change `shared/mac-release.js` and rebuild.
 - The fullscreen window can be toggled with `Control-Command-F`.
 - If port 3001 is already occupied, quit the other process before opening
   Esquila.
+
+## Remote corrections and monitor (0.1.5+)
+
+The cloud `/admin` page can display the last synchronized per-shearer counts and
+add, edit, or delete shearing records. This version of the Mac app receives those
+changes through the same configured cloud URL and server token. Install the new
+release before relying on bidirectional sync; older versions only upload.
+
+Counting remains local while offline. Remote changes appear after reconnection,
+normally on the next one-minute sync, and refresh the local monitor. Conflicting
+corrections use the later timestamp (cloud wins ties); review retained versions
+in the cloud admin history. No remote edit restarts or updates this application.

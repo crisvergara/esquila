@@ -22,7 +22,7 @@ The system is offline-first with two halves (full design doc: `docs/OFFLINE_SYNC
 
 ```
 tagger / monitors ──LAN HTTP──> countserver.js (on-prem, SQLite + sync outbox)
-                                      │  push-only sync when online
+                                      │  bidirectional shearing sync when online
                                       ▼
                         esquila-cloud (Express + Neon Postgres, HTTPS)
                                       ▲
@@ -39,7 +39,7 @@ esquila/
 ├── cloud/                  # esquila-cloud remote service
 │   ├── server.js           # Sync push endpoint, snapshot API, device enrollment
 │   ├── schema.sql          # Neon Postgres schema
-│   ├── admin.html          # Device enrollment page (/admin)
+│   ├── admin.html          # Ranch monitor, record management, enrollment (/admin)
 │   └── Dockerfile          # Deploy image (see fly.toml at repo root)
 ├── shared/
 │   ├── uuidv7.js           # Time-ordered ids, generated at whichever origin writes
@@ -85,6 +85,21 @@ Tracking medication names is important because brands need to be rotated periodi
 
 Phones are enrolled by scanning a QR code generated on the cloud's `/admin` page; each device gets its own revocable token. All calendar-day logic (treatment dates, report grouping) uses the ranch's timezone, **America/Santiago**.
 
+## Remote ranch administration
+
+Open [the cloud admin](https://esquila-cloud.fly.dev/admin) and sign in with the
+admin password. The page shows the latest ranch contact, app version, mode,
+configured shearers, and per-station totals for the selected Chile date. Browse
+records by date/code, include deleted rows to inspect their history, and add,
+edit, or delete records. Editing preserves the original shearing time.
+
+Install Mac **0.1.5 or later** to receive cloud corrections. The ranch pushes
+local writes then pulls cloud changes (including deletions), normally every
+minute. Changes remain pending while disconnected; local counting continues.
+Conflicting edits use the later timestamp, with the cloud winning exact ties;
+versions are retained in the admin history. The cloud monitor is a synchronized
+view, not a live LAN feed. Names reflect the latest station configuration.
+
 ## API Endpoints
 
 ### On-prem (countserver.js, port 3001)
@@ -111,7 +126,11 @@ All deletes are soft deletes (tombstones), and every row carries a UUIDv7 `id`, 
 | `GET` | `/api/snapshot` | device token | Full flock: latest shearing events, all treatments, presets |
 | `POST` | `/api/admin/login`, `/api/admin/logout` | admin password/session | Start or end an HttpOnly admin session |
 | `GET/POST/DELETE` | `/api/admin/devices` | admin session | Device lifecycle; POST returns the token + enrollment QR |
-| `GET` | `/admin` | login required | Device enrollment UI |
+| `POST` | `/api/sync/ranch` | server token | Ranch heartbeat and up to 500 shearing changes after a durable revision cursor |
+| `GET` | `/api/admin/ranch` | admin session | Last ranch contact, version, mode, shearers, and pending changes |
+| `GET/POST` | `/api/admin/shearing` | admin session | Browse by Chile date/code, monitor totals, retry-safe additions/edits/deletions |
+| `GET` | `/api/admin/shearing/:id/history` | admin session | Last 50 accepted changes and discarded stale corrections |
+| `GET` | `/admin` | login required | Ranch monitor, shearing management, and device enrollment |
 | `GET` | `/healthz` | — | Health check |
 | `GET` | `/api/updates/mac` | — | Verified Apple Silicon installer metadata for Mac update checks |
 
@@ -168,7 +187,7 @@ For local frontend development: `npm run dev:cloud` proxies `/api` to a local cl
 | `http://<host>:3001/monitor` | Desktop monitor — shows all stations at a glance (LAN) |
 | `http://<host>:3001/mobilemonitor` | Mobile monitor — same info, phone-friendly (LAN) |
 | `https://<cloud-host>/` | EsquilaDB PWA — sheep records & treatment tracking (offline-capable) |
-| `https://<cloud-host>/admin` | Device enrollment |
+| `https://<cloud-host>/admin` | Ranch monitor, shearing management, and device enrollment |
 | `http://<host>:3001/qr.png` | QR code linking to the tagger |
 
 ## Data & Backups

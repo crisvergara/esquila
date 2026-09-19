@@ -186,6 +186,43 @@ vs. in Neon: `SELECT COUNT(*) FROM shearing_events;` etc. When
 If the ranch has no internet that day, nothing breaks — the outbox just
 waits and the server logs a retry with backoff.
 
+## Remote ranch monitor and corrections (Mac 0.1.5+)
+
+After merging, let both required checks complete and the workflow deploy the
+cloud. Install the newly published Mac release at the ranch using **Buscar
+actualizaciones…** in the sheep menu (or the public release installer). The
+existing URL/token remains valid. Old ranch versions still upload, but cannot
+report detailed status or receive remote edits; the admin page flags that state.
+Do not rely on remote corrections being applied locally until the new app has
+reported and the pending cloud count clears.
+
+At `/admin`, inspect each server's last contact, version, mode, shearers, and
+pending counts. Browse a Chile date (clear it for all history), search codes,
+and include deleted rows to inspect their history. Add/edit/delete is available
+with the admin login. Editing preserves the original date. Cloud saves are
+immediate; ranch confirmation arrives on the next successful sync. An offline
+ranch continues counting, and the remote monitor explicitly shows stale contact.
+
+Operational tradeoffs:
+
+- Conflicting edits are resolved by the later timestamp, with cloud winning
+  exact ties. Keep clocks synchronized. **Historial** retains accepted versions
+  and discarded stale uploads for manual review; it does not automatically merge
+  individual fields. Multiple edits to an unsynced local row can be coalesced.
+- The default heartbeat/pull interval is 60 seconds, even without new counts.
+  While the ranch app runs, it can keep Fly/Neon awake more often than push-only
+  sync. Turn it off normally when not in use or adjust the sync interval, accepting
+  slower updates and a stale-contact indicator.
+- Historical totals use stations and their latest reported names. Changing a
+  shearer's name does not create historical staff assignment records.
+- Initial down-sync copies retained cloud history into SQLite, 500 rows per
+  cycle. One flock/one active barn is assumed. Do not connect unrelated farms.
+- History, receipts, and tombstones grow over time and require database storage
+  and backups. Do not truncate them or reset the revision counter to save space.
+- If restoring PostgreSQL from an older backup, a barn cursor may be ahead and
+  pull will fail closed. Preserve both databases and review/reconcile the missing
+  history before changing cursors; resetting them blindly can lose corrections.
+
 ## 5. Enroll the phones
 
 For each person: on `/admin`, create a device with role **phone** and a

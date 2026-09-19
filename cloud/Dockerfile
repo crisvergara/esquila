@@ -19,6 +19,7 @@ COPY cloud/package.json ./
 RUN npm install --omit=dev
 COPY cloud/ ./
 COPY shared/ /app/shared/
+COPY tagger/modeschema.json /app/tagger/modeschema.json
 COPY --from=build /app/build-cloud /app/build-cloud
 EXPOSE 8080
 CMD ["node", "server.js"]

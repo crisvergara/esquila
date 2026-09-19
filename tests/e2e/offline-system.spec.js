@@ -1,6 +1,8 @@
 import { expect, test } from "@playwright/test";
 import Database from "better-sqlite3";
 import crypto from "node:crypto";
+import { createRequire } from "node:module";
+const { Pool } = createRequire(new URL("../../cloud/package.json", import.meta.url))("pg");
 import { createServer } from "node:http";
 import { existsSync, readdirSync } from "node:fs";
 import { mkdtemp } from "node:fs/promises";
@@ -31,6 +33,9 @@ let cloudService;
 let ranchService;
 let serverToken;
 let phoneToken;
+let testDatabaseUrl;
+let testSchema;
+let schemaPool;
 
 function startCloud() {
   if (!process.env.TEST_DATABASE_URL) {
@@ -40,7 +45,7 @@ function startCloud() {
     cwd: path.join(ROOT, "cloud"),
     env: {
       PORT: String(CLOUD_PORT),
-      DATABASE_URL: process.env.TEST_DATABASE_URL,
+      DATABASE_URL: testDatabaseUrl,
       ADMIN_PASSWORD: adminPassword,
       PUBLIC_URL: cloudBase,
       NODE_ENV: "test",
@@ -91,6 +96,15 @@ async function clickDigits(page, digits) {
 test.describe.configure({ mode: "serial" });
 
 test.beforeAll(async () => {
+  if (!process.env.TEST_DATABASE_URL) throw new Error("TEST_DATABASE_URL must point to a disposable PostgreSQL database");
+  // Each worker/retry gets a separate flock. Down-sync must never import another
+  // test run's sheep into the fresh ranch database.
+  testSchema = `esquila_e2e_${crypto.randomUUID().replaceAll('-', '')}`;
+  schemaPool = new Pool({ connectionString: process.env.TEST_DATABASE_URL });
+  await schemaPool.query(`CREATE SCHEMA ${testSchema}`);
+  const url = new URL(process.env.TEST_DATABASE_URL);
+  url.searchParams.set('options', `-csearch_path=${testSchema}`);
+  testDatabaseUrl = url.toString();
   tempRoot = await mkdtemp(path.join(os.tmpdir(), "esquila-e2e-"));
   ranchDir = path.join(tempRoot, "ranch");
   await import("node:fs/promises").then(({ mkdir }) => mkdir(ranchDir));
@@ -108,6 +122,10 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   await Promise.all([stopService(ranchService), stopService(cloudService)]);
+  if (schemaPool) {
+    if (testSchema) await schemaPool.query(`DROP SCHEMA IF EXISTS ${testSchema} CASCADE`);
+    await schemaPool.end();
+  }
 });
 
 test("migrates a legacy ranch database once and backs it up", async () => {
@@ -143,7 +161,7 @@ test("migrates a legacy ranch database once and backs it up", async () => {
   await stopService(service);
 
   const migrated = new Database(legacyPath, { readonly: true });
-  expect(migrated.pragma("user_version", { simple: true })).toBe(2);
+  expect(migrated.pragma("user_version", { simple: true })).toBe(3);
   expect(migrated.prepare("SELECT COUNT(*) AS n FROM counts").get().n).toBe(1);
   expect(migrated.prepare("SELECT COUNT(*) AS n FROM treatments").get().n).toBe(1);
   expect(migrated.prepare("SELECT COUNT(*) AS n FROM sync_outbox").get().n).toBe(2);
@@ -504,8 +522,8 @@ test("edits made during an ambiguous cloud push remain queued and reconcile", as
       const chunks = [];
       for await (const chunk of req) chunks.push(chunk);
       const raw = Buffer.concat(chunks).toString();
-      const pushed = await jsonRequest(`${cloudBase}/api/sync/push`, { method: "POST", token: serverToken, raw });
-      if (first) {
+      const pushed = await jsonRequest(`${cloudBase}${req.url}`, { method: "POST", token: serverToken, raw });
+      if (first && req.url === "/api/sync/push") {
         first = false;
         // The cloud has committed, but the barn has not received its receipt.
         const row = (await jsonRequest(`${isolatedBase}/api/records`)).data.rows[0];
@@ -622,6 +640,125 @@ test("cloud enforces auth, roles, rollback, admin CSRF, and last-write-wins", as
   expect((await jsonRequest(`${cloudBase}/api/snapshot`, { token: device.token })).response.status).toBe(200);
   expect((await request.delete(`${cloudBase}/api/admin/devices/${device.id}`, { headers: { Origin: cloudBase } })).status()).toBe(200);
   expect((await jsonRequest(`${cloudBase}/api/snapshot`, { token: device.token })).response.status).toBe(401);
+});
+
+test("cloud admin manages shearing offline, retries lost receipts, and reconciles both conflict directions", async ({ page, request }) => {
+  const admin = (method, route, body) => jsonRequest(`${cloudBase}${route}`, { method, token: adminPassword, body });
+  const listing = async tag => (await admin('GET', `/api/admin/shearing?day=&tag=${tag}`)).data.rows;
+  await waitFor(async () => (await admin('GET', '/api/admin/ranch')).data.servers[0]?.information?.shearers[0].name === 'Ana');
+  const ranchState = (await admin('GET', '/api/admin/ranch')).data;
+  expect(ranchState.servers[0].information).toMatchObject({ platform: process.platform, pending: 0 });
+  const totals = (await admin('GET', `/api/admin/shearing?day=${ranchState.day}`)).data.totals;
+  expect(totals.reduce((sum, row) => sum + row.count, 0)).toBe(totalCount((await jsonRequest(`${ranchBase}/count`)).data));
+  for (const route of ['/api/admin/ranch', '/api/admin/shearing']) {
+    expect((await jsonRequest(`${cloudBase}${route}`)).response.status).toBe(401);
+    expect((await jsonRequest(`${cloudBase}${route}`, { token: phoneToken })).response.status).toBe(401);
+  }
+  expect((await jsonRequest(`${cloudBase}/api/sync/ranch`, { method: 'POST', token: phoneToken, body: {} })).response.status).toBe(403);
+  await request.post(`${cloudBase}/api/admin/login`, { data: { password: adminPassword } });
+  expect((await request.post(`${cloudBase}/api/admin/shearing`, { data: {} })).status()).toBe(403);
+
+  await stopService(ranchService); ranchService = undefined;
+  await page.goto(`${cloudBase}/admin`);
+  await page.getByLabel('Contraseña de administración').fill(adminPassword);
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
+  await expect(page.getByRole('table', { name: 'Monitor por esquilador' })).toBeVisible();
+  await page.getByRole('button', { name: 'Agregar registro', exact: true }).click();
+  await page.locator('#record-tag').fill('A99881');
+  await page.locator('#record-station').selectOption('2');
+  let lostReceipt;
+  await page.route('**/api/admin/shearing', async route => {
+    if (route.request().method() !== 'POST') return route.continue();
+    const response = await route.fetch(); lostReceipt = await response.json(); await route.abort('failed');
+  });
+  await page.locator('#record-save').click();
+  await expect(page.locator('#editor-error')).not.toBeEmpty();
+  expect(lostReceipt.ok).toBe(true);
+  await page.unroute('**/api/admin/shearing');
+  await page.reload();
+  await page.getByRole('button', { name: 'Reintentar mismo cambio' }).click();
+  await expect(page.locator('#ranch-result')).toContainText('Guardado en la nube');
+  expect(await listing('A99881')).toHaveLength(1);
+  await page.locator('#ranch-tag').fill('A99881');
+  await page.getByRole('button', { name: 'Buscar / Actualizar' }).click();
+  await expect(page.locator('#ranch-rows tr')).toHaveCount(1);
+  await expect(page.locator('#ranch-rows')).toContainText('Pendiente en galpón');
+  const old = (await listing('A99881'))[0];
+  await page.locator('#ranch-rows').getByRole('button', { name: 'Editar', exact: true }).click();
+  await page.locator('#record-tag').fill('A99882');
+  await page.locator('#record-station').selectOption('3');
+  await page.locator('#record-save').click();
+  await expect(page.locator('#ranch-editor')).not.toBeVisible();
+  expect((await admin('POST', '/api/admin/shearing', { ...old, action: 'edit', submissionId: crypto.randomUUID() })).response.status).toBe(409);
+  expect((await listing('A99882'))[0].occurred_at).toBe(old.occurred_at);
+  const addIntent = { action: 'add', tag: 'A99883', station: 1, type: 'oveja', color: 'none', woolQuality: 'GOOD', lactation: 'idk', submissionId: crypto.randomUUID() };
+  const [tombstone, repeated] = await Promise.all([admin('POST', '/api/admin/shearing', addIntent), admin('POST', '/api/admin/shearing', addIntent)]);
+  expect(repeated.response.status).toBe(200);
+  expect(repeated.data.id).toBe(tombstone.data.id);
+  expect([tombstone.data.duplicate, repeated.data.duplicate].sort()).toEqual([false, true]);
+  expect((await admin('POST', '/api/admin/shearing', { ...addIntent, tag: 'A11223' })).response.status).toBe(409);
+  expect(tombstone.response.status).toBe(200);
+  await page.locator('#ranch-tag').fill('A99883');
+  await page.getByRole('button', { name: 'Buscar / Actualizar' }).click();
+  await expect(page.locator('#ranch-rows')).toContainText('A99883');
+  await page.locator('#ranch-rows').getByRole('button', { name: 'Eliminar', exact: true }).click();
+  await page.getByRole('button', { name: 'Confirmar eliminación' }).click();
+  await expect(page.locator('#ranch-editor')).not.toBeVisible();
+  expect(await listing('A99883')).toHaveLength(0);
+  const history = (await admin('GET', `/api/admin/shearing/${tombstone.data.id}/history`)).data;
+  expect(history).toHaveLength(2); expect(history[0].after_row.deleted_at).toBeTruthy();
+  await page.locator('#ranch-deleted').check();
+  await page.getByRole('button', { name: 'Buscar / Actualizar' }).click();
+  await expect(page.locator('#ranch-rows')).toContainText('Eliminado');
+  await page.locator('#ranch-rows').getByRole('button', { name: 'Historial' }).click();
+  await expect(page.locator('#history-rows')).toContainText('A99883');
+  await page.getByRole('button', { name: 'Cerrar historial' }).click();
+  const invalid = await admin('POST', '/api/admin/shearing', { action: 'add', tag: 'A12', station: 1, type: 'oveja', submissionId: crypto.randomUUID() });
+  expect(invalid.response.status).toBe(400);
+
+  ranchService = startRanch(ranchDir); await waitForHealth(ranchBase, ranchService);
+  await waitFor(async () => (await jsonRequest(`${ranchBase}/api/records?tag=A99882`)).data.rows.length === 1);
+  const db = new Database(path.join(ranchDir, 'esquila'), { readonly: true });
+  expect(db.prepare('SELECT deleted_at FROM counts WHERE id=?').get(tombstone.data.id).deleted_at).toBeTruthy();
+  expect(db.prepare('SELECT count(*) AS n FROM sync_outbox').get().n).toBe(0);
+  await waitFor(async () => BigInt((await admin('GET', '/api/admin/ranch')).data.servers[0].applied_revision) >= BigInt(history[0].after_row.revision));
+
+  // While cloud is down, two ranch corrections are durable. An admin later edits
+  // one of them; the other retains its newer local value when the older cloud page arrives.
+  const local = (await jsonRequest(`${ranchBase}/api/records?tag=A99882`)).data.rows[0];
+  // Freeze the barn with a saved copy, make a remote correction, then edit the
+  // same saved copy locally while cloud is unavailable. The local timestamp wins.
+  const second = await ranchPost('/api/records', { action: 'add', tag: 'A99887', station: 2, type: 'oveja', color: 'none', woolQuality: 'GOOD', lactation: 'idk', submissionId: crypto.randomUUID() });
+  expect(second.response.status).toBe(200);
+  await waitFor(async () => (await listing('A99887')).length === 1);
+  await stopService(ranchService); ranchService = undefined;
+  expect((await admin('POST', '/api/admin/shearing', { ...(await listing('A99887'))[0], action: 'edit', tag: 'A99888', submissionId: crypto.randomUUID() })).response.status).toBe(200);
+  await stopService(cloudService); cloudService = undefined;
+  ranchService = startRanch(ranchDir); await waitForHealth(ranchBase, ranchService);
+  const savedSecond = (await jsonRequest(`${ranchBase}/api/records?tag=A99887`)).data.rows[0];
+  expect((await ranchPost('/api/records', { ...savedSecond, action: 'edit', tag: 'A99889', submissionId: crypto.randomUUID() })).response.status).toBe(200);
+  const localEdit = await ranchPost('/api/records', { ...local, action: 'edit', tag: 'A99884', submissionId: crypto.randomUUID() });
+  expect(localEdit.response.status).toBe(200);
+  const localAdd = await ranchPost('/api/records', { action: 'add', tag: 'A99885', station: 2, type: 'oveja', color: 'none', woolQuality: 'GOOD', lactation: 'idk', submissionId: crypto.randomUUID() });
+  expect(localAdd.response.status).toBe(200);
+  await stopService(ranchService); ranchService = undefined;
+  cloudService = startCloud(); await waitForHealth(cloudBase, cloudService);
+  const newer = await admin('POST', '/api/admin/shearing', { ...(await listing('A99882'))[0], action: 'edit', tag: 'A99886', submissionId: crypto.randomUUID() });
+  expect(newer.response.status).toBe(200);
+  ranchService = startRanch(ranchDir); await waitForHealth(ranchBase, ranchService);
+  await waitFor(async () => (await jsonRequest(`${ranchBase}/api/records?tag=A99886`)).data.rows.length === 1 && (await listing('A99885')).length === 1 && (await listing('A99889')).length === 1);
+  const conflicts = (await admin('GET', `/api/admin/shearing/${local.id}/history`)).data;
+  expect(conflicts.some(h => h.source === 'stale-push' && h.after_row.tag === 'A99884' && h.before_row.tag === 'A99886')).toBe(true);
+  expect(db.prepare('SELECT tag FROM counts WHERE id=?').get(local.id).tag).toBe('A99886');
+  const secondHistory = (await admin('GET', `/api/admin/shearing/${second.data.id}/history`)).data;
+  expect(secondHistory.some(h => h.before_row?.tag === 'A99888' && h.after_row.tag === 'A99889')).toBe(true);
+  expect(db.prepare('SELECT tag FROM counts WHERE id=?').get(second.data.id).tag).toBe('A99889');
+  const cursor = db.prepare('SELECT cursor FROM ranch_sync_state').get().cursor;
+  expect(BigInt(cursor)).toBeGreaterThan(500n);
+  await stopService(ranchService); ranchService = startRanch(ranchDir); await waitForHealth(ranchBase, ranchService);
+  expect(db.prepare('SELECT cursor FROM ranch_sync_state').get().cursor).toBe(cursor);
+  expect(db.prepare('SELECT count(*) AS n FROM sync_outbox').get().n).toBe(0);
+  db.close();
 });
 
 test("vaccination PWA survives offline reload and syncs directly to cloud", async ({ browser }) => {

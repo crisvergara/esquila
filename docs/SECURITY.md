@@ -67,6 +67,22 @@ an HTTP request path or referrer. It is still visible to the person/camera that
 opens the QR. Generate one device per phone, share it privately, and revoke it if
 the phone or QR is lost.
 
+## Cloud shearing administration
+
+Ranch telemetry, browsing, mutation, and history endpoints require the existing
+admin session or controlled admin bearer authentication. Phone device tokens
+cannot use them or pull the barn revision feed. Remote writes inherit the exact
+same-origin CSRF requirement. Shared field validation is enforced server-side;
+request sizes, page sizes, and history results are bounded. UI values are rendered
+as text, including server names and audit JSON.
+
+Cloud mutation receipts and shearing history contain ranch data; include them in
+protected database backups and never export production history into the public
+repository. Audit versions are retained, including rejected stale uploads, but
+are not a tamper-proof compliance log. A compromised administrator or server
+credential can change the flock. Keep local/cloud clocks accurate because
+conflicting offline writes use timestamps.
+
 ## Data-integrity controls are security controls
 
 - Parameterize all SQL.

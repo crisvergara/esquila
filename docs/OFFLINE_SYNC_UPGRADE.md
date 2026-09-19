@@ -2,6 +2,16 @@
 
 Status: **approved 2026-08-03** — all open questions resolved; see [Decisions](#decisions-resolved-2026-08-03) at the end.
 
+## Subsequent approved extension (September 2026)
+
+The user requested cloud admin shearing management and bidirectional barn sync.
+That extension supersedes this original design's push-only shearing ownership
+and deferred remote monitor decisions. The implemented protocol, conflict rules,
+transactional revision cursor, and limitations are documented in
+[ARCHITECTURE.md](ARCHITECTURE.md#cloud-ranch-management-and-bidirectional-shearing-sync).
+The original decisions below remain as design history. Treatment ownership and
+the fully offline LAN counting requirement are unchanged.
+
 ## Context
 
 Esquila today is a single on-prem Express + SQLite server (`countserver.js`, port 3001) serving four React apps from one Vite build: `tagger/` (counting app), `monitor/` + `mobilemonitor/` (dashboards), and `esquiladb/` (vaccination/records app). Everything assumes the LAN and the server are reachable; a failed fetch silently loses data. The upgrade goals:

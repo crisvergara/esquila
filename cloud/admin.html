@@ -4,9 +4,9 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" />
-  <title>Esquila — Dispositivos</title>
+  <title>Esquila — Administración</title>
   <style>
-    body { font-family: system-ui, sans-serif; background: #1a1a1a; color: #eee; max-width: 680px; margin: 0 auto; padding: 1rem; }
+    body { font-family: system-ui, sans-serif; background: #1a1a1a; color: #eee; max-width: 1200px; margin: 0 auto; padding: 1rem; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
     h1 { font-size: 1.3rem; }
     input, select, button { font-size: 1rem; padding: 0.5rem; border-radius: 6px; border: 1px solid #555; background: #2a2a2a; color: #eee; }
@@ -21,13 +21,55 @@
     .token { font-family: monospace; word-break: break-all; font-size: 0.8rem; color: #9c9; }
     .muted { color: #aaa; font-size: 0.85rem; }
     .error { color: #ff8c8c; }
+    .scroll { overflow-x: auto; }
+    dialog { background: #222; color: #eee; border: 1px solid #777; max-width: min(90vw, 640px); }
+    dialog::backdrop { background: #0009; }
+    label { display: inline-flex; flex-direction: column; gap: .3rem; }
+    #ranch-servers li { margin-bottom: .7rem; }
+    pre { white-space: pre-wrap; overflow-wrap: anywhere; }
   </style>
 </head>
 <body>
   <header>
-    <h1>Esquila — Dispositivos</h1>
+    <h1>Esquila — Administración</h1>
     <button class="quiet" id="logout">Cerrar sesión</button>
   </header>
+  <section aria-labelledby="ranch-heading">
+    <h2 id="ranch-heading">Galpón — Monitor y registros</h2>
+    <p>Datos recibidos en la nube. Durante una desconexión, los conteos del galpón siguen funcionando y aparecerán aquí al sincronizar.</p>
+    <ul id="ranch-servers"></ul>
+    <p id="ranch-error" class="error" role="alert"></p>
+    <form id="ranch-filters" class="row">
+      <label>Fecha en Chile (vacía = todas)<input id="ranch-day" type="date"></label>
+      <label>Buscar código<input id="ranch-tag" maxlength="40" type="search"></label>
+      <label><span>Incluir eliminados</span><input id="ranch-deleted" type="checkbox"></label>
+      <button>Buscar / Actualizar</button><button type="button" id="ranch-add">Agregar registro</button>
+    </form>
+    <p class="muted">El monitor cuenta registros por estación; los nombres corresponden a la configuración más reciente, incluso al consultar fechas anteriores.</p>
+    <div class="scroll"><table aria-label="Monitor por esquilador"><thead><tr><th>Esquilador / estación</th><th>Ovejas</th><th>Carneros</th><th>Corderos</th><th>Total</th></tr></thead><tbody id="ranch-totals"></tbody></table></div>
+    <p id="ranch-summary" role="status"></p>
+    <div class="scroll"><table aria-label="Registros de esquila"><thead><tr><th>Fecha (Chile)</th><th>Código</th><th>Estación</th><th>Tipo</th><th>Color</th><th>Lana</th><th>Lactancia</th><th>Sincronización</th><th>Acciones</th></tr></thead><tbody id="ranch-rows"></tbody></table></div>
+    <div class="row"><button id="ranch-prev">Anterior</button><button id="ranch-next">Siguiente</button></div>
+    <p id="ranch-result" role="status"></p>
+  </section>
+  <dialog id="ranch-editor" aria-labelledby="editor-title">
+    <h2 id="editor-title">Registro de esquila</h2>
+    <p id="editor-note"></p>
+    <form id="record-form">
+      <div class="row">
+        <label>Código<input id="record-tag" required maxlength="20"></label>
+        <label>Estación<select id="record-station"></select></label>
+        <label>Tipo<select id="record-type"><option value="oveja">Oveja</option><option value="carnero">Carnero</option><option value="borrega">Cordero</option></select></label>
+        <label>Color<select id="record-color"></select></label>
+        <label>Lana<select id="record-woolQuality"></select></label>
+        <label>Lactancia<select id="record-lactation"></select></label>
+      </div>
+      <p id="editor-error" class="error" role="alert"></p>
+      <div class="row"><button id="record-save">Guardar</button><button type="button" id="record-cancel">Cerrar</button></div>
+    </form>
+  </dialog>
+  <dialog id="ranch-history" aria-labelledby="history-title"><h2 id="history-title">Historial del registro</h2><p>Se conservan las versiones aceptadas y los intentos locales descartados por una corrección más reciente. Se muestran los últimos 50 cambios.</p><div id="history-rows"></div><button id="history-close">Cerrar historial</button></dialog>
+  <h2>Esquila — Dispositivos</h2>
   <div class="row">
     <input id="name" maxlength="80" placeholder="Nombre (ej. Teléfono de Papá)" style="flex:1" />
     <select id="role">

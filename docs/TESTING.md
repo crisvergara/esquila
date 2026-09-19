@@ -17,10 +17,18 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
 - recent-record editor additions, edits, deletion confirmations, response-loss retries across reload/restart, stale-editor rejection, offline reconciliation, and stale tombstone replay;
 - edits made during a cloud upload whose response is lost, plus durable lamb-number reservation after manual corrections and restart;
 - ranch restart safety for lamb numbering and synchronization;
+- cloud monitor/record management, lost admin receipts across reload, concurrent
+  duplicate submissions, stale editors, deleted-row history, and admin/phone/CSRF
+  boundaries;
+- bidirectional offline corrections in both conflict directions, retained conflict
+  versions, tombstone pulls, ranch acknowledgements, and persisted restart cursors;
+- transactional pull-page validation, 500-row paging, no upload echoes, and local
+  edits made while a pull is in flight;
 - cloud device authentication, phone/server role boundaries, malformed requests, transaction rollback, last-write-wins semantics, admin login, CSRF protection, and device revocation;
 - vaccination PWA enrollment, offline writes, offline service-worker reload, direct phone-to-cloud synchronization, and proof that the treatment never passes through the ranch database.
 
-The E2E suite uses temporary directories and configurable non-production ports. It refuses to run without `TEST_DATABASE_URL`; that URL must point to a disposable database.
+The E2E suite uses temporary directories, a fresh isolated PostgreSQL schema per
+worker/retry (removed afterward), and configurable non-production ports. It refuses to run without `TEST_DATABASE_URL`; that URL must point to a disposable database.
 
 ## Apple Silicon installer
 
