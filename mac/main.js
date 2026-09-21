@@ -33,6 +33,7 @@ let refreshTray = () => {};
 let updateDialogOpen = false;
 let updateWindow;
 let installingUpdate = false;
+let nativeInstallRequested = false;
 let downloadInProgress = false;
 
 const dataDir = () => app.getPath("userData");
@@ -320,6 +321,7 @@ async function installUpdate() {
       // quit handler would bypass Squirrel's installation/relaunch lifecycle.
       quitting = true;
       await stopServer();
+      nativeInstallRequested = true;
       autoUpdater.quitAndInstall();
     } else {
       await verifyInstaller(state.filename, state.release);
@@ -329,6 +331,7 @@ async function installUpdate() {
       app.quit();
     }
   } catch (error) {
+    nativeInstallRequested = false;
     if (quitting) { quitting = false; startServer(activeConfig); }
     await dialog.showMessageBox({ type: "warning", message: "No se pudo instalar la actualización.", detail: error.message, buttons: ["Aceptar"] });
   } finally {
@@ -352,7 +355,17 @@ ipcMain.handle("updates:action", async (event, action) => {
   else if (action === "install") await installUpdate();
 });
 // Native errors outside a staging request must not crash the running barn.
-autoUpdater.on("error", error => log(`Native update: ${error.message}`));
+autoUpdater.on("error", error => {
+  log(`Native update: ${error.message}`);
+  if (nativeInstallRequested) {
+    nativeInstallRequested = false;
+    quitting = false;
+    startServer(activeConfig);
+    showUpdates();
+    dialog.showMessageBox({ type: "warning", message: "No se pudo reiniciar para actualizar. El conteo sigue funcionando.",
+      detail: error.message, buttons: ["Aceptar"] }).catch(error => log(error.message));
+  }
+});
 
 function buildTray() {
   const iconPath = path.join(sourceRoot, "public", "logo192.png");
@@ -383,7 +396,7 @@ function buildTray() {
       { label: updateState?.phase === "checking" ? "Buscando actualizaciones…" : "Buscar actualizaciones…",
         enabled: Boolean(updater) && !updateBusy, click: () => checkForUpdates(true).catch(error => log(error.message)) },
       ...(updateState?.release ? [{
-        label: updateState.phase === "downloading" ? `Descargando actualización: ${Math.floor(100 * updateState.received / (updateState.total || 1))}%…` : `Actualizar a ${updateState.release.version} (${updateState.release.build})…`,
+        label: updateState.phase === "downloading" ? `Descargando actualización: ${Math.floor(100 * updateState.received / (updateState.total || 1))}%…` : updateState.phase === "ready" ? "Actualización lista para instalar…" : `Actualizar a ${updateState.release.version} (${updateState.release.build})…`,
         enabled: !installingUpdate, click: () => showUpdates(),
       }] : []),
       { type: "separator" },
@@ -476,8 +489,15 @@ app.whenReady().then(async () => {
       const identity = JSON.parse(await readFile(path.join(sourceRoot, "mac", "release.json"), "utf8"));
       if (identity.version === installed.version && Number.isSafeInteger(identity.build) && identity.build > 0) installed = identity;
     } catch { /* Local/manual builds have no CI identity. */ }
+    let previousUpdatePhase;
     updater = createUpdater({ installed, teamId: installed.teamId, directory: path.join(dataDir(), "updates"), onChange: state => {
       refreshTray();
+      if (state.phase === "ready" && previousUpdatePhase !== "ready" && Notification.isSupported()) {
+        const notice = new Notification({ title: "Actualización descargada", body: "Abre el menú de la oveja para instalarla cuando puedas pausar el conteo." });
+        notice.on("click", showUpdates);
+        notice.show();
+      }
+      previousUpdatePhase = state.phase;
       updateWindow?.webContents.send("updates:state", state);
       updateWindow?.setProgressBar(state.phase === "downloading" ? state.received / (state.total || 1) : -1);
     } });

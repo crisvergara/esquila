@@ -9,6 +9,7 @@ if (production) {
 module.exports = {
   extends: null,
   ...require('../package.json').build,
+  afterPack: 'scripts/mac-after-pack.cjs',
   forceCodeSigning: production,
   buildVersion: process.env.GITHUB_RUN_NUMBER,
   mac: {

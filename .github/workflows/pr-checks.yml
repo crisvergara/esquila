@@ -102,6 +102,7 @@ jobs:
         run: |
           file dist-mac/mac-arm64/Esquila.app/Contents/MacOS/Esquila | grep -q arm64
           codesign --verify --deep --strict dist-mac/mac-arm64/Esquila.app
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsArbitraryLoads' dist-mac/mac-arm64/Esquila.app/Contents/Info.plist)" = "false"
           hdiutil verify dist-mac/Esquila-*-arm64.dmg
           test "$(/usr/libexec/PlistBuddy -c 'Print :NSBonjourServices:0' dist-mac/mac-arm64/Esquila.app/Contents/Info.plist)" = "_http._tcp"
           /usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' dist-mac/mac-arm64/Esquila.app/Contents/Info.plist | grep -q WiFi
