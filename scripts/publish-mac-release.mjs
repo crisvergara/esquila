@@ -12,6 +12,8 @@ if (manifest.commit !== process.env.GITHUB_SHA || manifest.build !== Number(proc
 }
 const filename = `Esquila-${manifest.version}-arm64.dmg`;
 await verifyInstaller(path.join(directory, filename), manifest);
+if (manifest.automatic) await verifyInstaller(path.join(directory, `Esquila-${manifest.version}-arm64.zip`), manifest.automatic);
+if (process.env.ESQUILA_SIGNED_RELEASE === '1' && !manifest.automatic) throw new Error('Signed update payload missing');
 const tag = `mac-${manifest.commit}`;
 const gh = args => execFileSync('gh', [...args, '--repo', RELEASE_REPOSITORY], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 let existing;
@@ -27,12 +29,14 @@ if (existing && !existing.isDraft) {
   // even if rebuilding the same commit produces different DMG bytes.
   const temporary = await mkdtemp(path.join(os.tmpdir(), 'esquila-release-'));
   try {
-    gh(['release', 'download', tag, '--pattern', 'mac-update.json', '--pattern', filename, '--dir', temporary]);
+    gh(['release', 'download', tag, '--pattern', 'mac-update.json', '--pattern', filename, ...(manifest.automatic ? ['--pattern', `Esquila-${manifest.version}-arm64.zip`] : []), '--dir', temporary]);
     advertised = validateRelease(JSON.parse(await readFile(path.join(temporary, 'mac-update.json'), 'utf8')));
     if (advertised.commit !== manifest.commit || advertised.build !== manifest.build || advertised.version !== manifest.version) {
       throw new Error('Existing release belongs to a different build.');
     }
     await verifyInstaller(path.join(temporary, filename), advertised);
+    if (manifest.automatic && advertised.automatic?.teamId !== manifest.automatic.teamId) throw new Error('Published signing identity mismatch');
+    if (advertised.automatic) await verifyInstaller(path.join(temporary, `Esquila-${manifest.version}-arm64.zip`), advertised.automatic);
   } finally { await rm(temporary, { recursive: true, force: true }); }
 } else {
   if (!existing) {

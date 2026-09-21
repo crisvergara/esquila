@@ -1,4 +1,4 @@
-import { app, dialog, Notification, BrowserWindow, ipcMain, Menu, nativeImage, safeStorage, shell, Tray } from "electron";
+import { app, autoUpdater, dialog, Notification, BrowserWindow, ipcMain, Menu, nativeImage, safeStorage, shell, Tray } from "electron";
 import Bonjour from "bonjour-service";
 import { spawn } from "node:child_process";
 import { appendFile, chmod, mkdir, readFile, writeFile } from "node:fs/promises";
@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { createUpdater, verifyInstaller } from "./updater.js";
+import { stageNativeUpdate } from "./native-update.js";
 
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SERVER_PORT = 3001;
@@ -30,6 +31,8 @@ let quitting = false;
 let updater;
 let refreshTray = () => {};
 let updateDialogOpen = false;
+let updateWindow;
+let installingUpdate = false;
 let downloadInProgress = false;
 
 const dataDir = () => app.getPath("userData");
@@ -257,21 +260,13 @@ function createRecordsWindow() {
 }
 
 async function checkForUpdates(manual = false) {
-  if (!updater || updateDialogOpen || downloadInProgress) return;
+  if (manual) showUpdates();
+  if (!updater || updateDialogOpen || downloadInProgress || installingUpdate) return;
   const state = await updater.check();
   if (!state) return;
   if (state.phase === "available") {
     const label = `${state.release.version} (${state.release.build})`;
-    if (manual) {
-      updateDialogOpen = true;
-      try {
-        const result = await dialog.showMessageBox({ type: "info", title: "Actualización disponible",
-          message: `Esquila ${label} está disponible.`,
-          detail: "Puedes descargarla sin detener el conteo. Para instalarla tendrás que cerrar Esquila y reemplazar la aplicación entre jornadas.",
-          buttons: ["Descargar actualización", "Más tarde"], defaultId: 1, cancelId: 1 });
-        if (result.response === 0) await downloadUpdate();
-      } finally { updateDialogOpen = false; }
-    } else {
+    if (!manual) {
       const marker = path.join(dataDir(), "updates", "notified-build");
       const previous = await readFile(marker, "utf8").catch(() => "");
       if (previous !== String(state.release.build) && Notification.isSupported()) {
@@ -283,41 +278,81 @@ async function checkForUpdates(manual = false) {
         await writeFile(marker, String(state.release.build)).catch(() => {});
       }
     }
-  } else if (manual) {
-    await dialog.showMessageBox({ type: state.error ? "warning" : "info", title: "Actualizaciones de Esquila",
-      message: state.error || "Ya tienes la versión más reciente de Esquila.", buttons: ["Aceptar"] });
   }
+}
+
+function showUpdates() {
+  if (updateWindow) { updateWindow.show(); updateWindow.focus(); return; }
+  app.dock?.show();
+  updateWindow = new BrowserWindow({ width: 600, height: 480, title: "Actualizaciones de Esquila",
+    webPreferences: { preload: path.join(sourceRoot, "mac", "update-preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
+  updateWindow.loadFile(path.join(sourceRoot, "mac", "update.html"));
+  updateWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+  updateWindow.webContents.on("will-navigate", event => event.preventDefault());
+  updateWindow.on("closed", () => { updateWindow = undefined; });
 }
 
 async function downloadUpdate() {
-  if (downloadInProgress) return;
+  showUpdates();
+  if (downloadInProgress || installingUpdate) return;
   downloadInProgress = true;
-  try { await downloadAndOfferInstaller(); }
+  try { await updater?.download(); }
   finally { downloadInProgress = false; }
 }
 
-async function downloadAndOfferInstaller() {
-  const state = await updater?.download();
-  if (!state) return;
-  if (state.phase !== "ready") {
-    await dialog.showMessageBox({ type: "warning", message: state.error || "No se pudo descargar la actualización.", buttons: ["Aceptar"] });
-    return;
-  }
-  const result = await dialog.showMessageBox({ type: "info", title: "Actualización lista",
-    message: "El instalador está descargado y verificado.",
-    detail: "Al continuar se abrirá el instalador y se cerrará Esquila: los teléfonos no podrán contar hasta que la abras de nuevo. Arrastra Esquila a Aplicaciones y acepta Reemplazar. Los registros y la configuración se conservan.",
-    buttons: ["Abrir instalador y cerrar Esquila", "Seguir contando"], defaultId: 1, cancelId: 1 });
-  if (result.response !== 0) return;
+async function installUpdate() {
+  const state = updater?.state;
+  if (!state || state.phase !== "ready" || installingUpdate || updateDialogOpen) return;
+  updateDialogOpen = true;
   try {
-    await verifyInstaller(state.filename, state.release);
-    const error = await shell.openPath(state.filename);
-    if (error) throw new Error("macOS no pudo abrir el instalador. Reintenta desde el menú.");
-    quitting = true;
-    app.quit();
+    const result = await dialog.showMessageBox(updateWindow, { type: "question", title: "Instalar actualización",
+      message: state.automatic ? "¿Instalar y reiniciar Esquila ahora?" : "¿Abrir el instalador y cerrar Esquila?",
+      detail: "Los teléfonos no podrán contar durante el reinicio. Los registros y la configuración se conservan." +
+        (state.automatic ? " La aplicación se reemplazará y abrirá automáticamente." : " Arrastra Esquila a Aplicaciones, acepta Reemplazar y vuelve a abrirla."),
+      buttons: [state.automatic ? "Instalar y reiniciar" : "Abrir instalador", "Seguir contando"], defaultId: 1, cancelId: 1 });
+    if (result.response !== 0) return;
+    installingUpdate = true;
+    refreshTray();
+    updateWindow?.webContents.send("updates:state", { ...state, phase: "installing" });
+    if (state.automatic) {
+      await stageNativeUpdate({ autoUpdater, filename: state.filename, release: state.release });
+      // Drain the child before Squirrel quits Electron. app.exit() in the normal
+      // quit handler would bypass Squirrel's installation/relaunch lifecycle.
+      quitting = true;
+      await stopServer();
+      autoUpdater.quitAndInstall();
+    } else {
+      await verifyInstaller(state.filename, state.release);
+      const error = await shell.openPath(state.filename);
+      if (error) throw new Error("macOS no pudo abrir el instalador. Reintenta desde el menú.");
+      quitting = true;
+      app.quit();
+    }
   } catch (error) {
-    await dialog.showMessageBox({ type: "warning", message: error.message, buttons: ["Aceptar"] });
+    if (quitting) { quitting = false; startServer(activeConfig); }
+    await dialog.showMessageBox({ type: "warning", message: "No se pudo instalar la actualización.", detail: error.message, buttons: ["Aceptar"] });
+  } finally {
+    installingUpdate = false;
+    updateDialogOpen = false;
+    refreshTray();
+    updateWindow?.webContents.send("updates:state", updater.state);
   }
 }
+
+ipcMain.handle("updates:state", event => {
+  if (event.sender !== updateWindow?.webContents) throw new Error("Ventana no autorizada.");
+  return updater?.state || { phase: "idle" };
+});
+ipcMain.handle("updates:action", async (event, action) => {
+  if (event.sender !== updateWindow?.webContents) throw new Error("Ventana no autorizada.");
+  if (installingUpdate || !updater) return;
+  if (action === "check") await checkForUpdates(true);
+  else if (action === "download") await downloadUpdate();
+  else if (action === "pause") updater.pause();
+  else if (action === "install") await installUpdate();
+});
+// Native errors outside a staging request must not crash the running barn.
+autoUpdater.on("error", error => log(`Native update: ${error.message}`));
 
 function buildTray() {
   const iconPath = path.join(sourceRoot, "public", "logo192.png");
@@ -327,7 +362,7 @@ function buildTray() {
   tray.setToolTip("Esquila — servidor del galpón");
   const rebuildMenu = () => {
     const updateState = updater?.state;
-    const updateBusy = ["checking", "downloading"].includes(updateState?.phase);
+    const updateBusy = installingUpdate || ["checking", "downloading"].includes(updateState?.phase);
     tray.setContextMenu(Menu.buildFromTemplate([
       { label: "Abrir monitor", click: createMonitorWindow },
       { label: "Registros recientes…", click: createRecordsWindow },
@@ -348,11 +383,11 @@ function buildTray() {
       { label: updateState?.phase === "checking" ? "Buscando actualizaciones…" : "Buscar actualizaciones…",
         enabled: Boolean(updater) && !updateBusy, click: () => checkForUpdates(true).catch(error => log(error.message)) },
       ...(updateState?.release ? [{
-        label: updateState.phase === "downloading" ? "Descargando actualización…" : `Actualizar a ${updateState.release.version} (${updateState.release.build})…`,
-        enabled: !updateBusy, click: () => downloadUpdate().catch(error => log(error.message)),
+        label: updateState.phase === "downloading" ? `Descargando actualización: ${Math.floor(100 * updateState.received / (updateState.total || 1))}%…` : `Actualizar a ${updateState.release.version} (${updateState.release.build})…`,
+        enabled: !installingUpdate, click: () => showUpdates(),
       }] : []),
       { type: "separator" },
-      { label: "Salir de Esquila", click: () => { quitting = true; app.quit(); } },
+      { label: "Salir de Esquila", enabled: !installingUpdate, click: () => { quitting = true; app.quit(); } },
     ]));
   };
   refreshTray = rebuildMenu;
@@ -441,7 +476,11 @@ app.whenReady().then(async () => {
       const identity = JSON.parse(await readFile(path.join(sourceRoot, "mac", "release.json"), "utf8"));
       if (identity.version === installed.version && Number.isSafeInteger(identity.build) && identity.build > 0) installed = identity;
     } catch { /* Local/manual builds have no CI identity. */ }
-    updater = createUpdater({ installed, directory: path.join(dataDir(), "updates"), onChange: () => refreshTray() });
+    updater = createUpdater({ installed, teamId: installed.teamId, directory: path.join(dataDir(), "updates"), onChange: state => {
+      refreshTray();
+      updateWindow?.webContents.send("updates:state", state);
+      updateWindow?.setProgressBar(state.phase === "downloading" ? state.received / (state.total || 1) : -1);
+    } });
     const check = () => checkForUpdates().catch(error => log(`Update check: ${error.message}`));
     setTimeout(check, 30_000).unref();
     setInterval(check, 6 * 60 * 60_000).unref();

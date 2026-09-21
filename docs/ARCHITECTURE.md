@@ -225,12 +225,19 @@ The ARM64 Mac shell checks at startup and every six hours, with a manual menu
 check. It accepts only the supported schema, architecture, increasing build
 number, nondecreasing package version, and an exact HTTPS download URL within
 this repository. Downloads permit only GitHub's known HTTPS asset hosts, impose
-size/time limits, stream into a partial file, verify SHA-256, and rename only
+size/inactivity limits, resume partial files with validated HTTP ranges, verify SHA-256, and rename only
 after success. Cached files are reverified immediately before opening.
 
 Checks and downloads never stop the barn child process or depend on its sync
-credentials. A user explicitly confirms quitting to open the installer; replacing
-the application remains manual because the app is ad-hoc signed. Ranch data stays
+credentials. A user explicitly confirms installation before any native staging. Production
+builds are Developer ID signed and notarized. The backward-compatible schema-1
+feed retains its DMG fields and adds an optional `automatic` ZIP descriptor with
+size, digest, URL, and Apple team. Signed clients choose it only for their own
+team. After verification and consent, a random-token loopback-only HTTP server
+passes the cached ZIP to Electron/Squirrel, which checks the code signature.
+The barn child stops only after staging succeeds, then Squirrel replaces and
+relaunches the app. Before consent, quitting cannot apply a downloaded update.
+Older or differently signed clients retain the manual DMG path. Ranch data stays
 in Application Support outside the application bundle. No remote installation
 command or automatic schema rollback is supported.
 
@@ -242,6 +249,6 @@ command or automatic schema rollback is supported.
 - Accurate computer clocks matter for conflicting offline corrections.
 - The barn LAN API is unauthenticated and uses HTTP; physical/WiFi network trust
   is assumed. See [SECURITY.md](SECURITY.md).
-- Mac releases are ARM64 and ad-hoc signed. Update notices and verified downloads
-  are supported; unattended installation and notarization remain future work.
+- Mac releases are ARM64. Installation requires operator confirmation; updates
+  never restart an active counting session automatically.
 - S3 SQLite backup is retained, with a more robust backup/restore system deferred.

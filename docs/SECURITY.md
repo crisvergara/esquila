@@ -109,8 +109,14 @@ accounts and never place tokens in update URLs or manifests.
 Only the main-branch deploy job receives `contents: write` for release publishing.
 PR builds neither publish releases nor receive deployment secrets. No installer
 runs or app replacement happens without an explicit local user confirmation.
-The current ad-hoc signature does not provide Developer ID publisher identity;
-a future unattended updater requires proper signing/notarization infrastructure.
+Production releases require Developer ID signing, hardened runtime, and stapled
+notarization. The signed ZIP is additionally verified by Squirrel against the
+installed application's signing requirement. The temporary native feed binds
+only to loopback, uses unpredictable paths, rejects other methods/Host headers,
+and exposes only the preverified ZIP after explicit installation consent.
+Apple private keys and notarization passwords live in GitHub Actions secrets;
+only trusted main-branch jobs receive them. Treat workflow-write access as
+signing authority. Never add these credentials to PR jobs or print them.
 
 ## Dependency and CI policy
 
@@ -155,9 +161,8 @@ a future unattended updater requires proper signing/notarization infrastructure.
   deployment.
 - Device API rate limiting is currently provider/network dependent. Add explicit
   limits before supporting many users or exposing higher-cost operations.
-- The family Mac installer is ad-hoc signed rather than Developer ID signed and
-  notarized. Never add Apple signing material to the repository or untrusted PR
-  jobs.
+- Local/PR installers are ad-hoc signed. Production installers require Apple
+  credentials; protect their renewal, backups, and revocation procedures.
 - AWS uses long-lived environment credentials for the retained S3/SES path.
   Prefer a tightly scoped IAM principal and migrate to shorter-lived credentials
   or a more robust managed backup design in a future phase.
