@@ -90,3 +90,16 @@ test('CI identity and manifest carry the same build and exact installer hash', a
   assert.deepEqual(JSON.parse(await readFile(path.join(directory, 'mac/release.json'))), { version: '0.1.4', build: 20, commit: manifest.commit });
   assert.deepEqual(JSON.parse(await readFile(path.join(directory, 'dist-mac/mac-update.json'))), manifest);
 });
+
+test('signed publication validates ZIP bytes and preserves signed metadata on retry', async t => {
+  for (const scenario of ['new', 'published']) {
+    const fixture = await setup(t, scenario);
+    const signed = { ...manifest, automatic: { url: manifest.url.replace('.dmg', '.zip'), size: 11,
+      sha256: createHash('sha256').update('fixture zip').digest('hex'), teamId: 'ABCDEFGHIJ' } };
+    for (const subdir of ['assets', 'remote']) await writeFile(path.join(fixture.directory, subdir, 'mac-update.json'), JSON.stringify(signed));
+    fixture.run();
+    assert.deepEqual(JSON.parse(await readFile(path.join(fixture.directory, 'cloud/mac-update.json'))), signed);
+    await writeFile(path.join(fixture.directory, 'assets/Esquila-0.1.4-arm64.zip'), 'corrupt');
+    assert.throws(fixture.run);
+  }
+});

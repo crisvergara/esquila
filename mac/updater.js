@@ -15,14 +15,14 @@ async function readBounded(response, limit) {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-async function assetResponse(url, fetchImpl, signal) {
+async function assetResponse(url, fetchImpl, signal, offset = 0) {
   for (let redirects = 0; redirects <= 5; redirects++) {
     const target = new URL(url);
     if (target.protocol !== 'https:' || target.username || target.password || target.port ||
         !['github.com', 'release-assets.githubusercontent.com', 'objects.githubusercontent.com'].includes(target.hostname)) {
       throw new Error('La descarga fue redirigida a una dirección no permitida.');
     }
-    const response = await fetchImpl(target.href, { redirect: 'manual', signal });
+    const response = await fetchImpl(target.href, { redirect: 'manual', signal, headers: offset ? { Range: `bytes=${offset}-` } : {} });
     if ([301, 302, 303, 307, 308].includes(response.status)) {
       const location = response.headers.get('location');
       await response.body?.cancel();
@@ -44,8 +44,9 @@ export async function verifyInstaller(filename, release) {
   if (hash.digest('hex') !== release.sha256) throw new Error('El instalador no pasó la verificación. Vuelve a descargarlo.');
 }
 
-export function createUpdater({ installed, directory, fetchImpl = fetch, onChange = () => {} }) {
-  let state = { phase: 'idle', release: null, filename: null, error: null };
+export function createUpdater({ installed, directory, fetchImpl = fetch, onChange = () => {}, teamId = null }) {
+  let state = { phase: 'idle', release: null, filename: null, error: null, received: 0, total: 0, automatic: false };
+  let controller;
   let busy = false;
   const change = values => { state = { ...state, ...values }; onChange(state); };
   const errorMessage = error => error instanceof SyntaxError
@@ -55,8 +56,10 @@ export function createUpdater({ installed, directory, fetchImpl = fetch, onChang
     : error.message;
   return {
     get state() { return state; },
+    pause() { controller?.abort(new Error('Descarga pausada. Puedes continuar cuando quieras.')); },
     async check() {
       if (busy) return;
+      if (state.phase === 'ready') return state;
       busy = true; change({ phase: 'checking', error: null });
       try {
         const response = await fetchImpl(UPDATE_FEED_URL, { redirect: 'error', signal: AbortSignal.timeout(15_000), headers: { 'Cache-Control': 'no-cache' } });
@@ -71,40 +74,71 @@ export function createUpdater({ installed, directory, fetchImpl = fetch, onChang
     async download() {
       if (busy || !state.release) return;
       busy = true;
-      const release = state.release;
-      const filename = path.join(directory, `Esquila-${release.version}-${release.build}-${release.sha256.slice(0, 12)}.dmg`);
+      const automatic = Boolean(teamId && state.release.automatic?.teamId === teamId);
+      const release = automatic ? state.release.automatic : state.release;
+      const filename = path.join(directory, `Esquila-${state.release.version}-${state.release.build}-${release.sha256.slice(0, 12)}.${automatic ? 'zip' : 'dmg'}`);
       const partial = `${filename}.part`;
-      change({ phase: 'downloading', error: null, filename: null });
+      controller = new AbortController();
+      change({ phase: 'downloading', error: null, filename: null, automatic, received: 0, total: release.size });
       try {
         await mkdir(directory, { recursive: true, mode: 0o700 });
         try {
           await verifyInstaller(filename, release);
-          change({ phase: 'ready', filename });
+          change({ phase: 'ready', filename, received: release.size });
           return state;
         } catch { /* Missing or corrupt cached download: fetch a fresh copy. */ }
-        await rm(partial, { force: true });
-        const response = await assetResponse(release.url, fetchImpl, AbortSignal.timeout(30 * 60_000));
-        const file = await open(partial, 'wx', 0o600);
-        let size = 0;
-        const hash = createHash('sha256');
+        let offset = (await stat(partial).catch(() => ({ size: 0 }))).size;
+        if (offset >= release.size) {
+          await rm(partial, { force: true });
+          offset = 0;
+        }
+        // No total deadline: a slow but healthy connection can finish. Bound each
+        // wait for headers/body data instead, and preserve bytes on interruption.
+        let idleTimer;
+        const resetIdle = () => {
+          clearTimeout(idleTimer);
+          idleTimer = setTimeout(() => controller.abort(new Error('La conexión se detuvo. Reintenta para continuar la descarga.')), 120_000);
+        };
+        resetIdle();
         try {
-          for await (const chunk of response.body) {
-            size += chunk.length;
-            if (size > release.size) throw new Error('El instalador supera el tamaño esperado.');
-            hash.update(chunk);
-            await file.writeFile(chunk);
-          }
-          if (size !== release.size || hash.digest('hex') !== release.sha256) {
-            throw new Error('La descarga está incompleta o no pasó la verificación. Reintenta.');
-          }
-          await file.sync();
-        } finally { await file.close(); }
+          const response = await assetResponse(release.url, fetchImpl, controller.signal, offset);
+          if (response.status === 206) {
+            if (response.headers.get('content-range') !== `bytes ${offset}-${release.size - 1}/${release.size}`) {
+              await response.body?.cancel();
+              throw new Error('El servidor devolvió un rango de descarga inválido.');
+            }
+          } else if (response.status === 200) offset = 0;
+          else throw new Error('Respuesta de descarga inesperada.');
+          const file = await open(partial, offset ? 'a' : 'w', 0o600);
+          let size = offset;
+          change({ received: size });
+          let lastProgress = 0;
+          try {
+            for await (const chunk of response.body) {
+              resetIdle();
+              size += chunk.length;
+              if (size > release.size) {
+                await file.close();
+                await rm(partial, { force: true });
+                throw new Error('El instalador supera el tamaño esperado.');
+              }
+              await file.writeFile(chunk);
+              if (Date.now() - lastProgress > 200 || size === release.size) {
+                change({ received: size });
+                lastProgress = Date.now();
+              }
+            }
+            await file.sync();
+          } finally { await file.close(); }
+          if (size !== release.size) throw new Error('La descarga está incompleta. Reintenta para continuar.');
+        } finally { clearTimeout(idleTimer); }
+        try { await verifyInstaller(partial, release); }
+        catch (error) { await rm(partial, { force: true }); throw error; }
         await rename(partial, filename);
-        change({ phase: 'ready', filename });
+        change({ phase: 'ready', filename, received: release.size });
       } catch (error) {
-        await rm(partial, { force: true }).catch(() => {});
         change({ phase: 'error', error: errorMessage(error) });
-      } finally { busy = false; }
+      } finally { busy = false; controller = null; }
       return state;
     },
   };

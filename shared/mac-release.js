@@ -13,7 +13,17 @@ export function validateRelease(value) {
   }
   const expected = `https://github.com/${RELEASE_REPOSITORY}/releases/download/mac-${value.commit}/Esquila-${value.version}-arm64.dmg`;
   if (value.url !== expected) throw new Error('La dirección del instalador no es válida.');
-  return { schema: 1, version: value.version, build: value.build, commit: value.commit,
+  let automatic;
+  if (value.automatic !== undefined) {
+    const a = value.automatic;
+    if (!a || a.url !== expected.replace(/\.dmg$/, '.zip') ||
+        !/^[a-f0-9]{64}$/.test(a.sha256) || !Number.isSafeInteger(a.size) ||
+        a.size < 1 || a.size > MAX_INSTALLER_BYTES || !/^[A-Z0-9]{10}$/.test(a.teamId)) {
+      throw new Error('Los datos del instalador firmado no son válidos.');
+    }
+    automatic = { url: a.url, sha256: a.sha256, size: a.size, teamId: a.teamId };
+  }
+  return { ...(automatic ? { automatic } : {}), schema: 1, version: value.version, build: value.build, commit: value.commit,
     platform: 'darwin', arch: 'arm64', sha256: value.sha256, size: value.size,
     publishedAt: value.publishedAt, url: value.url };
 }

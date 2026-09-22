@@ -65,11 +65,12 @@ jobs:
   mac-installer:
     name: Apple Silicon installer
     runs-on: macos-14
-    timeout-minutes: 20
+    timeout-minutes: 45
     env:
       # electron-builder skips even ad-hoc signing for pull-request builds unless
-      # this is set. This job uses identity "-" and receives no signing secrets.
+      # this is set. PRs use identity "-" and receive no signing secrets.
       CSC_FOR_PULL_REQUEST: true
+      ESQUILA_SIGNED_RELEASE: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
@@ -77,6 +78,23 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Load production signing credentials
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          node --input-type=module <<'NODE'
+          import fs from 'node:fs';
+          for (const name of ['CSC_LINK', 'CSC_KEY_PASSWORD', 'APPLE_ID', 'APPLE_APP_SPECIFIC_PASSWORD', 'APPLE_TEAM_ID']) {
+            const value = process.env[name];
+            if (!value || /[\r\n]/.test(value)) throw new Error(`Missing/invalid signing secret: ${name}`);
+            fs.appendFileSync(process.env.GITHUB_ENV, `${name}=${value}\n`);
+          }
+          NODE
       - name: Stamp Mac release identity
         run: node scripts/mac-release.mjs identity
       - run: npm run build:mac:arm64
@@ -84,9 +102,17 @@ jobs:
         run: |
           file dist-mac/mac-arm64/Esquila.app/Contents/MacOS/Esquila | grep -q arm64
           codesign --verify --deep --strict dist-mac/mac-arm64/Esquila.app
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NSAppTransportSecurity:NSAllowsArbitraryLoads' dist-mac/mac-arm64/Esquila.app/Contents/Info.plist)" = "false"
           hdiutil verify dist-mac/Esquila-*-arm64.dmg
           test "$(/usr/libexec/PlistBuddy -c 'Print :NSBonjourServices:0' dist-mac/mac-arm64/Esquila.app/Contents/Info.plist)" = "_http._tcp"
           /usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' dist-mac/mac-arm64/Esquila.app/Contents/Info.plist | grep -q WiFi
+      - name: Verify Developer ID and stapled notarization
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          codesign -dvv dist-mac/mac-arm64/Esquila.app 2>&1 | grep -F "TeamIdentifier=$APPLE_TEAM_ID"
+          codesign -dvv dist-mac/mac-arm64/Esquila.app 2>&1 | grep -F 'Authority=Developer ID Application:'
+          xcrun stapler validate dist-mac/mac-arm64/Esquila.app
+          spctl --assess --type execute --verbose dist-mac/mac-arm64/Esquila.app
       - name: Generate verified update metadata
         run: |
           export RELEASE_PUBLISHED_AT="$(git show -s --format=%cI HEAD)"
@@ -124,6 +150,7 @@ jobs:
       - name: Publish installer and prepare cloud update feed
         env:
           GH_TOKEN: ${{ github.token }}
+          ESQUILA_SIGNED_RELEASE: 1
         run: node scripts/publish-mac-release.mjs release-assets
       - name: Install Fly CLI
         uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1

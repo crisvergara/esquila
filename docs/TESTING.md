@@ -37,7 +37,7 @@ worker/retry (removed afterward), and configurable non-production ports. It refu
 
 ## Apple Silicon installer
 
-This job runs on macOS and builds only the ARM64 DMG/ZIP. It verifies the executable architecture, ad-hoc signature, DMG checksum, Bonjour service declaration, and local-network permission description.
+This job runs on macOS and builds only the ARM64 DMG/ZIP. It verifies the executable architecture, code signature (ad-hoc on PRs; Developer ID plus notarization on main), DMG checksum, Bonjour service declaration, and local-network permission description.
 
 The Mac window lifecycle is indirectly covered by the same ranch server and browser onboarding contracts. A fully automated macOS GUI test is intentionally omitted because login-item, tray, fullscreen, and local-network permission dialogs are controlled by macOS and are substantially less reliable on headless GitHub runners. Those remain release-candidate smoke tests on a real Mac.
 
@@ -46,7 +46,10 @@ version/build rollback rejection, offline checks, concurrent requests, permitted
 redirects, corrupt/partial/oversized installers, cached-file tampering, generated
 build identity, and release publication/retry behavior using a fake GitHub CLI.
 No publication test writes to GitHub. Native notification permissions, opening a
-DMG, and dragging the replacement application remain real-Mac smoke checks.
+DMG, native signed replacement/relaunch, Keychain continuity, and LAN permissions
+remain real-Mac smoke checks. Updater tests additionally cover resumable signed
+ZIPs across restart, ignored/invalid ranges, signing-team fallback, native handoff,
+corrupt-cache rejection, timeout/error cleanup, and no quit during staging.
 
 ## Delivery on main
 

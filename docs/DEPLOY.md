@@ -104,8 +104,8 @@ Fly token.
 1. `Application and offline E2E` runs the builds, audits, and regression suite.
 2. `Apple Silicon installer` builds and verifies the ARM64 DMG/ZIP, then uploads
    them as `Esquila-mac-arm64-<commit SHA>` under the workflow run's **Artifacts**.
-   Downloads are retained for 30 days. Install these ad-hoc signed packages
-   manually on the ranch Mac.
+   Downloads are retained for 30 days. Main builds are Developer ID signed and
+   notarized; PR builds remain ad-hoc and receive no Apple secrets.
 3. After both checks succeed, `Deploy cloud to Fly.io` downloads the verified
    artifacts and publishes a GitHub Release tagged `mac-<commit SHA>`. It then
    deploys the same commit using `fly.toml` and verifies `/healthz` and the exact
@@ -268,3 +268,42 @@ fly secrets set PUBLIC_URL='https://esquila.yourdomain.com'
 - **Cost watch**: `fly dashboard` shows usage. The only surprise charges to
   avoid are a dedicated IPv4 ($2/mo) and extra machines (`fly scale count 1`
   should stay at 1).
+
+## Apple signing setup
+
+Production builds fail closed unless all five GitHub Actions secrets exist:
+
+| Secret | Value |
+|---|---|
+| `MAC_CSC_LINK` | Base64 PKCS#12 containing the Developer ID Application certificate and private key |
+| `MAC_CSC_KEY_PASSWORD` | PKCS#12 export password |
+| `APPLE_ID` | Developer account email |
+| `APPLE_APP_SPECIFIC_PASSWORD` | App-specific password used by Apple's notarization service |
+| `APPLE_TEAM_ID` | Ten-character developer team identifier |
+
+Create a **Developer ID Application** certificate (G2) in the Apple developer
+portal from a locally generated CSR. Back up its private key and export password
+securely outside the repository. Do not use Apple Development, Apple Distribution,
+or Developer ID Installer certificates for this app. Generate an app-specific
+password at account.apple.com. `scripts/configure-apple-signing.sh` reads these
+values in a private local terminal and pipes them directly into GitHub secrets;
+it does not print passwords. Do not paste them into chat or commit them.
+
+The main build uses hardened runtime and the Electron JIT entitlement, signs all
+bundled code, notarizes/staples the app, and checks Developer ID/team identity,
+Gatekeeper acceptance and stapling before generating the public manifest. Both
+DMG and ZIP hashes are verified before publication and on immutable release
+reuse. Missing credentials or notarization failures block publication/deployment.
+PR checks retain their existing required names and do not use these secrets.
+
+Before the first production rollout, manually install the signed DMG on a test
+Mac and confirm LAN access, existing encrypted configuration, records and pending
+sync. Then install a second build through **Instalar y reiniciar**, checking that
+it relaunches with the newer build and identical ranch data. Unit mocks cannot
+prove macOS certificate trust or replacement permissions. Test a slow interrupted
+download and **Seguir contando** without any restart as well.
+
+Renew membership annually, monitor certificate expiry, and rotate notarization
+passwords when required. Preserve the team identity across releases. Revoke a
+compromised certificate and rotate the GitHub secrets; a team change requires a
+manual migration. A credential outage never stops already-installed counting.

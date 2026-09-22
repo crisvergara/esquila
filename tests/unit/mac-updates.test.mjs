@@ -79,7 +79,6 @@ test('downloads follow allowed redirects, verify contents, reuse cache, and dete
 });
 
 test('partial, corrupt, oversized, and unsafe downloads never become installable', async t => {
-  const directory = await temporary(t);
   for (const response of [
     () => new Response(bytes.subarray(0, 5)),
     () => new Response(Buffer.alloc(bytes.length)),
@@ -88,11 +87,14 @@ test('partial, corrupt, oversized, and unsafe downloads never become installable
     () => new Response(null, { status: 302, headers: { location: 'http://github.com/file' } }),
     () => { throw new TypeError('disconnected'); },
   ]) {
+    const directory = await temporary(t);
     const updater = createUpdater({ installed, directory, fetchImpl: async url => url === UPDATE_FEED_URL ? Response.json(release) : response() });
     await updater.check();
     assert.equal((await updater.download()).phase, 'error');
     assert.equal(updater.state.filename, null);
-    assert.deepEqual(await readdir(directory), []);
+    const files = await readdir(directory);
+    assert.ok(files.every(name => name.endsWith('.part')));
+    for (const name of files) assert.deepEqual(await readFile(path.join(directory, name)), bytes.subarray(0, 5));
   }
 });
 
@@ -132,4 +134,82 @@ test('cloud feed serves validated metadata without authentication and fails clos
   assert.deepEqual(await response.json(), release);
   await writeFile(file, JSON.stringify({ ...release, sha256: 'bad' }));
   assert.equal((await fetch(url)).status, 503);
+});
+
+const signedRelease = { ...release, automatic: { url: release.url.replace('.dmg', '.zip'),
+  sha256: release.sha256, size: release.size, teamId: 'ABCDEFGHIJ' } };
+
+test('signed payload validation rejects substituted ZIPs, sizes, digests and identities', () => {
+  assert.deepEqual(validateRelease(signedRelease), signedRelease);
+  for (const override of [{ url: release.url }, { sha256: 'bad' }, { size: 0 }, { teamId: 'bad' }]) {
+    assert.throws(() => validateRelease({ ...signedRelease, automatic: { ...signedRelease.automatic, ...override } }));
+  }
+});
+
+test('interrupted signed downloads resume across restart with progress and exact byte verification', async t => {
+  const directory = await temporary(t);
+  const states = [];
+  let interrupted = true;
+  const fetchImpl = async (url, options) => {
+    if (url === UPDATE_FEED_URL) return Response.json(signedRelease);
+    assert.equal(url, signedRelease.automatic.url);
+    if (interrupted) return new Response(bytes.subarray(0, 5));
+    assert.equal(options.headers.Range, 'bytes=5-');
+    return new Response(bytes.subarray(5), { status: 206, headers: { 'content-range': `bytes 5-${bytes.length - 1}/${bytes.length}` } });
+  };
+  let updater = createUpdater({ installed, directory, teamId: 'ABCDEFGHIJ', fetchImpl });
+  await updater.check();
+  assert.equal((await updater.download()).phase, 'error');
+  interrupted = false;
+  updater = createUpdater({ installed, directory, teamId: 'ABCDEFGHIJ', fetchImpl, onChange: state => states.push(state) });
+  await updater.check();
+  const result = await updater.download();
+  assert.equal(result.phase, 'ready');
+  assert.equal(result.automatic, true);
+  assert.ok(result.filename.endsWith('.zip'));
+  assert.deepEqual(await readFile(result.filename), bytes);
+  assert.ok(states.some(state => state.received === 5));
+  assert.equal(result.received, bytes.length);
+  assert.equal((await updater.check()).phase, 'ready');
+});
+
+test('range ignored restarts safely, invalid range fails, different signing team uses manual DMG', async t => {
+  for (const invalid of [false, true]) {
+    let first = true;
+    const updater = createUpdater({ installed, directory: await temporary(t), fetchImpl: async url => {
+      if (url === UPDATE_FEED_URL) return Response.json(release);
+      if (first) { first = false; return new Response(bytes.subarray(0, 5)); }
+      return invalid ? new Response(bytes, { status: 206, headers: { 'content-range': 'bytes 0-2/3' } }) : new Response(bytes);
+    } });
+    await updater.check(); await updater.download();
+    assert.equal((await updater.download()).phase, invalid ? 'error' : 'ready');
+  }
+  const updater = createUpdater({ installed, teamId: 'XXXXXXXXXX', directory: await temporary(t), fetchImpl: async url => {
+    if (url === UPDATE_FEED_URL) return Response.json(signedRelease);
+    assert.equal(url, release.url);
+    return new Response(bytes);
+  } });
+  await updater.check();
+  assert.equal((await updater.download()).automatic, false);
+});
+
+test('pause aborts an active transfer and leaves durable bytes for retry', async t => {
+  let streaming;
+  const began = new Promise(resolve => { streaming = resolve; });
+  const updater = createUpdater({ installed, directory: await temporary(t), fetchImpl: async (url, options) => {
+    if (url === UPDATE_FEED_URL) return Response.json(release);
+    return new Response(new ReadableStream({ start(controller) {
+      controller.enqueue(bytes.subarray(0, 5));
+      options.signal.addEventListener('abort', () => controller.error(options.signal.reason));
+    } }));
+  }, onChange: state => { if (state.received === 5) streaming(); } });
+  await updater.check();
+  const download = updater.download();
+  await began;
+  updater.pause();
+  const result = await download;
+  assert.equal(result.phase, 'error');
+  assert.match(result.error, /pausada/);
+  assert.equal(result.received, 5);
+  assert.equal(result.filename, null);
 });

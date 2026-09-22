@@ -8,10 +8,10 @@ required on the barn computer.
 
 1. Connect the MacBook to the barn WiFi using the normal WiFi menu.
 2. Open `Esquila.dmg`, then drag **Esquila** into **Applications**.
-3. Open Esquila from Applications. Because this first build is not signed,
-   macOS may block it the first time. Control-click **Esquila**, choose
-   **Open**, then choose **Open** again. When macOS asks whether Esquila may
-   find and communicate with devices on the local network, choose **Allow**.
+3. Open Esquila from Applications. Production releases from 0.1.7 are Developer
+   ID signed and notarized. Accept the normal first-open confirmation. When
+   macOS asks for local-network access, choose **Allow**. Older ad-hoc releases
+   may require Control-click → Open for the one-time migration.
 4. In the setup window:
    - enter the shearer names in station order;
    - enter the cloud sync URL and server token;
@@ -90,59 +90,52 @@ npm run build:mac:arm64   # Apple Silicon MacBook (M1/M2/M3/M4/M5)
 The DMG and ZIP are written to `dist-mac/`. They are deliberately ignored by
 Git because they are large generated artifacts.
 
-The local build is ad-hoc signed. Control-click/Open is adequate for a
-family-only deployment. For normal double-click installation, obtain an Apple
-Developer ID certificate, replace the ad-hoc `"identity": "-"` setting, and
-configure Electron Builder signing/notarization credentials.
+Local and PR builds use ad-hoc signing without Apple credentials. Production
+main builds require Developer ID signing and notarization; missing credentials
+fail the release rather than silently publishing an unsigned application.
+See [Apple signing setup](../docs/DEPLOY.md#apple-signing-setup).
 
 ## Updating the barn Mac
 
-Download the DMG from the latest successful **Checks and delivery** run on
-`main` in GitHub Actions (under **Artifacts → Esquila-mac-arm64-<commit SHA>**),
-or build locally. Quit the old Esquila app and drag the new app over the
-old one in Applications. The database and configuration remain untouched in
-Application Support.
+Choose **Buscar actualizaciones…** from the sheep menu. A dedicated window shows
+percentage and downloaded/total MB, with **Pausar descarga** and **Reintentar /
+continuar descarga**. Closing this window leaves the download running; reopen it
+from the sheep menu. Interrupted bytes survive app restarts in
+`~/Library/Application Support/Esquila/updates/`. Downloads have a two-minute
+inactivity deadline, not a total time limit. If the host cannot resume, the
+transfer starts over safely. Completed downloads are verified and cached.
 
-Starting with version 0.1.4, the sheep menu includes **Buscar actualizaciones…**.
-The packaged Apple Silicon app also checks 30 seconds after opening and every
-six hours, and displays a macOS notification once per new build (subject to
-macOS notification permissions). The menu offers **Actualizar a <versión>…**
-when the remote server advertises a newer build. Internet failures never stop
-or delay counting; you can retry manually.
+Once ready, choose **Instalar y reiniciar**, then confirm when counting can pause.
+The signed application is replaced and relaunched without dragging a DMG.
+**Seguir contando** leaves the update downloaded without scheduling installation.
+Checking or downloading never stops the barn server. Local data, pending sync,
+and encrypted configuration stay in Application Support outside the app bundle.
 
-The update is downloaded from this repository's public GitHub Releases and
-verified against the size and SHA-256 digest advertised by the cloud. Downloading
-keeps the barn server running. Choose **Seguir contando** to install later; a
-verified download is reused. When ready between shearing sessions, choose
-**Abrir instalador y cerrar Esquila**, drag Esquila into Applications, accept
-**Replace**, and reopen it. This is a guided manual replacement, not unattended
-installation. The old app remains installed until you replace it, and the
-Application Support database/configuration are preserved.
+### One-time migration and maintenance
 
-The current 0.1.3 installation needs one manual upgrade to gain these options.
-Local development runs and Intel builds do not check for updates. The feed is
-fixed to `https://esquila-cloud.fly.dev/api/updates/mac`; custom deployments
-must change `shared/mac-release.js` and rebuild.
-
-### Maintenance and tradeoffs
-
-- Builds are distinguished by the CI run number as well as the package version;
-  every successful push can be offered without manually bumping the version.
-  Keep increasing CI build numbers if the workflow is migrated. Older builds
-  and lower package versions are never offered as upgrades after a cloud rollback.
-- Release assets are public and must remain available. Do not delete or replace
-  a published release that the cloud advertises. CI reruns reuse published bytes.
-- Each download can be hundreds of MB. Interrupted downloads restart; completed
-  verified installers are cached in Application Support/Esquila/updates. Old
-  cached installers can be removed manually when disk space is needed.
-- HTTPS, the pinned repository, and checksums protect transport and integrity;
-  the checksum is not an independent publisher signature. Keep GitHub and Fly
-  deployment access secure. Ad-hoc signing may still require macOS's first-open
-  confirmation. Unattended signed updates remain a future option requiring
-  Developer ID signing, notarization, and maintained Apple credentials.
-- Notifications do not force an update. Installation briefly stops LAN counting,
-  so do it between sessions and keep normal backups before upgrading. A rollback
-  of the cloud does not roll back an already-installed Mac database migration.
+- Existing ad-hoc installations need one manual replacement with the signed DMG.
+  Their existing update menu still downloads that DMG. Quit Esquila, drag the new
+  app into Applications, replace, and reopen. Keep the same macOS user account;
+  confirm Keychain or local-network access prompts if macOS presents them.
+- Signed builds use the verified ZIP for native updates only when its Apple team
+  matches the installed build. A different team uses the explicit manual DMG
+  fallback. Never change signing identity casually.
+- The app checks after 30 seconds and every six hours. Checks notify; downloading
+  and installation are operator actions. Neither a cloud outage nor an update
+  check affects offline counting. No GitHub account is needed for downloads.
+- Every release retains an increasing CI build number, even if its package
+  version does not change. Cloud rollback never offers older builds.
+- Keep membership, certificates, and notarization credentials current. Failed
+  signing/notarization blocks new releases and cloud deployment, not existing
+  ranch operation. Retain published assets; do not replace their bytes.
+- Allow disk space for the ZIP, extracted replacement, and current app. Old
+  downloads can be removed from the updates folder when Esquila is closed.
+- Installation briefly stops counting; choose any convenient pause, not
+  necessarily a different season. Keep normal backups. App rollback does not
+  undo database migrations.
+- Test each first signed release and signing-identity change on a real Mac:
+  first launch, local-network access, encrypted token access, counting, update
+  restart, login item, and preservation of existing records and pending sync.
 
 ## Operational notes
 
