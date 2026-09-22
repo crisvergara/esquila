@@ -13,11 +13,22 @@ required on the barn computer.
    macOS asks for local-network access, choose **Allow**. Older ad-hoc releases
    may require Control-click → Open for the one-time migration.
 4. In the setup window:
-   - enter the shearer names in station order;
-   - enter the cloud sync URL and server token;
-   - enter the vaccination-app URL (normally the same cloud URL);
+   - enter the cloud sync URL and server token from the remote admin;
+   - choose **Cargar configuración del galpón** and review its name and stations;
+   - publish that server's configuration in `/admin` first if prompted;
+   - the vaccination-app URL defaults to the same cloud URL;
    - leave **Start Esquila automatically** selected.
 5. Choose **Save and open monitor**. The monitor fills the screen.
+
+The first enrollment needs internet. Later launches and counting use the saved
+manifest without internet. Existing installations import their current station
+names on their first configuration sync unless an administrator already
+published settings. Choose **Administrar este galpón en la nube…** in the sheep
+menu to edit colors, stations, tag formats and surveys for this exact server.
+The browser uses the normal admin login; the menu link contains no credential.
+See [remote configuration](../docs/RANCH_CONFIGURATION.md) for delivery status,
+retiring options and historical station names. Standalone, unregistered installs
+can still use the local station setup by leaving the cloud URL empty.
 
 Closing the monitor does **not** stop the server. Esquila remains available
 from the sheep icon in the macOS menu bar. That menu can reopen the monitor,
@@ -65,8 +76,8 @@ The app stores its data outside the application bundle:
 
 ```text
 ~/Library/Application Support/Esquila/
-├── esquila          # SQLite database
-├── shearers.json    # editable station names
+├── esquila          # SQLite records, outbox and durable manifest versions
+├── shearers.json    # legacy/bootstrap station names
 ├── config.json      # configuration; sync token encrypted by macOS
 └── esquila.log      # local diagnostics
 ```

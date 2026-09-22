@@ -46,6 +46,18 @@
           "text": "#282c34"
         },
         {
+          "name": "Verde",
+          "value": "green",
+          "color": "#25d342",
+          "text": "#282c34"
+        },
+        {
+          "name": "Negro",
+          "value": "black",
+          "color": "#161616",
+          "text": "#ffffff"
+        },
+        {
           "name": "No Hay",
           "value": "none",
           "color": "#000000",
@@ -179,6 +191,12 @@
           "value": "pink",
           "color": "#f55a9a",
           "text": "#282c34"
+        },
+        {
+          "name": "Negro",
+          "value": "black",
+          "color": "#161616",
+          "text": "#ffffff"
         },
         {
           "name": "No Hay",

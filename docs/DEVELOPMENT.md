@@ -55,7 +55,7 @@ test report, or commit.
 | `ESQUILA_DATA_DIR` | Tests/Mac internals only | Overrides Electron user-data location for isolated runs |
 
 The barn process uses its working directory for the `esquila` SQLite file and
-live `shearers.json`. The Mac wrapper deliberately starts it in Application
+legacy/bootstrap `shearers.json`. Runtime manifests are stored in SQLite. The Mac wrapper deliberately starts it in Application
 Support; do not replace those paths with repository-relative assumptions.
 
 ### Cloud server
@@ -122,11 +122,14 @@ Support; do not replace those paths with repository-relative assumptions.
 
 ## Adding or changing a mode
 
-`tagger/modeschema.json` defines mode type, bulk behavior, tag prefixes/colors,
-and surveys. A mode change must be reflected in server-side validation and
-count-stat handling, remain compatible with historical rows, render in tagger
-and monitors, and receive E2E coverage. Unknown modes and invalid survey values
-must continue to fail closed.
+`tagger/modeschema.json` supplies bootstrap defaults; cloud manifests configure
+colors, prefixes, digit limits and survey options per server. Shared schema
+validation lives in `shared/ranch-configuration.js`. The three animal types and
+survey database fields remain fixed. A new type/field requires changes to server
+validation, persistence, stats, clients, sync and regression coverage. Retiring
+an option must preserve its historical identity and in-progress submissions.
+Unknown modes, unknown revisions and invalid survey values fail closed. See
+[RANCH_CONFIGURATION.md](RANCH_CONFIGURATION.md).
 
 ## Definition of done
 

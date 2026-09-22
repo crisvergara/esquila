@@ -18,7 +18,9 @@ form.addEventListener("submit", async (event) => {
         ? "Demasiados intentos. Espera 15 minutos."
         : (body.error === "invalid password" ? "Contraseña incorrecta." : "No se pudo iniciar sesión."));
     }
-    location.replace("/admin");
+    // A same-URL replace with a fragment can stay on the login document.
+    // Reload retains the ranch selection and requests the authenticated page.
+    location.reload();
   } catch (err) {
     error.textContent = err.message;
     submit.disabled = false;

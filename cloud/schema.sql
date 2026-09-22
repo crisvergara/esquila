@@ -99,3 +99,20 @@ CREATE TABLE IF NOT EXISTS ranch_status (
 CREATE TABLE IF NOT EXISTS admin_record_mutations (
   id text PRIMARY KEY, request jsonb NOT NULL, result jsonb NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS ranch_configurations (
+  device_id uuid PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,
+  revision int NOT NULL CHECK (revision > 0), configuration jsonb NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  applied_revision int NOT NULL DEFAULT 0, checked_at timestamptz
+);
+CREATE TABLE IF NOT EXISTS ranch_configuration_history (
+  device_id uuid NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  revision int NOT NULL, configuration jsonb NOT NULL, source text NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(device_id, revision)
+);
+CREATE TABLE IF NOT EXISTS ranch_configuration_receipts (
+  device_id uuid NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+  id text NOT NULL, request jsonb NOT NULL, result jsonb NOT NULL,
+  PRIMARY KEY(device_id, id)
+);

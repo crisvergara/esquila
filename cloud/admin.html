@@ -6,6 +6,7 @@
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" />
   <title>Esquila — Administración</title>
   <style>
+    * { box-sizing: border-box; }
     body { font-family: system-ui, sans-serif; background: #1a1a1a; color: #eee; max-width: 1200px; margin: 0 auto; padding: 1rem; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
     h1 { font-size: 1.3rem; }
@@ -27,6 +28,20 @@
     label { display: inline-flex; flex-direction: column; gap: .3rem; }
     #ranch-servers li { margin-bottom: .7rem; }
     pre { white-space: pre-wrap; overflow-wrap: anywhere; }
+    a { color: #91d6ff; }
+    #configuration { margin: 1.5rem 0; padding: 1.2rem; border: 1px solid #555; border-radius: 12px; }
+    #configuration-fields { border: 0; padding: 0; min-width: 0; }
+    .config-choice { display: flex; flex-wrap: wrap; align-items: end; gap: .7rem; margin: .7rem 0; }
+    .config-choice input[type=color] { min-height: 44px; width: 76px; }
+    .config-choice label:first-child { flex: 1; min-width: min(100%, 180px); max-width: 22rem; }
+    #configuration input[type=text] { width: 100%; min-width: 0; }
+    #configuration-fields > label:first-child { display: flex; max-width: 32rem; }
+    .config-choice button { min-height: 44px; }
+    .retired { opacity: .65; }
+    .config-swatch { padding: .65rem 1rem; border-radius: 6px; border: 1px solid #888; }
+    #configuration details { margin: 1rem 0; padding: 1rem; border: 1px solid #555; border-radius: 8px; }
+    #configuration summary { cursor: pointer; font-size: 1.2rem; font-weight: bold; }
+    .config-options { margin-bottom: 1.4rem; }
   </style>
 </head>
 <body>
@@ -34,6 +49,19 @@
     <h1>Esquila — Administración</h1>
     <button class="quiet" id="logout">Cerrar sesión</button>
   </header>
+  <section id="configuration" aria-labelledby="configuration-title">
+    <h2 id="configuration-title">Configuración de galpones</h2>
+    <p>Configura las estaciones, los colores, los códigos y las preguntas de cada servidor. El galpón guarda una copia y sigue contando sin internet.</p>
+    <label>Servidor del galpón<select id="configuration-server"></select></label>
+    <p id="configuration-status" role="status"></p>
+    <p id="configuration-error" class="error" role="alert"></p>
+    <div id="configuration-retry"></div>
+    <form id="configuration-form" hidden>
+      <fieldset id="configuration-fields"></fieldset>
+      <p class="muted">Quitar colores o respuestas los oculta para nuevos conteos; los registros anteriores se conservan. Un animal en curso termina con la configuración con que se inició.</p>
+      <div class="row"><button id="configuration-save">Publicar configuración</button><button type="button" id="configuration-reload">Recargar configuración</button></div>
+    </form>
+  </section>
   <section aria-labelledby="ranch-heading">
     <h2 id="ranch-heading">Galpón — Monitor y registros</h2>
     <p>Datos recibidos en la nube. Durante una desconexión, los conteos del galpón siguen funcionando y aparecerán aquí al sincronizar.</p>
@@ -45,7 +73,7 @@
       <label><span>Incluir eliminados</span><input id="ranch-deleted" type="checkbox"></label>
       <button>Buscar / Actualizar</button><button type="button" id="ranch-add">Agregar registro</button>
     </form>
-    <p class="muted">El monitor cuenta registros por estación; los nombres corresponden a la configuración más reciente, incluso al consultar fechas anteriores.</p>
+    <p class="muted">El rebaño y sus registros son compartidos por los servidores. El monitor usa los nombres del galpón seleccionado, incluso al consultar fechas anteriores.</p>
     <div class="scroll"><table aria-label="Monitor por esquilador"><thead><tr><th>Esquilador / estación</th><th>Ovejas</th><th>Carneros</th><th>Corderos</th><th>Total</th></tr></thead><tbody id="ranch-totals"></tbody></table></div>
     <p id="ranch-summary" role="status"></p>
     <div class="scroll"><table aria-label="Registros de esquila"><thead><tr><th>Fecha (Chile)</th><th>Código</th><th>Estación</th><th>Tipo</th><th>Color</th><th>Lana</th><th>Lactancia</th><th>Sincronización</th><th>Acciones</th></tr></thead><tbody id="ranch-rows"></tbody></table></div>
@@ -85,6 +113,6 @@
     <tbody id="devices"></tbody>
   </table>
   <p class="muted">Los tokens solo se muestran una vez, al crear el dispositivo. Para revocar acceso, elimina el dispositivo.</p>
-  <script src="/admin.js"></script>
+  <script type="module" src="/admin.js"></script>
 </body>
 </html>

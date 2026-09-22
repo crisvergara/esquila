@@ -1,6 +1,8 @@
 import React from "react";
+import useTagColors from '../hooks/useTagColors';
 
 function StationSelect({ setStation, counts, shearers }) {
+  const colorStyle = useTagColors();
   return (
     <>
       <header className="App-header">
@@ -8,13 +10,14 @@ function StationSelect({ setStation, counts, shearers }) {
       </header>
       <section className="Station-buttons">
         {shearers.map((shearer, index) => {
+          if (shearer.active === false) return null;
           const count = counts[index + 1] ?? {
             lastTag: "",
             lastTagColor: "none",
           };
           return (
             <React.Fragment key={index}>
-              <div className={`Tag-Display-${count.lastTagColor}`}>
+              <div className="Tag-Display-none" style={colorStyle(count)}>
                 {count.lastTag}
               </div>
               <button onClick={() => setStation(index + 1)}>
