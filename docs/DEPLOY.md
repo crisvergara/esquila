@@ -289,6 +289,25 @@ password at account.apple.com. `scripts/configure-apple-signing.sh` reads these
 values in a private local terminal and pipes them directly into GitHub secrets;
 it does not print passwords. Do not paste them into chat or commit them.
 
+When exporting with OpenSSL 3, use a macOS-compatible PKCS#12 rather than its
+PBES2 default. The default can produce `MAC verification failed` in macOS
+`security import` even with the correct password. Keychain Access exports are
+also supported. For an existing private key and PEM certificate, use:
+
+```sh
+openssl pkcs12 -export -inkey /secure/path/developer-id.key \
+  -in /secure/path/developer-id.pem -out /secure/path/developer-id.p12 \
+  -passout file:/secure/path/export-password \
+  -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1
+```
+
+These options apply only to the encrypted certificate transport container, not
+the application's code signature. Keep the container and password private and
+verify import in an isolated Mac keychain before uploading them to GitHub.
+After correcting a credential-only failure, rerun failed jobs; no code change
+or version bump is needed. Deployment remains blocked until verification passes.
+
+
 The main build uses hardened runtime and the Electron JIT entitlement, signs all
 bundled code, notarizes/staples the app, and checks Developer ID/team identity,
 Gatekeeper acceptance and stapling before generating the public manifest. Both
