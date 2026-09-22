@@ -56,6 +56,10 @@ can be maintained without turning this file into a second README.
    must leave the barn server running. Quitting to install requires explicit
    operator action, and application replacement must preserve ranch data.
 
+10. **Background hosting stays awake.** The Mac shell prevents automatic idle
+    sleep while it is running, including with all windows closed. Preserve
+    display sleep and screen locking, and release the assertion when it exits.
+
 ## Working agreement for future sessions
 
 Before editing:

@@ -32,6 +32,12 @@ Internet                         Cloud service ─> PostgreSQL
 The Raspberry Pi files remain a supported fallback, but the Apple Silicon Mac
 application is the preferred barn deployment.
 
+The Mac shell holds a `prevent-app-suspension` power assertion while hosting,
+including with all windows closed and during child-process recovery. Normal
+idle sleep must not take the barn server offline. The assertion ends on app
+exit; display sleep and screen locking remain available. Explicit system sleep,
+lid closure, shutdown, and battery exhaustion can still interrupt LAN service.
+
 ## Data ownership and identity
 
 - `counts` in barn SQLite and authenticated cloud administrators may originate

@@ -142,8 +142,12 @@ and encrypted configuration stay in Application Support outside the app bundle.
 - The app listens on port 3001 on the Mac's network interfaces.
 - macOS may ask whether Esquila may accept incoming connections; choose
   **Allow**, otherwise phones cannot reach it.
-- Prevent sleep while plugged in under **System Settings → Lock Screen** so
-  the server stays reachable during a shearing event.
+- Esquila prevents automatic idle sleep while it is open, including when all
+  windows are closed and only the sheep menu remains. The display can still
+  turn off and lock. Quit Esquila to restore normal idle sleep. Keep the Mac
+  plugged in during shearing: serving on battery uses extra power. Keep its lid
+  open; closing it or explicitly choosing Sleep can still make phones lose
+  access. Releases through 0.1.7 require the operator to prevent idle sleep.
 - The fullscreen window can be toggled with `Control-Command-F`.
 - If port 3001 is already occupied, quit the other process before opening
   Esquila.
@@ -175,6 +179,21 @@ in the cloud admin history. No remote edit restarts or updates this application.
    guest/client-isolation settings. Confirm Esquila is enabled in macOS
    **Privacy & Security → Local Network**, and allow its incoming connections
    if the Mac firewall is enabled. Keep the Mac awake while counting.
+5. To separate browser delays from server delays, open
+   `http://<current-Mac-IP>:3001/healthz` on another device. It returns
+   `{"ok":true}` without loading the tagger or contacting the cloud. On another
+   Mac, the following reports connection and first-response times:
+
+   ```sh
+   curl --noproxy '*' --connect-timeout 10 --max-time 15 \
+     -w '\nconnect=%{time_connect}s first_byte=%{time_starttransfer}s total=%{time_total}s\n' \
+     http://<current-Mac-IP>:3001/healthz
+   ```
+
+   A quick curl response with a slow browser points to the browser's connection
+   path (for example, an HTTPS upgrade or proxy), rather than tagger startup.
+   An unreachable address or connection timeout occurs before an HTTP response;
+   confirm the current address, WiFi reachability, and whether the Mac is asleep.
 
 The setup page verifies the advertised address, not a connection from the phone.
 Only seeing the shearer names on the phone confirms that path works. No internet
