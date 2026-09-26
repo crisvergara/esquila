@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { createUpdater, verifyInstaller } from "./updater.js";
 import { stageNativeUpdate } from "./native-update.js";
+import { cloudOrigin, fetchRanchManifest, ranchAdminUrl } from './ranch-connection.js';
 
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SERVER_PORT = 3001;
@@ -57,6 +58,7 @@ async function readConfig() {
         : parsed.cloudSyncToken || "",
       cloudAppUrl: parsed.cloudAppUrl || "",
       configured: parsed.configured === true,
+      initialManifest: parsed.initialManifest || null,
     };
   } catch {
     return { cloudSyncUrl: "", cloudSyncToken: "", cloudAppUrl: "", configured: false };
@@ -86,6 +88,7 @@ function startServer(config) {
       CLOUD_SYNC_URL: config.cloudSyncUrl,
       CLOUD_SYNC_TOKEN: config.cloudSyncToken,
       CLOUD_APP_URL: config.cloudAppUrl,
+      ESQUILA_INITIAL_MANIFEST: config.initialManifest ? JSON.stringify(config.initialManifest) : '',
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -380,6 +383,7 @@ function buildTray() {
       { label: "Abrir monitor", click: createMonitorWindow },
       { label: "Registros recientes…", click: createRecordsWindow },
       { label: "Configuración…", click: createSettingsWindow },
+      { label: 'Administrar este galpón en la nube…', enabled: Boolean(activeConfig?.cloudSyncUrl), click: () => openRanchAdmin() },
       { label: "Configurar teléfonos…", click: createTaggerSetupWindow },
       { label: "Abrir tagger en este Mac", click: () => shell.openExternal(`${SERVER_ORIGIN}/tagger`) },
       { type: "separator" },
@@ -408,11 +412,33 @@ function buildTray() {
   rebuildMenu();
 }
 
-ipcMain.handle("settings:load", async () => {
+async function openRanchAdmin() {
+  try {
+    const local = await fetch(`${SERVER_ORIGIN}/api/configuration`, { signal: AbortSignal.timeout(5000) }).then(r => r.json());
+    await shell.openExternal(ranchAdminUrl(activeConfig.cloudSyncUrl, local.deviceId));
+  } catch (error) { dialog.showErrorBox('Administración del galpón', error.message); }
+}
+function requireSettingsWindow(event) {
+  if (!settingsWindow || event.sender !== settingsWindow.webContents || event.senderFrame !== settingsWindow.webContents.mainFrame) throw new Error('Ventana no autorizada.');
+}
+ipcMain.handle('settings:preview', async (event, values) => {
+  requireSettingsWindow(event);
+  const previous = await readConfig();
+  const origin = cloudOrigin(values.cloudSyncUrl);
+  const token = String(values.cloudSyncToken || '').trim() || (origin === previous.cloudSyncUrl ? previous.cloudSyncToken : '');
+  const manifest = await fetchRanchManifest(origin, token);
+  return { manifest, adminUrl: ranchAdminUrl(origin, manifest.deviceId) };
+});
+ipcMain.handle('settings:admin', async event => { requireSettingsWindow(event); await openRanchAdmin(); });
+ipcMain.handle("settings:load", async event => {
+  requireSettingsWindow(event);
   const config = await readConfig();
   let shearers = [];
+  let manifest = null;
   try {
-    shearers = await fetch(`${SERVER_ORIGIN}/shearers`).then((res) => res.json());
+    const local = await fetch(`${SERVER_ORIGIN}/api/configuration`, { signal: AbortSignal.timeout(5000) }).then(res => res.json());
+    shearers = local.configuration.shearers;
+    if (local.revision) manifest = local;
   } catch {}
   return {
     cloudSyncUrl: config.cloudSyncUrl,
@@ -420,46 +446,57 @@ ipcMain.handle("settings:load", async () => {
     hasCloudSyncToken: Boolean(config.cloudSyncToken),
     configured: config.configured,
     shearers,
+    manifest,
     openAtLogin: app.getLoginItemSettings().openAtLogin,
   };
 });
 
-ipcMain.handle("settings:save", async (_event, values) => {
+ipcMain.handle("settings:save", async (event, values) => {
+  requireSettingsWindow(event);
   const previous = await readConfig();
-  const names = Array.isArray(values.names) ? values.names.map((name) => name.trim()) : [];
-  if (names.length < 1 || names.length > 6 || names.some((name) => !name)) {
-    throw new Error("Ingresa entre 1 y 6 nombres.");
-  }
-  const cloudSyncUrl = String(values.cloudSyncUrl || "").trim().replace(/\/$/, "");
-  const cloudAppUrl = String(values.cloudAppUrl || "").trim().replace(/\/$/, "");
+  const cloudSyncUrl = values.cloudSyncUrl ? cloudOrigin(values.cloudSyncUrl) : '';
+  const cloudAppUrl = values.cloudAppUrl ? cloudOrigin(values.cloudAppUrl) : cloudSyncUrl;
   const newToken = String(values.cloudSyncToken || "").trim();
-  if ((cloudSyncUrl && !(newToken || previous.cloudSyncToken)) || (!cloudSyncUrl && newToken)) {
+  const token = newToken || (cloudSyncUrl === previous.cloudSyncUrl ? previous.cloudSyncToken : '');
+  if ((cloudSyncUrl && !token) || (!cloudSyncUrl && newToken)) {
     throw new Error("La dirección de sincronización y el token deben configurarse juntos.");
   }
-  const response = await fetch(`${SERVER_ORIGIN}/setup/shearers`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ names }),
-  });
-  if (!response.ok) throw new Error("No se pudieron guardar los esquiladores.");
+  const changedConnection = cloudSyncUrl !== previous.cloudSyncUrl || token !== previous.cloudSyncToken;
+  let initialManifest = cloudSyncUrl ? previous.initialManifest : null;
+  if (cloudSyncUrl && (changedConnection || !previous.configured)) {
+    initialManifest = await fetchRanchManifest(cloudSyncUrl, token);
+    if (values.confirmedDeviceId !== initialManifest.deviceId) throw new Error('Carga y revisa la configuración del galpón antes de guardar.');
+  }
+  if (!cloudSyncUrl) {
+    const names = Array.isArray(values.names) ? values.names.map(name => typeof name === 'string' ? name.trim() : '') : [];
+    if (names.length < 1 || names.length > 6 || names.some(name => !name || name.length > 80)) throw new Error('Ingresa entre 1 y 6 nombres para trabajar sin inscripción.');
+    if (previous.cloudSyncUrl) throw new Error('Conserva la conexión del galpón. No necesitas desconectarlo para trabajar sin internet.');
+    const response = await fetch(`${SERVER_ORIGIN}/setup/shearers`, {
+      method: 'POST', signal: AbortSignal.timeout(5000), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ names }),
+    });
+    if (!response.ok) throw new Error('No se pudieron guardar los esquiladores.');
+  }
   const config = {
     cloudSyncUrl,
-    cloudSyncToken: cloudSyncUrl ? (newToken || previous.cloudSyncToken) : "",
+    cloudSyncToken: cloudSyncUrl ? token : "",
     cloudAppUrl,
     configured: true,
+    initialManifest,
   };
   await writeConfig(config);
   const openAtLogin = values.openAtLogin === true;
   if (!usesIsolatedTestData && openAtLogin !== app.getLoginItemSettings().openAtLogin) {
     app.setLoginItemSettings({ openAtLogin, openAsHidden: true });
   }
-  await restartServer(config);
+  if (changedConnection || cloudAppUrl !== previous.cloudAppUrl || !previous.configured) await restartServer(config);
+  activeConfig = config; refreshTray();
   if (settingsWindow && !settingsWindow.isDestroyed()) settingsWindow.close();
   createMonitorWindow();
   return { ok: true };
 });
 
-ipcMain.handle("settings:clearToken", async () => {
+ipcMain.handle("settings:clearToken", async event => {
+  requireSettingsWindow(event);
   const config = await readConfig();
   config.cloudSyncToken = "";
   config.cloudSyncUrl = "";

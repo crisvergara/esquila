@@ -57,6 +57,21 @@ tests for both old and new data.
 
 ## Counting flow
 
+Each server has a cloud-owned, versioned configuration manifest containing its
+name, station slots and tagging schemas. See
+[RANCH_CONFIGURATION.md](RANCH_CONFIGURATION.md) for publication, enrollment,
+retirement and migration semantics. SQLite schema version 4 durably stores its
+versions, scoped by a hash of the cloud origin and credential. The independent
+configuration sync loop cannot block record synchronization. `/api/live` supplies
+the cached manifest when its device/revision identity changes, so field clients
+make no cloud request and avoid retransmitting unchanged schemas every second.
+
+Phones bind an in-progress entry to its starting configuration revision; the
+barn retains those versions for retry-safe validation after configuration
+changes and restarts. Retired color/prefix/survey values remain available to
+history, and retired station slots never renumber later stations. Current editor
+writes may preserve historical values; new records use active choices.
+
 1. The phone selects a station and follows the active mode from `/api/live`.
 2. It validates and submits a single `/count` or a `/bulk` request with a stable
    `submissionId`.
@@ -126,8 +141,9 @@ local outbox size, and cloud rows awaiting acknowledgement (including deletes).
 `GET /api/admin/shearing` filters by Chile date and code, returns 100 rows per
 page, and optionally includes tombstones. Monitor totals ignore the code filter
 and exclude deleted records. Both local and cloud monitors use `America/Santiago`.
-Station names come from the most recently reporting server; historical name
-assignments are not stored. Contact older than three minutes is marked stale;
+Station names and record-editor choices come from the selected server's
+published manifest, falling back to its last report for older installations;
+historical name assignments are not stored. Contact older than three minutes is marked stale;
 this is a synchronized monitor, not a cloud dependency in the LAN counting path.
 
 Admin writes use shared field validation, optimistic `updated_at` checks, and a

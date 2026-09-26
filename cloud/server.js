@@ -17,6 +17,7 @@ import pg from "pg";
 import QRCode from "qrcode";
 import { registerRanchManagement } from "./ranch-management.js";
 import { registerMacUpdates } from "./mac-updates.js";
+import { registerRanchConfiguration } from "./ranch-configuration.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BUILD_DIR = path.join(__dirname, "..", "build-cloud");
@@ -121,6 +122,8 @@ app.use((req, res, next) => {
   if (
     req.path === "/admin" ||
     req.path === "/admin.js" ||
+    req.path === "/admin-configuration.js" ||
+    req.path === "/configuration-schema.js" ||
     req.path === "/login.js" ||
     req.path.startsWith("/api/admin")
   ) {
@@ -186,6 +189,7 @@ const adminAuth = (req, res, next) => {
 // --------------------------------------------------------------------------
 
 registerRanchManagement(app, { pool, adminAuth, deviceAuth });
+registerRanchConfiguration(app, { pool, adminAuth, deviceAuth });
 
 const UPSERTS = {
   shearing_events: {
@@ -440,6 +444,8 @@ app.get("/admin", (req, res) => {
 app.get("/admin.js", (_req, res) => {
   res.type("application/javascript").sendFile(path.join(__dirname, "admin.js"));
 });
+app.get('/admin-configuration.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, 'admin-configuration.js')));
+app.get('/configuration-schema.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, '../shared/ranch-configuration.js')));
 
 app.get("/login.js", (_req, res) => {
   res.type("application/javascript").sendFile(path.join(__dirname, "login.js"));

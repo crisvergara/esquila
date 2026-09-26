@@ -161,7 +161,7 @@ test("migrates a legacy ranch database once and backs it up", async () => {
   await stopService(service);
 
   const migrated = new Database(legacyPath, { readonly: true });
-  expect(migrated.pragma("user_version", { simple: true })).toBe(3);
+  expect(migrated.pragma("user_version", { simple: true })).toBe(4);
   expect(migrated.prepare("SELECT COUNT(*) AS n FROM counts").get().n).toBe(1);
   expect(migrated.prepare("SELECT COUNT(*) AS n FROM treatments").get().n).toBe(1);
   expect(migrated.prepare("SELECT COUNT(*) AS n FROM sync_outbox").get().n).toBe(2);
@@ -222,6 +222,7 @@ test("tagger covers sheep, ram, bulk, live monitor, persistence, and ambiguous r
   await expect(tagger.getByText("Elija un color")).toBeVisible();
 
   await ranchPost("/mode", { mode: "carnero" });
+  await expect(tagger.getByLabel('Modo de conteo')).toHaveText('Carneros');
   await expect(tagger.getByRole("button", { name: "Verde", exact: true })).toBeVisible();
   await tagger.getByRole("button", { name: "Verde", exact: true }).click();
   await tagger.getByRole("button", { name: "AC", exact: true }).click();
@@ -293,7 +294,7 @@ test("ranch API rejects invalid data and keeps retries idempotent", async () => 
     ["too few digits", { ...valid, tag: "A1234" }],
     ["too many digits", { ...valid, tag: "A1234567" }],
     ["unknown prefix", { ...valid, tag: "Z12345" }],
-    ["invalid mode color", { ...valid, color: "green" }],
+    ["invalid mode color", { ...valid, color: "unconfigured-color" }],
     ["missing wool survey", { ...valid, woolQuality: undefined }],
     ["invalid wool survey", { ...valid, woolQuality: "PERFECT" }],
     ["missing lactation survey", { ...valid, lactation: undefined }],

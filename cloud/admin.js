@@ -1,3 +1,4 @@
+import { mountRanchConfiguration } from '/admin-configuration.js';
 const $ = (id) => document.getElementById(id);
 
 async function api(method, path, body) {
@@ -5,14 +6,15 @@ async function api(method, path, body) {
     method,
     headers: body ? { "Content-Type": "application/json" } : {},
     body: body ? JSON.stringify(body) : undefined,
+    signal: AbortSignal.timeout(15000),
   });
   if (response.status === 401) {
-    location.replace("/admin");
+    location.reload();
     throw new Error("Sesión vencida");
   }
   if (!response.ok) {
     const result = await response.json().catch(() => ({}));
-    throw new Error(result.error ?? `Error ${response.status}`);
+    throw Object.assign(new Error(result.error ?? `Error ${response.status}`), { status: response.status });
   }
   return response.json();
 }
@@ -61,9 +63,12 @@ async function createDevice() {
     const value = document.createElement("p");
     value.className = "token";
     if (device.role === "server") {
-      explanation.textContent = "Token para el servidor (CLOUD_SYNC_TOKEN):";
+      explanation.textContent = 'Primero publica la configuración de este galpón. Luego copia este token en la configuración de Esquila para descargarla:';
       value.textContent = device.token;
-      qr.append(explanation, value);
+      const link = document.createElement('a'); link.href = `/admin?server=${device.id}#configuration`; link.textContent = 'Configurar este galpón';
+      // Keep the one-time credential visible while configuring the new server.
+      link.onclick = event => { event.preventDefault(); location.hash = 'configuration'; $('configuration-server').value = device.id; $('configuration-server').dispatchEvent(new Event('change')); };
+      qr.append(explanation, value, link);
     } else {
       explanation.textContent = `Escanéalo con el teléfono de ${device.name}:`;
       const image = document.createElement("img");
@@ -74,6 +79,7 @@ async function createDevice() {
     }
     $("name").value = "";
     await loadDevices();
+    await loadRanch();
   } catch (err) {
     $("error").textContent = err.message;
   }
@@ -83,7 +89,12 @@ async function revoke(id) {
   $("error").textContent = "";
   try {
     await api("DELETE", `/api/admin/devices/${encodeURIComponent(id)}`);
+    if (new URL(location.href).searchParams.get('server') === id) {
+      location.replace('/admin#configuration');
+      return;
+    }
     await loadDevices();
+    await loadRanch();
   } catch (err) {
     $("error").textContent = err.message;
   }
@@ -105,7 +116,9 @@ let refreshRequested = false;
 let savingRecord = false;
 const attemptKey = 'esquila-admin-record-attempt';
 const dateText = value => value ? new Date(value).toLocaleString('es-CL', { timeZone: 'America/Santiago' }) : 'Sin contacto';
-const stationName = station => `${station}: ${ranchInfo?.servers[0]?.information?.shearers[station - 1]?.name || 'Sin nombre'}`;
+const selectedShearers = () => ranchInfo?.configuration?.shearers || ranchInfo?.servers.find(s => s.id === ranchInfo.selectedId)?.information?.shearers || [];
+const stationName = station => `${station}: ${selectedShearers()[station - 1]?.name || 'Sin nombre'}`;
+const configurationUI = mountRanchConfiguration({ api, onPublished: async () => { await loadDevices(); await loadRanch(); } });
 function button(text, action) {
   const element = document.createElement('button');
   element.type = 'button'; element.textContent = text; element.addEventListener('click', action);
@@ -119,16 +132,25 @@ function options(id, values, selected) {
 }
 function recordFields(row = {}) {
   const mode = ranchInfo.modes.find(m => m.type === $('record-type').value);
-  options('record-color', mode?.tagSchema?.colors || [{ value: 'none', name: 'No hay' }], row.color);
+  const available = values => {
+    const active = values.filter(v => v.active !== false || v.value === row.color || v.value === row.woolQuality || v.value === row.lactation);
+    return active;
+  };
+  const colors = available(mode?.tagSchema?.colors || [{ value: 'none', name: 'No hay' }]);
+  if (row.color && !colors.some(c => c.value === row.color)) colors.push({ value: row.color, name: `${row.color} (histórico)` });
+  options('record-color', colors, row.color);
   for (const [field, fallback] of [['woolQuality', 'IDK'], ['lactation', 'idk']]) {
-    options(`record-${field}`, mode?.surveySchema?.find(s => s.field === field)?.options || [{ value: fallback, name: 'No corresponde' }], row[field]);
+    const choices = available(mode?.surveySchema?.find(s => s.field === field)?.options || [{ value: fallback, name: 'No corresponde' }]);
+    if (row[field] && !choices.some(c => c.value === row[field])) choices.push({ value: row[field], name: `${row[field]} (histórico)` });
+    options(`record-${field}`, choices, row[field]);
   }
 }
 function openRecord(action, row = {}) {
-  editing = { action, ...(row.id ? { id: row.id, updated_at: row.updated_at } : {}) };
+  editing = { action, ...(ranchInfo.selectedId ? { serverId: ranchInfo.selectedId } : {}), ...(row.id ? { id: row.id, updated_at: row.updated_at } : {}) };
   $('editor-title').textContent = action === 'delete' ? `Eliminar ${row.tag}` : action === 'add' ? 'Agregar registro' : `Editar ${row.tag}`;
   $('editor-note').textContent = action === 'delete' ? 'El registro se eliminará de los conteos. El cambio llegará al galpón cuando vuelva a conectarse.' : 'Los cambios se guardan en la nube y llegan al galpón al sincronizar. Al editar se conserva la fecha original.';
-  options('record-station', Array.from({ length: ranchInfo.servers[0]?.information?.shearers.length || 6 }, (_, i) => ({ value: String(i + 1), name: stationName(i + 1) })), String(row.station || 1));
+  const stations = Array.from({ length: Math.max(selectedShearers().length || 6, row.station || 0) }, (_, i) => ({ value: String(i + 1), name: stationName(i + 1) })).filter(s => selectedShearers()[Number(s.value) - 1]?.active !== false || Number(s.value) === row.station);
+  options('record-station', stations, String(row.station || 1));
   $('record-tag').value = row.tag || ''; $('record-type').value = row.type || 'oveja'; recordFields(row);
   for (const el of $('record-form').querySelectorAll('input, select')) el.disabled = action === 'delete';
   $('record-save').textContent = action === 'delete' ? 'Confirmar eliminación' : 'Guardar';
@@ -150,7 +172,9 @@ async function loadRanch(initial = false) {
   if (loadingRanch) { refreshRequested = true; return; }
   loadingRanch = true;
   try {
-    ranchInfo = await api('GET', '/api/admin/ranch');
+    const server = new URL(location.href).searchParams.get('server');
+    ranchInfo = await api('GET', `/api/admin/ranch${server ? `?server=${encodeURIComponent(server)}` : ''}`);
+    configurationUI.setServers(ranchInfo.servers);
     if (initial) $('ranch-day').value = ranchInfo.day;
     $('ranch-servers').replaceChildren();
     for (const server of ranchInfo.servers) {
@@ -176,7 +200,7 @@ async function loadRanch(initial = false) {
       row.append(actions); $('ranch-rows').append(row);
     }
     const stations = new Map();
-    for (let i = 1; i <= (ranchInfo.servers[0]?.information?.shearers.length || 0); i++) stations.set(i, {});
+    for (let i = 1; i <= selectedShearers().length; i++) if (selectedShearers()[i - 1].active !== false) stations.set(i, {});
     for (const total of data.totals) { if (!stations.has(total.station)) stations.set(total.station, {}); stations.get(total.station)[total.type] = total.count; }
     $('ranch-totals').replaceChildren();
     let sum = 0;

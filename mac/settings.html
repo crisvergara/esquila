@@ -33,7 +33,7 @@
   <h1>Esquila 🐑</h1>
   <p class="sub">Configuración del servidor del galpón</p>
   <form id="form">
-    <section class="card">
+    <section class="card" id="local-stations">
       <h2>Esquiladores</h2>
       <p class="hint">Un nombre por estación, en el mismo orden de las mesas.</p>
       <div id="names"></div>
@@ -46,6 +46,10 @@
       <label for="sync-token">Token del servidor</label>
       <input id="sync-token" type="password" autocomplete="off" placeholder="Sin cambios" />
       <p class="hint" id="token-hint"></p>
+      <p class="hint">Crea un servidor y publica sus colores y esquiladores en la administración remota. Aquí solo necesitas la dirección y su token.</p>
+      <button type="button" id="load-configuration" class="secondary">Cargar configuración del galpón</button>
+      <div id="configuration-preview" role="status"></div>
+      <button type="button" id="open-admin" class="secondary" hidden>Administrar este galpón en la nube</button>
       <label for="app-url">Dirección de la app de vacunación</label>
       <input id="app-url" type="url" placeholder="https://esquila-cloud.fly.dev" />
     </section>

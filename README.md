@@ -65,7 +65,11 @@ esquila/
 
 ## Stations & Shearers
 
-Stations and shearer names are configured in `shearers.json`. There are 3 stations by default (Ramiro, Pacheco, Jesus).
+Manage station names and tagging choices per server in the cloud admin's
+**Configuración de galpones**. Published manifests synchronize to the barn and
+remain available offline. Up to 24 stable station slots can be activated or
+retired without renumbering records. See [ranch configuration](docs/RANCH_CONFIGURATION.md).
+`shearers.json` and `tagger/modeschema.json` now supply bootstrap defaults.
 
 ## Tag Format
 
@@ -188,7 +192,7 @@ For local frontend development: `npm run dev:cloud` proxies `/api` to a local cl
 | `http://<host>:3001/monitor` | Desktop monitor — shows all stations at a glance (LAN) |
 | `http://<host>:3001/mobilemonitor` | Mobile monitor — same info, phone-friendly (LAN) |
 | `https://<cloud-host>/` | EsquilaDB PWA — sheep records & treatment tracking (offline-capable) |
-| `https://<cloud-host>/admin` | Ranch monitor, shearing management, and device enrollment |
+| `https://<cloud-host>/admin` | Ranch configuration, monitor, shearing management, and device enrollment |
 | `http://<host>:3001/qr.png` | QR code linking to the tagger |
 
 ## Data & Backups
@@ -197,15 +201,14 @@ Animal records are stored in a local **SQLite** database file called `esquila`. 
 
 ## Configuring Shearers
 
-Edit `shearers.json` to change shearer names. Station numbers correspond to array index + 1.
-
-```json
-[
-  { "name": "Ramiro" },
-  { "name": "Pacheco" },
-  { "name": "Jesus" }
-]
-```
+Use **Configuración de galpones** in `/admin` to rename, add or retire stations
+for the selected ranch server. Station numbers remain stable when a station is
+retired. New Mac installations download these names during enrollment; existing
+installations receive changes through manifest synchronization.
 
 ## Configuring Modes & Tag Schemas
-Edit `tagger/modeschema.json` to add/remove modes, change available tag colors, letter codes, or survey questions.
+Use **Configuración de galpones** in `/admin` to add/retire colors, change
+prefixes and digit limits, and edit survey names/options. Green and black are
+included for both sheep and rams. These changes need no new application build;
+the three animal types retain their database/counting semantics. See
+[ranch configuration](docs/RANCH_CONFIGURATION.md) for onboarding and offline behavior.

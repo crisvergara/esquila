@@ -1,6 +1,6 @@
 {
   "name": "esquila",
-  "version": "0.1.7",
+  "version": "0.1.9",
   "description": "Offline-first sheep counting and vaccination tools",
   "author": "Sheep++",
   "private": true,
@@ -68,7 +68,7 @@
       "category": "public.app-category.productivity",
       "icon": "public/logo512.png",
       "extendInfo": {
-        "NSLocalNetworkUsageDescription": "Esquila comparte el tagger y el monitor con los dispositivos conectados al WiFi del galp\u00f3n.",
+        "NSLocalNetworkUsageDescription": "Esquila comparte el tagger y el monitor con los dispositivos conectados al WiFi del galpón.",
         "NSBonjourServices": [
           "_http._tcp"
         ],

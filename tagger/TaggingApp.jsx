@@ -6,6 +6,7 @@ import useCounts from "../hooks/useCounts";
 import useShearers from "../hooks/useShearers";
 import useTagEditor from "../hooks/useTagEditor";
 import useTaggingMode from "../hooks/useTaggingMode";
+import useRanchState from '../hooks/useRanchState';
 
 const createSubmissionId = () => {
   const bytes = new Uint8Array(16);
@@ -301,7 +302,10 @@ function SendingScreen() {
 */
 
 function TaggingApp() {
-  const { shearers, loaded: shearersLoaded } = useShearers();
+  const { shearers: liveShearers, loaded: shearersLoaded } = useShearers();
+  const [entrySchema, setEntrySchema] = useState(null);
+  const shearers = entrySchema?.shearers || liveShearers;
+  const { configurationRevision } = useRanchState();
   const [station, setStation] = useState(() => {
     const saved = Number.parseInt(localStorage.getItem("esquila-tagger-station") ?? "", 10);
     return Number.isInteger(saved) && saved > 0 ? saved : 0;
@@ -313,6 +317,7 @@ function TaggingApp() {
     setQuantitySubmitted(true);
   };
   const addDigit = (x) => {
+    freezeEntry();
     setQuantity(quantity + x);
   };
 
@@ -323,11 +328,15 @@ function TaggingApp() {
   const [showMessage, setShowMessage] = useState(null);
   const [submissionId, setSubmissionId] = useState(null);
   const [submissionError, setSubmissionError] = useState("");
-  const mode = useTaggingMode();
+  const liveMode = useTaggingMode();
+  const mode = entrySchema?.mode || liveMode;
+  const freezeEntry = () => {
+    if (!entrySchema) setEntrySchema({ mode: liveMode, revision: configurationRevision, shearers: liveShearers });
+  };
 
   const {
     color,
-    setColor,
+    setColor: setEntryColor,
     replaceTagComponent,
     addDigitToTagComponent,
     removeDigitFromTagComponent,
@@ -339,6 +348,7 @@ function TaggingApp() {
     currentTagComponentValue,
     tagCompleted,
   } = useTagEditor(mode.tagSchema);
+  const setColor = value => { freezeEntry(); setEntryColor(value); };
 
   const [surveyState, surveyDispatch] = useReducer((prevState, action) => {
     switch (action.type) {
@@ -378,6 +388,7 @@ function TaggingApp() {
   const { counts, refreshCounts, error: connectionError } = useCounts();
 
   const resetEntry = () => {
+    setEntrySchema(null);
     resetTag();
     resetSurvey();
     setQuantity("");
@@ -407,7 +418,7 @@ function TaggingApp() {
       const response = await fetch(path, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, submissionId: currentSubmissionId }),
+        body: JSON.stringify({ ...payload, configurationRevision: entrySchema?.revision ?? configurationRevision, submissionId: currentSubmissionId }),
         signal: controller.signal,
       });
       if (!response.ok) {
@@ -462,12 +473,12 @@ function TaggingApp() {
   };
 
   useEffect(() => {
-    resetEntry();
-  }, [mode]);
+    if (!entrySchema) resetEntry();
+  }, [liveMode.type]);
 
   useEffect(() => {
-    if (shearersLoaded && station > shearers.length) onCancel();
-  }, [shearersLoaded, shearers.length, station]);
+    if (!entrySchema && shearersLoaded && station && (!liveShearers[station - 1] || liveShearers[station - 1].active === false)) onCancel();
+  }, [shearersLoaded, liveShearers, station, entrySchema]);
 
   useEffect(() => {
     if (showMessage !== "success") return undefined;
@@ -477,7 +488,9 @@ function TaggingApp() {
 
   let screen = null;
 
-  if (station === 0) {
+  if (!shearersLoaded) {
+    screen = <p role="status">Cargando configuración del galpón…</p>;
+  } else if (station === 0) {
     screen = (
       <StationSelect
         setStation={selectStation}
@@ -588,7 +601,9 @@ function TaggingApp() {
     );
   }
 
-  return <div className="App">{connectionError && <p role="alert">{connectionError}</p>}{screen}</div>;
+  return <div className="App"><p className="Current-mode" aria-label="Modo de conteo">{({ oveja: 'Ovejas', carnero: 'Carneros', carnillero: 'Corderos' })[mode.type]}</p>
+    {entrySchema && (entrySchema.revision !== configurationRevision || mode.type !== liveMode.type) && <p role="status">La configuración cambió. Se usará con el próximo animal.</p>}
+    {connectionError && <p role="alert">{connectionError}</p>}{screen}</div>;
 }
 
 export default TaggingApp;
