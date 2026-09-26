@@ -63,6 +63,10 @@ can be maintained without turning this file into a second README.
     animal and its retries retain their starting configuration. Configuration
     failures must not block counting or record synchronization.
 
+11. **Background hosting stays awake.** The Mac shell prevents automatic idle
+    sleep while it is running, including with all windows closed. Preserve
+    display sleep and screen locking, and release the assertion when it exits.
+
 ## Working agreement for future sessions
 
 Before editing:

@@ -157,8 +157,9 @@ signing authority. Never add these credentials to PR jobs or print them.
   sessions and login throttling are currently in process memory and reset on
   restart; multiple instances would not share them.
 - Protect the barn Mac with automatic security updates, a login password, disk
-  encryption, normal backups, and sleep disabled only while plugged in during an
-  event.
+  encryption, and normal backups. Esquila prevents idle system sleep while it
+  is open without preventing display sleep or screen locking. Keep it plugged
+  in during an event and quit Esquila when hosting is no longer needed.
 
 ## Known risks and follow-up work
 

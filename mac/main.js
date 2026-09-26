@@ -1,4 +1,4 @@
-import { app, autoUpdater, dialog, Notification, BrowserWindow, ipcMain, Menu, nativeImage, safeStorage, shell, Tray } from "electron";
+import { app, autoUpdater, dialog, Notification, BrowserWindow, ipcMain, Menu, nativeImage, powerSaveBlocker, safeStorage, shell, Tray } from "electron";
 import Bonjour from "bonjour-service";
 import { spawn } from "node:child_process";
 import { appendFile, chmod, mkdir, readFile, writeFile } from "node:fs/promises";
@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { createUpdater, verifyInstaller } from "./updater.js";
 import { stageNativeUpdate } from "./native-update.js";
+import { keepServerAwake } from "./server-power.js";
 import { cloudOrigin, fetchRanchManifest, ranchAdminUrl } from './ranch-connection.js';
 
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -514,6 +515,7 @@ app.whenReady().then(async () => {
   Menu.setApplicationMenu(null);
   await mkdir(dataDir(), { recursive: true });
   const config = await readConfig();
+  keepServerAwake(app, powerSaveBlocker);
   startServer(config);
   try {
     await waitForServer();
