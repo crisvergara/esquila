@@ -1,8 +1,13 @@
 import { useSyncExternalStore } from 'react';
+import modes from '../tagger/modeschema.json';
+import shearers from '../shearers.json';
+import { validateConfiguration } from '../shared/ranch-configuration.js';
 
 // One short request per page supplies both hooks. Persistent HTTP/1 streams
 // exhaust the browser's six-connection pool across repeated tagger tabs.
-let state = { counts: {}, mode: 'oveja', error: null };
+let state = { counts: {}, mode: 'oveja', error: null, loaded: false, configurationRevision: 0,
+  configuration: { schemaVersion: 1, name: 'Galpón', modes, shearers } };
+let configurationJSON;
 const listeners = new Set();
 let timer;
 let pending;
@@ -17,12 +22,18 @@ export function refreshRanchState() {
   const timeout = setTimeout(() => controller.abort(), 5000);
   pending = (async () => {
     try {
-      const response = await fetch('/api/live', { cache: 'no-store', signal: controller.signal });
+      const query = state.loaded && state.configurationId ? `?configurationId=${encodeURIComponent(state.configurationId)}` : '';
+      const response = await fetch(`/api/live${query}`, { cache: 'no-store', signal: controller.signal });
       if (!response.ok) throw new Error(`Estado del galpón: ${response.status}`);
       const next = await response.json();
       if (!next.counts || typeof next.counts !== 'object' || !['oveja', 'carnero', 'carnillero'].includes(next.mode)) throw new Error('Estado del galpón inválido');
       failures = 0;
-      state = { counts: next.counts, mode: next.mode, error: null };
+      if (!next.configuration && (!state.loaded || next.configurationId !== state.configurationId)) throw new Error('Configuración del galpón pendiente');
+      const serialized = next.configuration ? JSON.stringify(next.configuration) : configurationJSON;
+      const configuration = serialized === configurationJSON ? state.configuration : validateConfiguration(next.configuration);
+      configurationJSON = serialized;
+      state = { counts: next.counts, mode: next.mode, error: null, loaded: true, configuration,
+        configurationRevision: next.configurationRevision, configurationId: next.configurationId };
       notify();
       return state;
     } catch (error) {

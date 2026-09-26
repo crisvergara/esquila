@@ -97,6 +97,16 @@ IPv6 are all an HTTPS-only app needs).
 
 ## Automatic deployment and Mac builds
 
+Ranch configuration uses additive PostgreSQL tables applied at cloud startup;
+no new secret or infrastructure service is needed. Deploy the cloud and install
+the new Mac release before relying on editable tagging schemas. Existing
+servers import their local station names only if no manifest is published.
+For new servers, publish their configuration in `/admin` before enrollment.
+Confirm the admin shows the same published and received revisions, then test
+one count with the cloud unavailable. Back up configuration/history/receipt
+tables with PostgreSQL and the local cache with SQLite. See
+[RANCH_CONFIGURATION.md](RANCH_CONFIGURATION.md) for rollout details.
+
 Pushes to the default branch, **`main`**, run the `Checks and delivery` workflow.
 Pull requests run the same required checks without deploying or receiving the
 Fly token.

@@ -2,6 +2,7 @@ import express from 'express';
 import { uuidv7 } from '../shared/uuidv7.js';
 import { ranchDay } from '../shared/ranchdate.js';
 import { shearingModes, validateShearingFields } from '../shared/shearing-validation.js';
+import { MAX_STATIONS, UUID } from '../shared/ranch-configuration.js';
 
 const cursorPattern = /^(0|[1-9]\d{0,17})$/;
 const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -13,7 +14,7 @@ export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
     if (req.device.role !== 'server') return res.status(403).json({ error: 'server role required' });
     const { cursor, information } = req.body || {};
     if (typeof cursor !== 'string' || !cursorPattern.test(cursor) || !information ||
-        !Array.isArray(information.shearers) || information.shearers.length < 1 || information.shearers.length > 6 ||
+        !Array.isArray(information.shearers) || information.shearers.length < 1 || information.shearers.length > MAX_STATIONS ||
         information.shearers.some(s => !s || typeof s.name !== 'string' || !s.name.trim() || s.name.length > 80) ||
         !['oveja', 'carnero', 'carnillero'].includes(information.mode) ||
         !Number.isSafeInteger(information.pending) || information.pending < 0 ||
@@ -24,7 +25,7 @@ export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
     try {
       const head = (await pool.query('SELECT revision FROM shearing_sync_clock WHERE singleton')).rows[0].revision;
       if (BigInt(cursor) > BigInt(head)) return res.status(409).json({ error: 'sync cursor is ahead of cloud; database recovery requires review' });
-      const safeInfo = { shearers: information.shearers.map(s => ({ name: s.name })), mode: information.mode,
+      const safeInfo = { shearers: information.shearers.map(s => ({ name: s.name, active: s.active !== false })), mode: information.mode,
         pending: information.pending, uptime: Math.floor(information.uptime), hostname: information.hostname,
         version: information.version, platform: information.platform };
       await pool.query(`INSERT INTO ranch_status(device_id, applied_revision, information) VALUES ($1, $2, $3)
@@ -35,13 +36,16 @@ export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
     } catch (error) { next(error); }
   });
 
-  app.get('/api/admin/ranch', adminAuth, async (_req, res, next) => {
+  app.get('/api/admin/ranch', adminAuth, async (req, res, next) => {
     try {
       const servers = (await pool.query(`SELECT d.id, d.name, d.last_seen_at, r.received_at, r.applied_revision, r.information,
         (SELECT count(*)::int FROM shearing_events e WHERE e.revision > COALESCE(r.applied_revision, 0)) AS pending_to_ranch
         FROM devices d LEFT JOIN ranch_status r ON r.device_id = d.id WHERE d.role = 'server'
         ORDER BY r.received_at DESC NULLS LAST, d.created_at DESC`)).rows;
-      res.json({ servers, modes: shearingModes, day: ranchDay(), serverTime: new Date().toISOString() });
+      const selectedId = req.query.server || servers[0]?.id;
+      if (selectedId && !servers.some(s => s.id === selectedId)) return res.status(404).json({ error: 'Galpón desconocido.' });
+      const configuration = selectedId ? (await pool.query('SELECT configuration FROM ranch_configurations WHERE device_id=$1', [selectedId])).rows[0]?.configuration : null;
+      res.json({ servers, selectedId, configuration, modes: configuration?.modes || shearingModes, day: ranchDay(), serverTime: new Date().toISOString() });
     } catch (error) { next(error); }
   });
 
@@ -85,6 +89,7 @@ export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
     }
     const request = [b.action, b.id ?? null, b.updated_at ?? null, b.tag ?? null, b.station ?? null,
       b.type ?? null, b.color ?? null, b.woolQuality ?? null, b.lactation ?? null];
+    if (b.serverId) request.push(b.serverId);
     let client;
     const fail = (status, message) => { throw Object.assign(new Error(message), { status }); };
     try {
@@ -104,8 +109,13 @@ export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
         if (old.updated_at.toISOString() !== b.updated_at) fail(409, 'El registro cambió. Cierra el formulario y vuelve a abrirlo.');
       }
       if (b.action !== 'delete') {
-        const status = (await client.query('SELECT information FROM ranch_status ORDER BY received_at DESC LIMIT 1')).rows[0];
-        const error = validateShearingFields(b, status?.information.shearers.length || 6);
+        if (b.serverId && !UUID.test(b.serverId)) fail(400, 'Galpón inválido.');
+        const target = b.serverId || (await client.query("SELECT d.id FROM devices d LEFT JOIN ranch_status r ON r.device_id=d.id WHERE d.role='server' ORDER BY r.received_at DESC NULLS LAST,d.created_at DESC LIMIT 1")).rows[0]?.id;
+        if (target && !(await client.query("SELECT 1 FROM devices WHERE id=$1 AND role='server'", [target])).rowCount) fail(404, 'Galpón desconocido.');
+        const configuration = target ? (await client.query('SELECT configuration FROM ranch_configurations WHERE device_id=$1', [target])).rows[0]?.configuration : null;
+        const status = target ? (await client.query('SELECT information FROM ranch_status WHERE device_id=$1', [target])).rows[0] : null;
+        const shearers = configuration?.shearers || status?.information.shearers || [];
+        const error = validateShearingFields(b, shearers.length || 6, configuration?.modes || shearingModes, old ? normalized(old) : null, shearers);
         if (error) fail(400, error);
       }
       const now = new Date(Math.max(Date.now(), old ? old.updated_at.getTime() + 1 : 0)).toISOString();

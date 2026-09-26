@@ -16,6 +16,7 @@ can be maintained without turning this file into a second README.
 | Security and secret handling | [docs/SECURITY.md](docs/SECURITY.md) | Trust boundaries, credentials, authentication, public-repository rules, and known risks |
 | Cloud deployment and operations | [docs/DEPLOY.md](docs/DEPLOY.md) | PostgreSQL/Fly deployment, device enrollment, verification, cost controls, and recovery |
 | Barn Mac application | [mac/README.md](mac/README.md) | Installation, onboarding, settings, local-network access, data locations, and ARM64 builds |
+| Ranch configuration | [docs/RANCH_CONFIGURATION.md](docs/RANCH_CONFIGURATION.md) | Remote editor, manifests, stable station/color identity, offline cache, and onboarding |
 | Raspberry Pi fallback | [pi/README.md](pi/README.md) | Legacy appliance install, kiosk onboarding, service operations, and recovery |
 
 ## Non-negotiable requirements
@@ -56,7 +57,13 @@ can be maintained without turning this file into a second README.
    must leave the barn server running. Quitting to install requires explicit
    operator action, and application replacement must preserve ranch data.
 
-10. **Background hosting stays awake.** The Mac shell prevents automatic idle
+10. **Remote configuration remains usable offline.** Cloud manifests are scoped
+    to the authenticated server, validated and persisted locally before use.
+    Retiring choices preserves history and station numbers. An in-progress
+    animal and its retries retain their starting configuration. Configuration
+    failures must not block counting or record synchronization.
+
+11. **Background hosting stays awake.** The Mac shell prevents automatic idle
     sleep while it is running, including with all windows closed. Preserve
     display sleep and screen locking, and release the assertion when it exits.
 

@@ -379,3 +379,4 @@
 @media (prefers-reduced-motion: reduce) {
   .Submission-spinner { animation: none; }
 }
+.Current-mode { margin: 0; padding: .3rem; color: #aaa; font-size: 1rem; text-align: center; }

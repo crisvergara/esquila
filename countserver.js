@@ -4,6 +4,7 @@ import Database from "better-sqlite3";
 import QRCode from "qrcode";
 import os from "os";
 import process from "process";
+import { createHash } from "node:crypto";
 import { PassThrough } from "node:stream";
 import { createReadStream, readFileSync, writeFileSync, existsSync, copyFileSync } from "node:fs";
 import { execFile } from "node:child_process";
@@ -18,6 +19,8 @@ import { uuidv7 } from "./shared/uuidv7.js";
 import { ranchDay } from "./shared/ranchdate.js";
 import { createRanchSync } from "./shared/ranch-sync.js";
 import { validateShearingFields } from "./shared/shearing-validation.js";
+import { activeModes } from "./shared/ranch-configuration.js";
+import { createLocalConfiguration } from "./shared/local-configuration.js";
 import { taggerConnectionInfo as getTaggerConnectionInfo } from "./shared/tagger-connection.js";
 
 const modeEmitter = new EventEmitter();
@@ -32,9 +35,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const taggingModes = JSON.parse(
   readFileSync(path.join(__dirname, "tagger", "modeschema.json"), "utf8")
 );
-const taggingModesByType = new Map(
-  taggingModes.map((taggingMode) => [taggingMode.type, taggingMode])
-);
+let ranchConfiguration;
 
 const taggerConnectionInfo = () => getTaggerConnectionInfo(os.networkInterfaces(), os.hostname(), port);
 
@@ -45,7 +46,7 @@ if (!existsSync(SHEARERS_FILE)) {
   copyFileSync(path.join(__dirname, "shearers.json"), SHEARERS_FILE);
 }
 
-const readShearers = () => {
+const readLegacyShearers = () => {
   try {
     const parsed = JSON.parse(readFileSync(SHEARERS_FILE, "utf8"));
     if (Array.isArray(parsed) && parsed.length > 0) return parsed;
@@ -54,6 +55,8 @@ const readShearers = () => {
   }
   return JSON.parse(readFileSync(path.join(__dirname, "shearers.json"), "utf8"));
 };
+
+const readShearers = () => ranchConfiguration?.current().configuration.shearers || readLegacyShearers();
 
 const hasAwsCredentials = Boolean(
   process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
@@ -315,6 +318,16 @@ if (db.pragma("user_version", { simple: true }) < 2) {
   })();
 }
 
+const configurationScope = createHash('sha256').update(JSON.stringify([process.env.CLOUD_SYNC_URL || '', process.env.CLOUD_SYNC_TOKEN || ''])).digest('hex');
+ranchConfiguration = createLocalConfiguration(db, configurationScope, {
+  schemaVersion: 1, name: 'Galpón', shearers: readLegacyShearers(), modes: taggingModes,
+});
+if (process.env.ESQUILA_INITIAL_MANIFEST) {
+  try {
+    const initial = JSON.parse(process.env.ESQUILA_INITIAL_MANIFEST);
+    if (initial.revision >= ranchConfiguration.current().revision) ranchConfiguration.apply(initial);
+  } catch { console.error('No se pudo aplicar la configuración inicial; se conserva la copia local.'); }
+}
 const getSettingsFromDb = db.prepare(`
   SELECT mode, email FROM settings
 `);
@@ -608,14 +621,17 @@ const readSubmissionId = (body) => {
 
 const readStation = (body) => {
   const station = Number(body?.station);
-  return Number.isInteger(station) && station >= 1 && station <= readShearers().length
+  const configuration = ranchConfiguration.forRevision(body?.configurationRevision);
+  return Number.isInteger(station) && station >= 1 && configuration?.shearers[station - 1] && configuration.shearers[station - 1].active !== false
     ? station
     : null;
 };
 
 const validateTagSubmission = (body) => {
   const type = body?.type ?? "oveja";
-  const taggingMode = taggingModesByType.get(type);
+  const configuration = ranchConfiguration.forRevision(body?.configurationRevision);
+  if (!configuration) return { error: 'Configuración desconocida. Actualiza la página.' };
+  const taggingMode = activeModes(configuration.modes).find(m => m.type === type);
   if (!taggingMode?.tagSchema || taggingMode.bulk) {
     return { error: "invalid sheep type" };
   }
@@ -641,7 +657,7 @@ const validateTagSubmission = (body) => {
     digits.length < digitsSchema.min ||
     digits.length > digitsSchema.max
   ) {
-    return { error: "tag must contain a valid prefix and 5-6 digits" };
+    return { error: `tag must contain a valid prefix and ${digitsSchema.min}-${digitsSchema.max} digits` };
   }
 
   for (const survey of taggingMode.surveySchema ?? []) {
@@ -661,6 +677,7 @@ const getStatsFromDb = async () => {
     s.lastRowId = tag.rowid;
     s.lastTag = tag.tag;
     s.lastTagColor = tag.color;
+    s.lastTagType = tag.type;
     s.lastScanTime = tag.date;
     s.counted += 1;
     s[tag.type] = (s[tag.type] ?? 0) + 1;
@@ -720,7 +737,8 @@ app.get("/api/records", (req, res) => {
   const filter = typeof req.query.tag === "string" ? req.query.tag.slice(0, 40) : "";
   res.json({ rows: recentRecords.all(`%${filter}%`),
     pending: db.prepare("SELECT COUNT(DISTINCT row_id) AS n FROM sync_outbox WHERE tbl = 'counts'").get().n,
-    syncConfigured: Boolean(process.env.CLOUD_SYNC_URL && process.env.CLOUD_SYNC_TOKEN) });
+    syncConfigured: Boolean(process.env.CLOUD_SYNC_URL && process.env.CLOUD_SYNC_TOKEN),
+    configuration: ranchConfiguration.current().configuration });
 });
 
 const mutateRecord = db.transaction((body) => {
@@ -742,7 +760,7 @@ const mutateRecord = db.transaction((body) => {
   if (body.action === "delete") {
     db.prepare("UPDATE counts SET deleted_at = ?, updated_at = ? WHERE id = ?").run(now, now, id);
   } else {
-    const validationError = validateShearingFields(body, readShearers().length);
+    const validationError = validateShearingFields(body, readShearers().length, ranchConfiguration.current().configuration.modes, old, readShearers());
     if (validationError) fail(400, validationError);
     if (old) {
       db.prepare(`UPDATE counts SET tag = ?, station = ?, color = ?, lactation = ?,
@@ -781,7 +799,15 @@ app.post("/api/records", bodyParser.json(), async (req, res) => {
 
 app.get("/api/live", (_req, res) => {
   res.setHeader("Cache-Control", "no-store, max-age=0");
-  res.json({ counts: countStatsByStation, mode });
+  const current = ranchConfiguration.current();
+  const configurationId = current.deviceId ? `${current.deviceId}:${current.revision}` : 'local';
+  res.json({ counts: countStatsByStation, mode, configurationId,
+    ...(configurationId === 'local' || _req.query.configurationId !== configurationId ? { configuration: current.configuration } : {}),
+    configurationRevision: current.revision });
+});
+
+app.get('/api/configuration', (_req, res) => {
+  res.set('Cache-Control', 'no-store').json({ ...ranchConfiguration.current(), syncConfigured: Boolean(process.env.CLOUD_SYNC_URL && process.env.CLOUD_SYNC_TOKEN) });
 });
 
 app.get("/count", (req, res) => {
@@ -818,7 +844,7 @@ app.get("/qr.png", (req, res) => {
 
 app.post("/mode", bodyParser.json(), (req, res) => {
   const nextMode = req.body?.mode;
-  if (!taggingModesByType.has(nextMode)) {
+  if (!taggingModes.some(m => m.type === nextMode)) {
     return res.status(400).json({ error: "invalid mode" });
   }
   updateSettingsFromDb.run(nextMode);
@@ -1104,6 +1130,7 @@ app.get("/setup/state", async (req, res) => {
     currentSsid,
     online: connectivity === null ? null : connectivity === "full",
     shearers: readShearers(),
+    configurationManaged: ranchConfiguration.current().revision > 0,
   });
 });
 
@@ -1149,16 +1176,18 @@ app.post("/setup/wifi/connect", bodyParser.json(), async (req, res) => {
 });
 
 app.post("/setup/shearers", bodyParser.json(), (req, res) => {
+  if (ranchConfiguration.current().revision > 0) return res.status(409).json({ error: 'Edita los esquiladores desde la administración remota.' });
   const names = req.body?.names;
   if (
     !Array.isArray(names) ||
     names.length < 1 ||
     names.length > 6 ||
-    names.some((n) => typeof n !== "string" || !n.trim())
+    names.some((n) => typeof n !== "string" || !n.trim() || n.length > 80)
   ) {
     return res.status(400).json({ error: "names must be 1-6 non-empty strings" });
   }
   writeFileSync(SHEARERS_FILE, JSON.stringify(names.map((n) => ({ name: n.trim() })), null, 2));
+  ranchConfiguration.updateLocal(names.map(name => ({ name: name.trim() })));
   refreshCounts();
   res.json({ ok: true });
 });
@@ -1321,6 +1350,26 @@ const runSync = async () => {
 
 if (CLOUD_SYNC_URL && CLOUD_SYNC_TOKEN) {
   setTimeout(runSync, 5000);
+  // Configuration retries independently of uploads and shearing pulls.
+  let configurationDelay = SYNC_INTERVAL_MS;
+  const syncConfiguration = async () => {
+    try {
+      const current = ranchConfiguration.current();
+      const response = await fetch(`${CLOUD_SYNC_URL}/api/sync/configuration`, {
+        method: 'POST', signal: AbortSignal.timeout(30000),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${CLOUD_SYNC_TOKEN}` },
+        body: JSON.stringify({ revision: current.revision, ...(current.revision === 0 ? { configuration: current.configuration } : {}) }),
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const changed = ranchConfiguration.apply(await response.json());
+      if (changed) await refreshCounts();
+      configurationDelay = changed ? Math.min(SYNC_INTERVAL_MS, 1000) : SYNC_INTERVAL_MS;
+    } catch (error) {
+      configurationDelay = Math.min(configurationDelay * 2, SYNC_MAX_BACKOFF_MS);
+      console.error(`Configuración remota pendiente (${error.message}); se conserva la copia local.`);
+    } finally { setTimeout(syncConfiguration, configurationDelay); }
+  };
+  setTimeout(syncConfiguration, 1000);
 } else {
   console.log("Cloud sync disabled — set CLOUD_SYNC_URL and CLOUD_SYNC_TOKEN to enable");
 }

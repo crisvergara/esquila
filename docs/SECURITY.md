@@ -69,6 +69,17 @@ the phone or QR is lost.
 
 ## Cloud shearing administration
 
+Ranch configuration uses the same admin authentication, exact-origin CSRF
+checks, no-store headers, CSP and text rendering. Publication requires an
+expected revision and durable mutation receipt. Server credentials can fetch
+only their own manifest and bootstrap it only before any cloud publication;
+phone credentials cannot access configuration endpoints. Manifests are bounded,
+schema-validated data, never executable instructions. Mac enrollment requires
+HTTPS (loopback HTTP is allowed for local tests), disallows redirects and limits
+response size before parsing. Tokens never enter admin links or LAN responses.
+Cached versions survive revocation for offline counting. See
+[RANCH_CONFIGURATION.md](RANCH_CONFIGURATION.md) for retention and ownership.
+
 Ranch telemetry, browsing, mutation, and history endpoints require the existing
 admin session or controlled admin bearer authentication. Phone device tokens
 cannot use them or pull the barn revision feed. Remote writes inherit the exact

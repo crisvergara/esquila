@@ -193,6 +193,13 @@
         $("wifi-current").innerHTML = '<span class="pill">Sin conexión WiFi</span>';
       }
       renderShearers(state.shearers.map((s) => s.name));
+      if (state.configurationManaged) {
+        $('shearer-status').textContent = 'Los esquiladores se administran en la nube. La copia local funciona sin internet.';
+        for (const input of $('shearer-list').querySelectorAll('input, button')) input.disabled = true;
+        $('btn-add-shearer').disabled = true;
+        $('btn-save-shearers').textContent = 'Continuar →';
+        $('btn-save-shearers').onclick = () => show('step-done');
+      }
     } catch (e) {
       $("wifi-current").innerHTML = '<span class="pill">No se pudo leer el estado</span>';
       renderShearers(["", "", ""]);

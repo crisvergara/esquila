@@ -10,6 +10,14 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
 - UUIDv7 generation and Chile ranch-calendar behavior across summer and winter offsets;
 - legacy SQLite migration, pre-migration backup, vaccination conversion, and outbox backfill;
 - the browser onboarding wizard, including validation and four-station configuration;
+- remote manifest editing (including green/black and custom colors), seven
+  stations, durable publication retries after lost responses/reload, stale
+  revisions, CSRF and phone/server scoping;
+- live configuration retirement during an in-progress count and ambiguous retry,
+  custom monitor swatches, historical record corrections, offline restart and
+  catch-up, malformed metadata isolation, and retained settings after revocation;
+- Mac enrollment preview, required review before saving, invalid token feedback,
+  HTTPS/redirect/size validation, and credential-free per-server admin links;
 - eight tagger tabs plus a monitor in one browser can navigate, submit counts,
   receive mode changes, and recover from offline status without exhausting HTTP
   connections (the original stream client reproduced a navigation timeout);

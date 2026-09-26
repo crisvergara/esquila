@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import modes from '../tagger/modeschema.json';
 import { uuidv7 } from '../shared/uuidv7.js';
 import './records.css';
 
@@ -20,6 +19,18 @@ function Records() {
   const [error, setError] = useState('');
   const [loadError, setLoadError] = useState('');
   const [notice, setNotice] = useState('');
+  const modes = data?.configuration?.modes || [];
+  const choices = (rows, value) => {
+    const result = rows.filter(r => r.active !== false || r.value === value);
+    if (value && !result.some(r => r.value === value)) result.push({ value, name: `${value} (histórico)` });
+    return result;
+  };
+  const defaults = type => {
+    const schema = modes.find(m => m.type === type);
+    return { type, color: schema?.tagSchema?.colors.find(c => c.active !== false)?.value || 'none',
+      woolQuality: schema?.surveySchema?.find(s => s.field === 'woolQuality')?.options.find(o => o.active !== false)?.value || 'IDK',
+      lactation: schema?.surveySchema?.find(s => s.field === 'lactation')?.options.find(o => o.active !== false)?.value || 'idk' };
+  };
   async function refresh() {
     const sequence = ++refreshSequence.current;
     try {
@@ -54,7 +65,7 @@ function Records() {
   const mode = modes.find(m => m.type === editing?.type);
   const change = (key, value) => setDraft({ ...draft, [key]: value });
   return <main>
-    <header><div><h1>Registros recientes</h1><p>Corrige los registros de esquila. Fechas y horas de Chile.</p></div><button disabled={!!editing} onClick={() => { setDraft({ ...blank, action: 'add' }); setError(''); }}>Agregar registro</button></header>
+    <header><div><h1>Registros recientes</h1><p>Corrige los registros de esquila. Fechas y horas de Chile.</p></div><button disabled={!!editing || !data} onClick={() => { setDraft({ ...blank, ...defaults('oveja'), station: names.findIndex(n => n.active !== false) + 1, action: 'add' }); setError(''); }}>Agregar registro</button></header>
     <p role="status">{data ? `${data.pending} registro(s) pendiente(s) de sincronizar${data.syncConfigured ? '' : ' · Sincronización remota sin configurar'}` : 'Cargando registros…'}</p>
     {loadError && <p role="alert">{loadError} <button onClick={refresh}>Actualizar</button></p>}
     {notice && <p className="success" role="status">{notice}</p>}
@@ -64,13 +75,13 @@ function Records() {
       {attempt ? <><p>Hay un cambio sin confirmar ({labels[attempt.type]} {attempt.tag}). Reintenta antes de hacer otro cambio.</p><button disabled={busy} onClick={() => submit(attempt)}>{busy ? 'Guardando…' : 'Reintentar'}</button></> :
         <form onSubmit={e => { e.preventDefault(); submit({ ...draft, submissionId: uuidv7() }); }}>
           {draft.action === 'delete' ? <p>Se descontará del monitor y se eliminará de la vista remota cuando vuelva internet.</p> : <div className="fields">
-            <label>Tipo<select aria-label="Tipo" value={draft.type} onChange={e => setDraft({ ...draft, type: e.target.value, color: 'none', woolQuality: e.target.value === 'oveja' ? 'GOOD' : 'IDK', lactation: 'idk' })}>{Object.entries(labels).map(([v, n]) => <option key={v} value={v}>{n}</option>)}</select></label>
-            <label>Código<input required maxLength={12} value={draft.tag} onChange={e => change('tag', e.target.value.toUpperCase())} /></label>
-            <label>Estación<select aria-label="Estación" value={draft.station} onChange={e => change('station', Number(e.target.value))}>{names.map((n, i) => <option key={i} value={i + 1}>{i + 1} · {n.name}</option>)}</select></label>
-            <label>Color<select aria-label="Color" value={draft.color} onChange={e => change('color', e.target.value)}>{(mode?.tagSchema?.colors || [{ value: 'none', name: 'No Hay' }]).map(c => <option key={c.value} value={c.value}>{c.name}</option>)}</select></label>
-            {(mode?.surveySchema || []).map(s => <label key={s.field}>{s.display}<select aria-label={s.display} value={draft[s.field]} onChange={e => change(s.field, e.target.value)}>{!s.options.some(o => o.value === draft[s.field]) && <option value={draft[s.field]}>{draft[s.field]}</option>}{s.options.map(o => <option key={o.value} value={o.value}>{o.name}</option>)}</select></label>)}
+            <label>Tipo<select aria-label="Tipo" value={draft.type} onChange={e => setDraft({ ...draft, ...defaults(e.target.value) })}>{Object.entries(labels).map(([v, n]) => <option key={v} value={v}>{n}</option>)}</select></label>
+            <label>Código<input required maxLength={14} value={draft.tag} onChange={e => change('tag', e.target.value.toUpperCase())} /></label>
+            <label>Estación<select aria-label="Estación" value={draft.station} onChange={e => change('station', Number(e.target.value))}>{draft.station > names.length && <option value={draft.station}>{draft.station} (histórica)</option>}{names.map((n, i) => (n.active !== false || draft.station === i + 1) && <option key={i} value={i + 1}>{i + 1} · {n.name}{n.active === false ? ' (inactiva)' : ''}</option>)}</select></label>
+            <label>Color<select aria-label="Color" value={draft.color} onChange={e => change('color', e.target.value)}>{choices(mode?.tagSchema?.colors || [{ value: 'none', name: 'No Hay' }], draft.color).map(c => <option key={c.value} value={c.value}>{c.name}</option>)}</select></label>
+            {(mode?.surveySchema || []).map(s => <label key={s.field}>{s.display}<select aria-label={s.display} value={draft[s.field]} onChange={e => change(s.field, e.target.value)}>{choices(s.options, draft[s.field]).map(o => <option key={o.value} value={o.value}>{o.name}</option>)}</select></label>)}
           </div>}
-          <p>{draft.type === 'borrega' ? 'Código de cordero: L y al menos 4 dígitos.' : 'Código: prefijo del campo y 5–6 dígitos.'} La hora original se conserva al editar.</p>
+          <p>{draft.type === 'borrega' ? 'Código de cordero: L y al menos 4 dígitos.' : `Código: prefijo del campo y ${mode?.tagSchema.textSchema[1].min}–${mode?.tagSchema.textSchema[1].max} dígitos.`} La hora original se conserva al editar.</p>
           <button type="submit" disabled={busy}>{draft.action === 'delete' ? 'Confirmar eliminación' : 'Guardar'}</button> <button type="button" disabled={busy} onClick={() => { setDraft(null); setError(''); }}>Cancelar</button>
         </form>}
     </section>}
@@ -79,7 +90,7 @@ function Records() {
     <div className="table"><table><thead><tr>{['Fecha (Chile)', 'Código', 'Estación', 'Tipo', 'Color', 'Calidad', 'Lactante', 'Estado', 'Acciones'].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{data?.rows.map(row => {
       const schema = modes.find(m => m.type === row.type);
       const surveyName = field => schema?.surveySchema?.find(s => s.field === field)?.options.find(o => o.value === row[field])?.name || '—';
-      return <tr key={row.id}><td>{stamp(row.date)}</td><td><strong>{row.tag}</strong></td><td>{names[row.station - 1]?.name || row.station}</td><td>{labels[row.type] || row.type}</td><td>{schema?.tagSchema?.colors.find(c => c.value === row.color)?.name || 'No Hay'}</td><td>{surveyName('woolQuality')}</td><td>{surveyName('lactation')}</td><td>{row.pending ? 'Pendiente' : 'Sincronizado'}</td><td className="actions"><button disabled={!!editing} onClick={() => { setDraft({ ...row, action: 'edit' }); setError(''); }}>Editar</button><button disabled={!!editing} onClick={() => { setDraft({ ...row, action: 'delete' }); setError(''); }}>Eliminar</button></td></tr>;
+      return <tr key={row.id}><td>{stamp(row.date)}</td><td><strong>{row.tag}</strong></td><td>{names[row.station - 1]?.name || row.station}</td><td>{labels[row.type] || row.type}</td><td>{schema?.tagSchema?.colors.find(c => c.value === row.color)?.name || row.color}</td><td>{surveyName('woolQuality')}</td><td>{surveyName('lactation')}</td><td>{row.pending ? 'Pendiente' : 'Sincronizado'}</td><td className="actions"><button disabled={!!editing} onClick={() => { setDraft({ ...row, action: 'edit' }); setError(''); }}>Editar</button><button disabled={!!editing} onClick={() => { setDraft({ ...row, action: 'delete' }); setError(''); }}>Eliminar</button></td></tr>;
     })}</tbody></table></div>
     {data?.rows.length === 0 && <p>No hay registros para esta búsqueda.</p>}
   </main>;
