@@ -630,7 +630,7 @@ test("cloud enforces auth, roles, rollback, admin CSRF, and last-write-wins", as
   await page.getByRole("button", { name: "Iniciar sesión" }).click();
   await expect(page.getByRole("heading", { name: "Esquila — Dispositivos" })).toBeVisible();
 
-  expect((await request.post(`${cloudBase}/api/admin/login`, { data: { password: adminPassword } })).status()).toBe(200);
+  expect((await request.post(`${cloudBase}/api/admin/login`, { headers: { Origin: cloudBase }, data: { password: adminPassword } })).status()).toBe(200);
   expect((await request.post(`${cloudBase}/api/admin/devices`, { data: { name: "CSRF", role: "phone" } })).status()).toBe(403);
   const enrolled = await request.post(`${cloudBase}/api/admin/devices`, {
     headers: { Origin: cloudBase },
@@ -656,7 +656,7 @@ test("cloud admin manages shearing offline, retries lost receipts, and reconcile
     expect((await jsonRequest(`${cloudBase}${route}`, { token: phoneToken })).response.status).toBe(401);
   }
   expect((await jsonRequest(`${cloudBase}/api/sync/ranch`, { method: 'POST', token: phoneToken, body: {} })).response.status).toBe(403);
-  await request.post(`${cloudBase}/api/admin/login`, { data: { password: adminPassword } });
+  await request.post(`${cloudBase}/api/admin/login`, { headers: { Origin: cloudBase }, data: { password: adminPassword } });
   expect((await request.post(`${cloudBase}/api/admin/shearing`, { data: {} })).status()).toBe(403);
 
   await stopService(ranchService); ranchService = undefined;

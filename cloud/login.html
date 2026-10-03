@@ -1,35 +1,9 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" />
-  <title>Esquila — Iniciar sesión</title>
-  <style>
-    * { box-sizing: border-box; }
-    body { min-height: 100vh; margin: 0; display: grid; place-items: center; padding: 1rem; font-family: system-ui, sans-serif; background: #1a1a1a; color: #eee; }
-    main { width: 100%; max-width: 420px; background: #242424; border-radius: 14px; padding: 2rem; box-shadow: 0 18px 50px #0008; }
-    h1 { margin: 0 0 .4rem; color: #61dafb; }
-    p { color: #aaa; }
-    label { display: block; margin: 1.5rem 0 .5rem; font-weight: 600; }
-    input, button { width: 100%; font-size: 1rem; padding: .8rem; border-radius: 8px; }
-    input { border: 1px solid #666; background: #161616; color: white; }
-    button { margin-top: 1rem; border: 0; background: #3a6ea5; color: white; font-weight: 700; cursor: pointer; }
-    button:disabled { opacity: .6; }
-    #error { color: #ff8c8c; min-height: 1.4rem; }
-  </style>
-</head>
-<body>
-  <main>
-    <h1>Esquila 🐑</h1>
-    <p>Administración de dispositivos</p>
-    <form id="login-form">
-      <label for="password">Contraseña de administración</label>
-      <input id="password" type="password" autocomplete="current-password" autofocus required />
-      <button id="submit" type="submit">Iniciar sesión</button>
-      <p id="error" role="alert"></p>
-    </form>
-  </main>
-  <script src="/login.js"></script>
-</body>
-</html>
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Esquila — Iniciar sesión</title><style>*{box-sizing:border-box}body{margin:0;padding:1rem;background:#181c20;color:#f0f2f4;font:17px/1.5 system-ui,sans-serif}main{max-width:780px;margin:3vh auto;background:#242a30;padding:clamp(1rem,4vw,2rem);border-radius:14px}h1{line-height:1.2}h2{margin-top:2rem}a{color:#87ddff}label{display:block;margin:1rem 0 .35rem;font-weight:600}input,select,button{font:inherit;min-height:46px;border-radius:7px;padding:.65rem .8rem;max-width:100%}input,select{width:100%;border:1px solid #8495a4;background:#141a20;color:white}button{border:1px solid #648fbb;background:#245783;color:white;cursor:pointer;margin:.7rem .5rem .3rem 0}button:disabled{opacity:.6;cursor:wait}button.danger{background:#713434}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #ffc45b;outline-offset:3px}.notice{border-left:4px solid #ffc45b;padding:.6rem 1rem;background:#303640}.status{white-space:pre-wrap;min-height:1.5rem;color:#ffe0a3}.muted,small{color:#c3cbd2}.account{padding:1rem 0;border-bottom:1px solid #58616a;overflow-wrap:anywhere}.account p{margin:.2rem 0}nav{display:flex;gap:1rem;flex-wrap:wrap;align-items:center}[hidden]{display:none!important}details{margin:1.2rem 0}summary{cursor:pointer;padding:.6rem 0}</style></head><body><main><h1>Esquila · Administración</h1>
+<p>Accede con tu correo y contraseña.</p><p id="load-error" class="status" role="alert"></p>
+<form id="login-form"><div id="email-field"><label for="email">Correo electrónico</label><input id="email" type="email" autocomplete="username" maxlength="254" required></div>
+<label for="password" id="password-label">Contraseña</label><input id="password" type="password" autocomplete="current-password" required maxlength="256">
+<button id="submit" type="submit" disabled>Iniciar sesión</button><p id="error" class="status" role="alert"></p></form>
+<p id="bootstrap-note" class="notice" hidden>Usa la contraseña compartida actual para crear tu primera cuenta personal en «Mi cuenta y accesos». Este acceso se cerrará cuando actives la cuenta.</p>
+<details id="forgot"><summary>Olvidé mi contraseña</summary><form id="forgot-form"><label for="reset-email">Correo de tu cuenta</label><input id="reset-email" type="email" autocomplete="email" required maxlength="254"><button type="submit">Enviar enlace de recuperación</button><p id="reset-status" class="status" role="status"></p></form></details>
+<p id="fresh-note" class="notice" hidden>El propietario debe crear la primera invitación desde la consola de despliegue. Consulta la guía de cuentas de administración.</p></main><script src="/login.js" type="module"></script></body></html>

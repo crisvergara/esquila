@@ -30,7 +30,7 @@
 The cloud server requires its own process:
 
 ```sh
-DATABASE_URL='<disposable-postgres-url>' \
+NODE_ENV=test DATABASE_URL='<disposable-postgres-url>' \
 ADMIN_PASSWORD='<local-only-password>' \
 PUBLIC_URL='http://127.0.0.1:8080' \
 npm start --prefix cloud
@@ -63,8 +63,11 @@ Support; do not replace those paths with repository-relative assumptions.
 | Variable | Required | Meaning |
 |---|---|---|
 | `DATABASE_URL` | Yes | TLS PostgreSQL connection URL |
-| `ADMIN_PASSWORD` | Yes | Admin login secret; `ADMIN_TOKEN` is legacy fallback only |
-| `PUBLIC_URL` | Recommended | Public HTTPS origin embedded in enrollment links |
+| `ADMIN_PASSWORD` | Bootstrap only | Optional shared secret before first owner activation; then permanently disabled |
+| `PUBLIC_URL` | For account email | Exact public HTTPS origin used in links and CSRF checks; HTTP loopback only under `NODE_ENV=test` |
+| `ADMIN_MAIL_FROM`, `ADMIN_SMTP_HOST`, `ADMIN_SMTP_PORT` | For account email | Verified sender and TLS SMTP endpoint (465 default) |
+| `ADMIN_SMTP_USER`, `ADMIN_SMTP_PASSWORD` | For account email | SMTP credentials; helper uses equivalent `_B64` variables; Fly secrets only |
+| `ADMIN_LINK_KEY` | For account email | Stable random 32-byte base64 key for the encrypted mail outbox |
 | `PORT` | No | HTTP port; defaults to 8080 |
 
 ## Rules by change area
@@ -144,3 +147,5 @@ Unknown modes, unknown revisions and invalid survey values fail closed. See
   the same pull request.
 - No generated artifact, runtime database, log, token, password, private URL, or
   environment file is present in the diff.
+
+Personal admin setup and security details: [ADMIN_ACCOUNTS.md](ADMIN_ACCOUNTS.md).

@@ -16,6 +16,7 @@ can be maintained without turning this file into a second README.
 | Security and secret handling | [docs/SECURITY.md](docs/SECURITY.md) | Trust boundaries, credentials, authentication, public-repository rules, and known risks |
 | Cloud deployment and operations | [docs/DEPLOY.md](docs/DEPLOY.md) | PostgreSQL/Fly deployment, device enrollment, verification, cost controls, and recovery |
 | Barn Mac application | [mac/README.md](mac/README.md) | Installation, onboarding, settings, local-network access, data locations, and ARM64 builds |
+| Cloud admin accounts | [docs/ADMIN_ACCOUNTS.md](docs/ADMIN_ACCOUNTS.md) | Personal accounts, invitation/reset email, first-owner setup, and secret handling |
 | Ranch configuration | [docs/RANCH_CONFIGURATION.md](docs/RANCH_CONFIGURATION.md) | Remote editor, manifests, stable station/color identity, offline cache, and onboarding |
 | Raspberry Pi fallback | [pi/README.md](pi/README.md) | Legacy appliance install, kiosk onboarding, service operations, and recovery |
 
@@ -66,6 +67,12 @@ can be maintained without turning this file into a second README.
 11. **Background hosting stays awake.** The Mac shell prevents automatic idle
     sleep while it is running, including with all windows closed. Preserve
     display sleep and screen locking, and release the assertion when it exits.
+
+12. **Cloud personal accounts stay private and revocable.** First-owner activation
+    permanently disables shared admin credentials. Passwords are salted hashes;
+    session/action tokens are hashed and expiring. Pending email links are encrypted
+    separately from the database. Account/mail failures must not block local counting
+    or change device credentials. Never log or commit passwords, links or email payloads.
 
 ## Working agreement for future sessions
 

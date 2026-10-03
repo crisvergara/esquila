@@ -274,3 +274,22 @@ command or automatic schema rollback is supported.
 - Mac releases are ARM64. Installation requires operator confirmation; updates
   never restart an active counting session automatically.
 - S3 SQLite backup is retained, with a more robust backup/restore system deferred.
+
+## Personal cloud accounts and email
+
+`admin_users` are independent from enrolled `devices`. Email is the admin username;
+owner accounts additionally manage invitations and revocation. All personal admins
+operate the deployment's ranch data. There is no public registration. The first
+owner activates through an emailed invitation; a durable singleton then permanently
+closes shared-password/bearer administration. Existing device authentication and
+offline ranch workflows do not change.
+
+Password hashes, hashed sessions, expiring action-token hashes, rate limits and
+security events live in PostgreSQL. Invites/reset tokens and encrypted email jobs
+commit together. The SMTP worker leases durable jobs, retries on failure and erases
+payloads after completion. Browser opening does not consume links; password
+submission atomically consumes the token, updates the password and revokes sessions.
+Only trusted Fly console access can bootstrap without the optional old password.
+SMTP misconfiguration disables mail actions without taking device sync offline.
+See [ADMIN_ACCOUNTS.md](ADMIN_ACCOUNTS.md) for parameters, data retention, bootstrap,
+recovery, deployment secrets, auto-stop behavior and identity-provider tradeoffs.

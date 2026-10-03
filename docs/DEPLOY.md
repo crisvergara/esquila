@@ -33,19 +33,12 @@ Pull the merged code:
 git pull
 ```
 
-## 1. Clear the test data out of Neon
+## 1. Prepare PostgreSQL
 
-Verification testing left fake sheep/treatments and two test devices in the
-`chile-farm` database. In the Neon console SQL editor (or `psql`), run:
-
-```sql
-TRUNCATE shearing_events, treatments, treatment_presets;
-DELETE FROM devices;
-```
-
-While you're in the Neon console, copy the **pooled connection string**
-(Connect → check "Connection pooling") — you'll need it in step 3. It looks
-like `postgresql://neondb_owner:...@ep-...-pooler.c-3.us-east-2.aws.neon.tech/neondb?sslmode=require`.
+Use a private production database and copy its TLS pooled connection string from
+Neon. **Never truncate an existing deployment to upgrade it.** Test suites use a
+separate disposable database. Cloud migrations are additive and run at startup;
+back up production data privately before upgrading.
 
 ## 2. Create the Fly app
 
@@ -61,19 +54,16 @@ fly launch --no-deploy --copy-config
 
 ## 3. Secrets + deploy
 
-Choose a strong admin password and keep it in your password manager. It protects
-the device-enrollment login:
+Store `DATABASE_URL` and the exact HTTPS `PUBLIC_URL` with Fly's private secret
+management. Use `fly secrets import` through stdin or the provider's secret UI;
+never type production passwords into shell command arguments or commit an env file.
+An existing `ADMIN_PASSWORD` remains usable only until the first personal owner
+activates. New deployments can bootstrap directly through trusted Fly console access.
 
-```bash
-openssl rand -base64 24
-```
-
-```bash
-fly secrets set DATABASE_URL='<neon-pooled-connection-string>' ADMIN_PASSWORD='<the-password-you-just-generated>' PUBLIC_URL='https://esquila-cloud.fly.dev'
-```
-
-(`PUBLIC_URL` is what enrollment QR codes point at — update it if you use a
-different app name or later add a custom domain.)
+Configure SMTP and create your personal owner following
+[ADMIN_ACCOUNTS.md](ADMIN_ACCOUNTS.md). Its setup script prompts privately and
+imports email credentials plus an independent outbox encryption key into Fly.
+GitHub requires none of those secrets. Device sync can run before mail is set up.
 
 ```bash
 fly deploy
@@ -152,14 +142,14 @@ and place it in `cloud/` first. This generated file is ignored by Git but includ
 in the cloud image. No installer binary is embedded in the image.
 
 Renew the token before its one-year expiry. Existing `DATABASE_URL`,
-`ADMIN_PASSWORD`, and `PUBLIC_URL` remain in Fly secrets; GitHub does not need
+`PUBLIC_URL`, and administrator email secrets remain in Fly secrets; GitHub does not need
 copies. See the [Fly continuous deployment guide](https://fly.io/docs/launch/continuous-deployment-with-github-actions/).
 
 ## 4. Enroll the ranch server
 
 1. Open `https://esquila-cloud.fly.dev/admin` in a browser.
-2. Log in with the `ADMIN_PASSWORD`. The login lasts 12 hours and is kept in a
-   secure, HttpOnly browser cookie; the password is not stored in the browser.
+2. Create your [personal owner account](ADMIN_ACCOUNTS.md), then log in with your
+   email and password. Sessions expire after 12 hours or one hour idle.
 3. Create a device named `ranch-server` with role **server** → copy the token it shows (shown only once).
 
 On the ranch machine, add these to the environment where `countserver.js`

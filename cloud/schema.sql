@@ -116,3 +116,44 @@ CREATE TABLE IF NOT EXISTS ranch_configuration_receipts (
   id text NOT NULL, request jsonb NOT NULL, result jsonb NOT NULL,
   PRIMARY KEY(device_id, id)
 );
+
+-- Administrator identities are separate from phone/server device credentials.
+CREATE TABLE IF NOT EXISTS admin_auth_state (
+  singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
+  initialized boolean NOT NULL DEFAULT false
+);
+INSERT INTO admin_auth_state(singleton) VALUES(true) ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS admin_users (
+  id uuid PRIMARY KEY, email text NOT NULL UNIQUE, name text NOT NULL,
+  role text NOT NULL CHECK(role IN ('owner','admin')),
+  status text NOT NULL CHECK(status IN ('invited','active','disabled')),
+  password_hash text, created_at timestamptz NOT NULL DEFAULT now(),
+  verified_at timestamptz, password_changed_at timestamptz, last_login_at timestamptz
+);
+CREATE TABLE IF NOT EXISTS admin_sessions (
+  token_hash text PRIMARY KEY, user_id uuid REFERENCES admin_users(id),
+  created_at timestamptz NOT NULL DEFAULT now(), last_seen_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL
+);
+CREATE INDEX IF NOT EXISTS admin_sessions_user ON admin_sessions(user_id);
+CREATE TABLE IF NOT EXISTS admin_action_tokens (
+  token_hash text PRIMARY KEY, user_id uuid NOT NULL REFERENCES admin_users(id),
+  purpose text NOT NULL CHECK(purpose IN ('invite','reset')),
+  expires_at timestamptz NOT NULL, consumed_at timestamptz
+);
+CREATE TABLE IF NOT EXISTS admin_mail_jobs (
+  id uuid PRIMARY KEY, user_id uuid NOT NULL REFERENCES admin_users(id),
+  token_hash text REFERENCES admin_action_tokens(token_hash), payload text,
+  status text NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','sending','sent','failed','cancelled')),
+  attempts int NOT NULL DEFAULT 0, next_attempt_at timestamptz NOT NULL DEFAULT now(),
+  created_at timestamptz NOT NULL DEFAULT now(), sent_at timestamptz
+);
+CREATE INDEX IF NOT EXISTS admin_mail_due ON admin_mail_jobs(status,next_attempt_at);
+CREATE TABLE IF NOT EXISTS admin_auth_limits (
+  key_hash text PRIMARY KEY, attempts int NOT NULL, reset_at timestamptz NOT NULL
+);
+CREATE TABLE IF NOT EXISTS admin_security_audit (
+  id bigserial PRIMARY KEY, actor_id uuid REFERENCES admin_users(id),
+  subject_id uuid REFERENCES admin_users(id), event text NOT NULL,
+  occurred_at timestamptz NOT NULL DEFAULT now()
+);

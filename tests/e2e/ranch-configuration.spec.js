@@ -86,7 +86,7 @@ test('remote editor publishes colors and seven stations, survives a lost respons
   expect((await admin('PUT', endpoint(), { revision: 0, configuration: saved.configuration, submissionId: crypto.randomUUID() })).response.status).toBe(409);
   const bad = structuredClone(saved.configuration); bad.modes[0].tagSchema.colors[0].color = 'red';
   expect((await admin('PUT', endpoint(), { revision: 1, configuration: bad, submissionId: crypto.randomUUID() })).response.status).toBe(400);
-  await request.post(`${cloudBase}/api/admin/login`, { data: { password } });
+  await request.post(`${cloudBase}/api/admin/login`, { headers: { Origin: cloudBase }, data: { password } });
   expect((await request.put(`${cloudBase}${endpoint()}`, { data: { revision: 1, configuration: saved.configuration, submissionId: crypto.randomUUID() } })).status()).toBe(403);
   barn = startBarn(); await waitForHealth(barnBase, barn);
   await waitFor(async () => (await local()).revision === 1);
