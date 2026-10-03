@@ -15,8 +15,8 @@ RUN npm run build:cloud
 FROM node:22-slim
 ENV NODE_ENV=production
 WORKDIR /app/cloud
-COPY cloud/package.json ./
-RUN npm install --omit=dev
+COPY cloud/package.json cloud/package-lock.json ./
+RUN npm ci --omit=dev
 COPY cloud/ ./
 COPY shared/ /app/shared/
 COPY tagger/modeschema.json /app/tagger/modeschema.json

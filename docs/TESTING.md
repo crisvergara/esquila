@@ -7,6 +7,12 @@ Every pull request and push to `main` runs two required jobs from `.github/workf
 This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It checks:
 
 - JavaScript syntax and both production Vite builds;
+- personal owner bootstrap, invitation/reset browser flows, single-use and expired
+  links, concurrent consumption, permanent legacy credential disablement, owner
+  boundaries, CSRF, session revocation/expiry and restart-safe throttling;
+- fake loopback SMTP outage/retry, encrypted pending messages, safe mail failures,
+  disabled-account restoration, text-only user rendering, and unchanged enrolled
+  device access; no real messages or production credentials are used;
 - UUIDv7 generation and Chile ranch-calendar behavior across summer and winter offsets;
 - legacy SQLite migration, pre-migration backup, vaccination conversion, and outbox backfill;
 - the browser onboarding wizard, including validation and four-station configuration;

@@ -3,7 +3,7 @@
 // hosts the EsquilaDB PWA over HTTPS (same origin — no CORS, and the secure
 // context the service worker needs).
 //
-// Env: DATABASE_URL (Postgres/Neon), ADMIN_PASSWORD (or legacy ADMIN_TOKEN),
+// Env: DATABASE_URL (Postgres/Neon), optional legacy ADMIN_PASSWORD (bootstrap only),
 //      PORT (default 8080),
 //      PUBLIC_URL (optional, for enrollment QR links behind a proxy).
 
@@ -18,6 +18,7 @@ import QRCode from "qrcode";
 import { registerRanchManagement } from "./ranch-management.js";
 import { registerMacUpdates } from "./mac-updates.js";
 import { registerRanchConfiguration } from "./ranch-configuration.js";
+import { createAdminAuth } from "./admin-auth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BUILD_DIR = path.join(__dirname, "..", "build-cloud");
@@ -27,12 +28,6 @@ if (!process.env.DATABASE_URL) {
   console.error("DATABASE_URL is required");
   process.exit(1);
 }
-const ADMIN_SECRET = process.env.ADMIN_PASSWORD ?? process.env.ADMIN_TOKEN;
-if (!ADMIN_SECRET) {
-  console.error("ADMIN_PASSWORD (or legacy ADMIN_TOKEN) is required");
-  process.exit(1);
-}
-
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   // Recycle idle clients quickly: Neon's pooler drops idle connections
@@ -43,8 +38,8 @@ const pool = new pg.Pool({
 
 // An idle client dying (e.g. Neon suspending) must not crash the server;
 // the pool replaces it on the next query.
-pool.on("error", (err) => {
-  console.error("Idle Postgres client error (ignored):", err.message);
+pool.on("error", () => {
+  console.error("Idle Postgres client error (ignored)");
 });
 
 const schema = await readFile(path.join(__dirname, "schema.sql"), "utf8");
@@ -57,70 +52,12 @@ registerMacUpdates(app);
 // proxy chains would let clients spoof req.ip and bypass login throttling.
 app.set("trust proxy", 1);
 
-const ADMIN_COOKIE = "esquila_admin_session";
-const ADMIN_SECURE_COOKIE = "__Host-esquila_admin_session";
-const ADMIN_SESSION_MS = 12 * 60 * 60 * 1000;
-const LOGIN_WINDOW_MS = 15 * 60 * 1000;
-const LOGIN_MAX_FAILURES = 5;
-const adminSessions = new Map();
-const loginFailures = new Map();
-
-const sha256 = (value) => crypto.createHash("sha256").update(value).digest("hex");
-
-const secretsEqual = (provided, expected) => {
-  if (typeof provided !== "string" || !provided) return false;
-  return crypto.timingSafeEqual(
-    Buffer.from(sha256(provided), "hex"),
-    Buffer.from(sha256(expected), "hex")
-  );
-};
-
-const cookies = (req) => Object.fromEntries(
-  (req.headers.cookie ?? "")
-    .split(";")
-    .map((part) => part.trim())
-    .filter(Boolean)
-    .map((part) => {
-      const split = part.indexOf("=");
-      return split === -1
-        ? [part, ""]
-        : [part.slice(0, split), decodeURIComponent(part.slice(split + 1))];
-    })
-);
-
-const adminSession = (req) => {
-  const parsed = cookies(req);
-  const id = parsed[ADMIN_SECURE_COOKIE] ?? parsed[ADMIN_COOKIE];
-  if (!id) return null;
-  const expiresAt = adminSessions.get(id);
-  if (!expiresAt || expiresAt <= Date.now()) {
-    adminSessions.delete(id);
-    return null;
-  }
-  return id;
-};
-
-const setAdminCookie = (req, res, id) => {
-  const name = req.secure ? ADMIN_SECURE_COOKIE : ADMIN_COOKIE;
-  const secure = req.secure ? "; Secure" : "";
-  res.setHeader(
-    "Set-Cookie",
-    `${name}=${encodeURIComponent(id)}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.floor(ADMIN_SESSION_MS / 1000)}${secure}`
-  );
-};
-
-const clearAdminCookie = (req, res) => {
-  const name = req.secure ? ADMIN_SECURE_COOKIE : ADMIN_COOKIE;
-  const secure = req.secure ? "; Secure" : "";
-  res.setHeader(
-    "Set-Cookie",
-    `${name}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${secure}`
-  );
-};
+const { adminAuth, session: adminSession, register: registerAdminAuth, mail: adminMail } = createAdminAuth(pool);
+const sha256 = value => crypto.createHash("sha256").update(value).digest("hex");
 
 app.use((req, res, next) => {
   if (
-    req.path === "/admin" ||
+    req.path.startsWith("/admin") ||
     req.path === "/admin.js" ||
     req.path === "/admin-configuration.js" ||
     req.path === "/configuration-schema.js" ||
@@ -134,7 +71,7 @@ app.use((req, res, next) => {
     res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+      "default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     );
     if (req.secure)
       res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
@@ -166,21 +103,6 @@ const deviceAuth = async (req, res, next) => {
   } catch (err) {
     next(err);
   }
-};
-
-const adminAuth = (req, res, next) => {
-  const token = bearerToken(req);
-  const session = adminSession(req);
-  if (!session && !secretsEqual(token, ADMIN_SECRET))
-    return res.status(401).json({ error: "authentication required" });
-  if (
-    session &&
-    req.method !== "GET" &&
-    req.headers.origin !== `${req.protocol}://${req.get("host")}`
-  ) {
-    return res.status(403).json({ error: "invalid request origin" });
-  }
-  next();
 };
 
 // --------------------------------------------------------------------------
@@ -353,47 +275,8 @@ app.get("/api/snapshot", deviceAuth, async (req, res, next) => {
 // Device enrollment (admin)
 // --------------------------------------------------------------------------
 
-app.post("/api/admin/login", express.json({ limit: "4kb" }), (req, res) => {
-  const key = req.ip;
-  const now = Date.now();
-  for (const [ip, failures] of loginFailures) {
-    const active = failures.filter((time) => now - time < LOGIN_WINDOW_MS);
-    if (active.length) loginFailures.set(ip, active);
-    else loginFailures.delete(ip);
-  }
-  for (const [id, expiresAt] of adminSessions) {
-    if (expiresAt <= now) adminSessions.delete(id);
-  }
-  if (loginFailures.size > 10_000) loginFailures.clear();
-  while (adminSessions.size > 10_000) {
-    adminSessions.delete(adminSessions.keys().next().value);
-  }
-  const recent = (loginFailures.get(key) ?? []).filter((time) => now - time < LOGIN_WINDOW_MS);
-  if (recent.length >= LOGIN_MAX_FAILURES) {
-    loginFailures.set(key, recent);
-    res.setHeader("Retry-After", String(Math.ceil((LOGIN_WINDOW_MS - (now - recent[0])) / 1000)));
-    return res.status(429).json({ error: "too many attempts; try again later" });
-  }
-  if (!secretsEqual(req.body?.password, ADMIN_SECRET)) {
-    recent.push(now);
-    loginFailures.set(key, recent);
-    return res.status(401).json({ error: "invalid password" });
-  }
-  loginFailures.delete(key);
-  const id = crypto.randomBytes(32).toString("base64url");
-  adminSessions.set(id, now + ADMIN_SESSION_MS);
-  setAdminCookie(req, res, id);
-  res.json({ ok: true });
-});
-
-app.post("/api/admin/logout", (req, res) => {
-  if (req.headers.origin !== `${req.protocol}://${req.get("host")}`)
-    return res.status(403).json({ error: "invalid request origin" });
-  const id = adminSession(req);
-  if (id) adminSessions.delete(id);
-  clearAdminCookie(req, res);
-  res.json({ ok: true });
-});
+registerAdminAuth(app);
+adminMail.start();
 
 app.get("/api/admin/devices", adminAuth, async (req, res, next) => {
   try {
@@ -436,8 +319,8 @@ app.delete("/api/admin/devices/:id", adminAuth, async (req, res, next) => {
   }
 });
 
-app.get("/admin", (req, res) => {
-  const page = adminSession(req) ? "admin.html" : "login.html";
+app.get(["/admin", "/admin/accounts"], async (req, res) => {
+  const page = await adminSession(req) ? (req.path === "/admin/accounts" ? "admin-accounts.html" : "admin.html") : "login.html";
   res.sendFile(path.join(__dirname, page));
 });
 
@@ -446,6 +329,9 @@ app.get("/admin.js", (_req, res) => {
 });
 app.get('/admin-configuration.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, 'admin-configuration.js')));
 app.get('/configuration-schema.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, '../shared/ranch-configuration.js')));
+
+app.get("/admin/access", (_req,res) => res.sendFile(path.join(__dirname,"admin-access.html")));
+for (const name of ["admin-access.js", "admin-accounts.js", "admin-common.js"]) app.get(`/${name}`, (_req,res) => res.type("application/javascript").sendFile(path.join(__dirname,name)));
 
 app.get("/login.js", (_req, res) => {
   res.type("application/javascript").sendFile(path.join(__dirname, "login.js"));
@@ -472,7 +358,7 @@ if (existsSync(BUILD_DIR)) {
 }
 
 app.use((err, req, res, next) => {
-  console.error(err);
+  console.error("Cloud request failed", /^[A-Z0-9_]{1,32}$/.test(err?.code || "") ? err.code : "internal");
   if (err?.type === "entity.parse.failed") {
     return res.status(400).json({ error: "invalid JSON" });
   }

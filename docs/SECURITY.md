@@ -42,16 +42,25 @@ compromised forever.
 
 ## Cloud authentication requirements
 
-- `ADMIN_PASSWORD` must be high entropy and stored only as a deployment secret
-  and in the owner's password manager.
-- Admin login comparison remains timing-safe. Login throttling must not trust
-  arbitrary forwarded proxy chains.
-- Admin cookies remain `HttpOnly`, `SameSite=Strict`, path-wide, and `Secure` on
-  HTTPS. Admin pages and scripts remain `no-store`, non-frameable, and protected
-  by the existing CSP and browser security headers.
-- State-changing browser admin requests require the exact same origin. Bearer
-  administration is retained only for controlled compatibility; do not expose
-  the admin secret in browser JavaScript.
+- Personal admin identities use email usernames, salted scrypt hashes, and
+  invitation-only onboarding. See [ADMIN_ACCOUNTS.md](ADMIN_ACCOUNTS.md) for the
+  security design, setup, roles, session limits and recovery procedures.
+- Activation of the first owner permanently disables shared password/bearer
+  administration. The initialized flag must survive backup/restore. There is no
+  public signup or fallback shared-password access after activation.
+- Sessions, action-token hashes and rate limits are in PostgreSQL. Browser cookies
+  are HttpOnly, SameSite Strict, and Secure with a `__Host-` prefix on HTTPS.
+  Pages/scripts are no-store and protected by CSP and frame/referrer restrictions.
+- Every browser mutation checks the exact Origin, including login and recovery.
+  Owners must re-enter their password to invite or disable accounts. Last-owner
+  protection and authorization are enforced in transactions, not just in the UI.
+- Invitations and resets are random, expiring, single-use links. Link tokens stay
+  in URL fragments, then page memory. Pending mail is encrypted with the independent
+  Fly `ADMIN_LINK_KEY`; SMTP credentials and this key never belong in GitHub,
+  tracked files, logs or public artifacts. Reset revokes every previous session.
+- Login and recovery throttles must not trust arbitrary forwarded proxy chains.
+  Fly remains the single trusted immediate proxy. Never publicly expose the
+  internal HTTP port. Personal account email links require a fixed HTTPS origin.
 - Device tokens are generated from cryptographically secure random bytes, shown
   only during creation, and stored in PostgreSQL only as hashes.
 - A device name is not an identity proof. Authorization comes from the matched
@@ -81,7 +90,7 @@ Cached versions survive revocation for offline counting. See
 [RANCH_CONFIGURATION.md](RANCH_CONFIGURATION.md) for retention and ownership.
 
 Ranch telemetry, browsing, mutation, and history endpoints require the existing
-admin session or controlled admin bearer authentication. Phone device tokens
+personal admin session (legacy bearer only before first-owner activation). Phone device tokens
 cannot use them or pull the barn revision feed. Remote writes inherit the exact
 same-origin CSRF requirement. Shared field validation is enforced server-side;
 request sizes, page sizes, and history results are bounded. UI values are rendered
@@ -153,9 +162,9 @@ signing authority. Never add these credentials to PR jobs or print them.
   migrations; it must not be a provider-wide administrator.
 - Keep PostgreSQL inaccessible from arbitrary sources where the provider permits
   network restrictions, require TLS, and rotate credentials after exposure.
-- Maintain one cloud machine unless session storage is externalized. Admin
-  sessions and login throttling are currently in process memory and reset on
-  restart; multiple instances would not share them.
+- Sessions and login throttles survive restarts in PostgreSQL. Mail workers lease
+  outbox jobs for two minutes so a crashed worker can be recovered. One machine
+  remains the inexpensive default; auto-stop pauses email retries until wakeup.
 - Protect the barn Mac with automatic security updates, a login password, disk
   encryption, and normal backups. Esquila prevents idle system sleep while it
   is open without preventing display sleep or screen locking. Keep it plugged
@@ -168,9 +177,9 @@ signing authority. Never add these credentials to PR jobs or print them.
   hostile.
 - LAN traffic is HTTP. Do not expose port 3001 through router port forwarding or
   a public tunnel.
-- Admin sessions are in memory, so a cloud restart logs admins out and resets
-  throttling history. This is acceptable for one small instance, not a scaled
-  deployment.
+- Personal accounts do not yet provide MFA/passkeys, per-ranch access scopes, or
+  breached-password screening. Owner mailboxes and recovery access must be
+  protected; account invitations/resets depend on a configured SMTP provider.
 - Device API rate limiting is currently provider/network dependent. Add explicit
   limits before supporting many users or exposing higher-cost operations.
 - Local/PR installers are ad-hoc signed. Production installers require Apple

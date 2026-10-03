@@ -175,10 +175,11 @@ The server starts on port **3001**. On first boot after this upgrade it migrates
 ```bash
 npm run build:cloud                  # builds the EsquilaDB PWA into build-cloud/
 cd cloud && npm install
-DATABASE_URL=<neon-url> ADMIN_PASSWORD=<strong-password> node server.js
+# Supply DATABASE_URL and PUBLIC_URL securely in the environment first.
+node server.js
 ```
 
-To deploy on Fly.io, see `fly.toml` (the app builds from `cloud/Dockerfile`). After deploying, open `https://<app>/admin`, create a `server` device, and set its token as `CLOUD_SYNC_TOKEN` on the ranch machine. Create a `phone` device per family phone and scan the QR to enroll.
+To deploy on Fly.io, see `fly.toml` (the app builds from `cloud/Dockerfile`). After deploying, [configure email and create your personal owner account](docs/ADMIN_ACCOUNTS.md). Open `https://<app>/admin`, create a `server` device, and set its token as `CLOUD_SYNC_TOKEN` on the ranch machine. Create a `phone` device per family phone and scan the QR to enroll.
 
 For local frontend development: `npm run dev:cloud` proxies `/api` to a local cloud server on port 8080.
 
@@ -212,3 +213,7 @@ prefixes and digit limits, and edit survey names/options. Green and black are
 included for both sheep and rams. These changes need no new application build;
 the three animal types retain their database/counting semantics. See
 [ranch configuration](docs/RANCH_CONFIGURATION.md) for onboarding and offline behavior.
+
+Cloud personal accounts, invitations, password reset and first-owner setup are
+documented in [docs/ADMIN_ACCOUNTS.md](docs/ADMIN_ACCOUNTS.md). Manage people at
+`https://<app>/admin/accounts`; accounts use email usernames and private passwords.

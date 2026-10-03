@@ -1,28 +1,26 @@
-const form = document.getElementById("login-form");
-const submit = document.getElementById("submit");
-const error = document.getElementById("error");
-
-form.addEventListener("submit", async (event) => {
+import { api, busy, el } from './admin-common.js';
+let legacy = false;
+try {
+  const state = await api('auth-status');
+  legacy = state.legacyAvailable && !state.personalAccounts;
+  el('email-field').hidden = legacy; el('email').required = !legacy;
+  el('password-label').textContent = legacy ? 'Contraseña de administración' : 'Contraseña';
+  el('bootstrap-note').hidden = !legacy;
+  el('fresh-note').hidden = state.personalAccounts || legacy;
+  el('submit').disabled = !state.personalAccounts && !legacy;
+  if (!state.emailEnabled) el('reset-status').textContent = 'El operador debe configurar el correo antes de poder recuperar contraseñas.';
+} catch { el('load-error').textContent = 'No se pudo conectar. Recarga la página para reintentar.'; }
+el('login-form').addEventListener('submit', event => {
   event.preventDefault();
-  submit.disabled = true;
-  error.textContent = "";
-  try {
-    const response = await fetch("/api/admin/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: document.getElementById("password").value }),
-    });
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      throw new Error(response.status === 429
-        ? "Demasiados intentos. Espera 15 minutos."
-        : (body.error === "invalid password" ? "Contraseña incorrecta." : "No se pudo iniciar sesión."));
-    }
-    // A same-URL replace with a fragment can stay on the login document.
-    // Reload retains the ranch selection and requests the authenticated page.
+  void busy(el('submit'), el('error'), async () => {
+    const password = el('password').value; el('password').value = '';
+    await api('login', { email: legacy ? undefined : el('email').value, password });
     location.reload();
-  } catch (err) {
-    error.textContent = err.message;
-    submit.disabled = false;
-  }
+  });
+});
+el('forgot-form').addEventListener('submit', event => {
+  event.preventDefault();
+  void busy(event.submitter, el('reset-status'), async () => {
+    el('reset-status').textContent = (await api('password/forgot', { email: el('reset-email').value })).message;
+  });
 });
