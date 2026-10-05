@@ -14,3 +14,5 @@ section { background: white; padding: 24px; border: 2px solid #235c43; border-ra
 .filter { max-width: 360px; margin-top: 24px; }.table { overflow-x: auto; background: white; border-radius: 8px; }
 table { border-collapse: collapse; width: 100%; } th, td { text-align: left; padding: 12px; border-bottom: 1px solid #dce3dc; } th { background: #e1eade; } td { white-space: nowrap; }.actions { display: flex; gap: 8px; }
 @media(max-width: 700px) { main { padding: 16px; } header { align-items: stretch; flex-direction: column; } }
+
+.survey-summary { white-space: pre-line; min-width: 12rem; max-width: 30rem; overflow-wrap: anywhere; }

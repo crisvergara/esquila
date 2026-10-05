@@ -56,8 +56,8 @@ lid closure, shutdown, and battery exhaustion can still interrupt LAN service.
 - Current sheep status is derived from the newest live shearing event for a tag;
   it is not a separately mutable sheep row.
 
-Schema definitions are canonical in `countserver.js`, `shared/ranch-sync.js`, and
-in `cloud/schema.sql`. A schema change must include migration behavior for
+Schema definitions are canonical in `countserver.js`, `shared/ranch-sync.js`,
+`shared/survey-migration.js`, and `cloud/schema.sql`. A schema change must include migration behavior for
 existing barn databases, fresh-install behavior, synchronization mapping, and
 tests for both old and new data.
 
@@ -131,6 +131,34 @@ station numbers, historical/inactive counts and configured color contrast,
 shows stale data warnings on LAN loss, and uses a separate web manifest so a
 saved monitor shortcut never targets the tagger. It requires local server
 connectivity to refresh, but no internet.
+
+## Versioned shearing surveys
+
+Configuration schema 2 describes ordered, active/retired choice, number and text
+questions per animal mode. Questions have stable field IDs, immutable types,
+required/optional responses and bounded validation rules. Schema 1 remains
+readable for existing caches. Old Mac clients reject schema 2 and continue
+using their persisted settings until updated. New phones send a namespaced
+`surveyResponses` object bound to the entry's starting manifest revision.
+
+SQLite schema 5 stores the full question/choice snapshot and responses in
+`counts.survey_json`; PostgreSQL stores the same object in
+`shearing_events.survey`. Domain writes, the survey, receipt and outbox commit
+atomically. Surveys use the event's LWW timestamp/tombstone/revision and are
+included in audit/conflict versions. Pull-page validation rejects a malformed
+survey before applying any row or cursor. Changes to a manifest never rewrite
+previously recorded question labels, choices or answers; both record editors
+validate against the saved event snapshot. Edits to animal type retain it too.
+
+The additive SQLite migration backs up existing data and preserves IDs, dates,
+receipts, outbox and tombstones. PostgreSQL backfill takes the normal revision
+lock and emits audit/cursor changes without changing event timestamps. Old
+wool/lactation data becomes an explicitly legacy snapshot; exact historical
+customized labels were never stored and cannot be recovered. Legacy columns
+remain compatibility projections. Mixed-version uploads/pulls that omit the
+survey retain custom answers, updating only the legacy responses they carry.
+See [RANCH_CONFIGURATION.md](RANCH_CONFIGURATION.md) for operator workflow and
+rollout constraints.
 
 ## Barn record corrections
 

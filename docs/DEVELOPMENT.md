@@ -126,12 +126,15 @@ Support; do not replace those paths with repository-relative assumptions.
 ## Adding or changing a mode
 
 `tagger/modeschema.json` supplies bootstrap defaults; cloud manifests configure
-colors, prefixes, digit limits and survey options per server. Shared schema
-validation lives in `shared/ranch-configuration.js`. The three animal types and
-survey database fields remain fixed. A new type/field requires changes to server
-validation, persistence, stats, clients, sync and regression coverage. Retiring
-an option must preserve its historical identity and in-progress submissions.
-Unknown modes, unknown revisions and invalid survey values fail closed. See
+colors, prefixes, digit limits and per-mode survey questions. Configuration
+schema 2 supports choice, text and numeric questions, with stable identities,
+retirement, ordering and required/optional responses. Validation is shared in
+`shared/ranch-configuration.js` and `shared/surveys.js`. Each shearing event owns
+its survey snapshot; editors must use that snapshot rather than today's manifest.
+Never erase custom answers when receiving a legacy writer that lacks the survey
+field. The three animal types remain fixed. A new type still requires changes
+to server validation, persistence, stats, clients, sync and regression coverage.
+Unknown modes, unknown revisions and invalid survey responses fail closed. See
 [RANCH_CONFIGURATION.md](RANCH_CONFIGURATION.md).
 
 ## Definition of done

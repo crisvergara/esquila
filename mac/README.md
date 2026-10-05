@@ -237,3 +237,13 @@ local status requests. After upgrading the Mac, close/reopen or reload existing
 phone/monitor tabs so they load the corrected client. Counts and mode updates
 normally appear within one second; a connection warning appears when status
 cannot be refreshed and clears automatically after recovery.
+
+### Configurable shearing questions
+
+After updating Esquila, use **Administrar este galpón en la nube…** to open
+**Configuración de galpones → Preguntas de la encuesta**. Publish questions for
+each animal mode; the Mac downloads and saves them for offline use. Reload old
+phone tabs after upgrading. **Registros recientes…** edits the answers originally
+recorded with each animal, including retired questions. New survey manifests need
+this updated app; older versions keep their cached settings. See
+[configuration and migration details](../docs/RANCH_CONFIGURATION.md).

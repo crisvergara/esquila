@@ -1,3 +1,5 @@
+import { validateSurvey, legacySurvey, legacyFields } from '../shared/surveys.js';
+import { migrateCloudSurveys } from '../shared/survey-migration.js';
 // esquila-cloud: the remote hub. Receives sync pushes from the ranch server
 // and from phones running EsquilaDB, serves the full-flock snapshot, and
 // hosts the EsquilaDB PWA over HTTPS (same origin — no CORS, and the secure
@@ -44,6 +46,7 @@ pool.on("error", () => {
 
 const schema = await readFile(path.join(__dirname, "schema.sql"), "utf8");
 await pool.query(schema);
+await migrateCloudSurveys(pool);
 console.log("Schema applied");
 
 const app = express();
@@ -60,7 +63,7 @@ app.use((req, res, next) => {
     req.path.startsWith("/admin") ||
     req.path === "/admin.js" ||
     req.path === "/admin-configuration.js" ||
-    req.path === "/configuration-schema.js" ||
+    req.path === "/configuration-schema.js" || req.path === '/surveys.js' ||
     req.path === "/login.js" ||
     req.path.startsWith("/api/admin")
   ) {
@@ -117,19 +120,19 @@ const UPSERTS = {
   shearing_events: {
     columns: [
       "id", "tag", "station", "color", "lactation", "type",
-      "wool_quality", "occurred_at", "updated_at", "deleted_at", "origin",
+      "wool_quality", "occurred_at", "updated_at", "deleted_at", "origin", "survey",
     ],
     required: ["id", "tag", "occurred_at", "updated_at"],
     sql: `
       INSERT INTO shearing_events
-        (id, tag, station, color, lactation, type, wool_quality, occurred_at, updated_at, deleted_at, origin)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        (id, tag, station, color, lactation, type, wool_quality, occurred_at, updated_at, deleted_at, origin, survey)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       ON CONFLICT (id) DO UPDATE SET
         tag = excluded.tag, station = excluded.station, color = excluded.color,
         lactation = excluded.lactation, type = excluded.type,
         wool_quality = excluded.wool_quality, occurred_at = excluded.occurred_at,
         updated_at = excluded.updated_at, deleted_at = excluded.deleted_at,
-        origin = excluded.origin
+        origin = excluded.origin, survey = excluded.survey
       WHERE excluded.updated_at > shearing_events.updated_at
     `,
   },
@@ -186,6 +189,10 @@ app.post("/api/sync/push", deviceAuth, express.json({ limit: "20mb" }), async (r
       return res.status(400).json({ error: "rows array required" });
     }
     for (const row of batch.rows) {
+      if (batch.table === 'shearing_events' && row?.survey !== undefined) {
+        try { row.survey = validateSurvey(row.survey); }
+        catch { return res.status(400).json({ error: 'invalid survey' }); }
+      }
       for (const field of UPSERTS[batch.table].required) {
         if (row[field] === undefined || row[field] === null || row[field] === "") {
           return res
@@ -207,6 +214,16 @@ app.post("/api/sync/push", deviceAuth, express.json({ limit: "20mb" }), async (r
     for (const batch of batches) {
       const spec = UPSERTS[batch.table];
       for (const row of batch.rows) {
+        if (batch.table === 'shearing_events') {
+          if (row.survey === undefined || row.survey.legacy) {
+            const old = (await client.query('SELECT survey FROM shearing_events WHERE id=$1', [row.id])).rows[0];
+            // An upgraded old Mac may send an explicit migrated survey. Treat
+            // it like an old writer, never replacing a richer event snapshot.
+            if (row.survey === undefined || (old?.survey && !old.survey.legacy)) row.survey = legacySurvey(row, old?.survey);
+          }
+          const fields = legacyFields(row.survey);
+          row.wool_quality = fields.woolQuality; row.lactation = fields.lactation;
+        }
         const values = spec.columns.map((col) =>
           col === "origin" ? (row.origin ?? req.device.name) : (row[col] ?? null)
         );
@@ -216,7 +233,7 @@ app.post("/api/sync/push", deviceAuth, express.json({ limit: "20mb" }), async (r
           const different = spec.columns.some((key, i) => {
             const current = existing[key] instanceof Date ? existing[key].toISOString() : existing[key];
             const incoming = ['occurred_at','updated_at','deleted_at'].includes(key) && values[i] ? new Date(values[i]).toISOString() : values[i];
-            return current !== incoming;
+            return key === 'survey' ? JSON.stringify(validateSurvey(current)) !== JSON.stringify(validateSurvey(incoming)) : current !== incoming;
           });
           if (different) await client.query(`INSERT INTO shearing_audit(row_id,source,before_row,after_row,dedupe)
             VALUES($1,'stale-push',$2,$3,$4) ON CONFLICT(dedupe) DO NOTHING`,
@@ -328,6 +345,7 @@ app.get("/admin.js", (_req, res) => {
   res.type("application/javascript").sendFile(path.join(__dirname, "admin.js"));
 });
 app.get('/admin-configuration.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, 'admin-configuration.js')));
+app.get('/surveys.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, '../shared/surveys.js')));
 app.get('/configuration-schema.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, '../shared/ranch-configuration.js')));
 
 app.get("/admin/access", (_req,res) => res.sendFile(path.join(__dirname,"admin-access.html")));

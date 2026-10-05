@@ -32,11 +32,65 @@ their data and can be corrected while retaining a retired value. New entries
 cannot choose retired options. There are at most 64 retained choices per list;
 restore an old choice instead of repeatedly creating duplicates.
 
-The three animal modes retain their counting semantics: sheep have wool and
-lactation questions, rams have individual tags without those questions, and
-lambs use bulk counting with automatic `L` numbers. Names/options of the sheep
-questions and per-mode tag formats are configurable. Adding another animal
-type or a new database field remains a code/schema change.
+## Configurable shearing surveys
+
+In each animal mode, **Preguntas de la encuesta** lets an administrator add,
+rename, reorder, retire, and restore questions. Choose **Opciones** (including
+sí/no), **Texto**, or **Número**; set whether the answer is required, numeric
+bounds, or a text length limit. You can retire all questions. Sheep start with
+wool quality and lactation; rams and lambs start with no questions. Lamb-batch
+answers apply to every animal in the batch and can be corrected individually.
+The animal modes themselves retain their individual/bulk counting semantics.
+
+A question's identifier and type are permanent. To change its type or meaning,
+retire it and add a new question. Retired questions/options remain in the
+manifest so they can be restored. Limits are 24 retained questions per mode,
+64 choices per question, 500 characters per text answer, and bounded numeric
+values. Publication validates the complete configuration before committing.
+
+Each new shearing event stores a snapshot of the questions actually asked,
+including their labels, choice labels, validation rules, and responses. Changing
+a question or answer label affects future animals only. The local **Registros
+recientes** screen and cloud **Galpón — Monitor y registros** show and edit the
+saved snapshot, even when a question or choice has since been retired. Changing
+an old record's animal type also preserves its original survey. No new question
+is retroactively added to a historical event. Manual new records use the current
+survey; a manifest change while the add form is open requires reopening it.
+
+Survey corrections use the same durable submission receipts, stale-editor
+checks, conflict history, tombstones, and bidirectional sync as tag corrections.
+A lost response can be retried across reload/restart without duplicating the
+record. Survey answers synchronize as part of the entire event, not as separate
+per-question merges. Concurrent offline corrections therefore retain the usual
+last-write-wins behavior, with the discarded cloud version in history.
+
+### Upgrade and historical migration
+
+Deploy the cloud release and update the ranch Mac app before publishing the new
+survey format (configuration schema 2). Older Macs reject that format and keep
+counting with their last cached configuration; they cannot collect newly added
+questions. Reload open tagger/record tabs after upgrading. Newly opened Macs
+continue to accept and migrate the original schema-1 manifests.
+
+SQLite schema 5 adds `counts.survey_json` transactionally, with a pre-v5 backup
+when records exist. PostgreSQL adds `shearing_events.survey` (JSONB), backfills
+old events at startup, and issues sync revisions/audit entries for the backfill.
+Both migrations preserve identities, occurrence/update times, tombstones,
+queued writes, and receipts, and run only once. Existing wool/lactation columns
+remain for older installations and flock-status consumers.
+
+Historical rows did not record the question labels or a manifest revision.
+Their saved wool/lactation values are imported into an explicitly marked legacy
+survey with the original built-in labels; unknown values remain visible as
+stored identifiers and missing answers remain missing. Exact customized labels
+from the time of those old events cannot be reconstructed. Ram/lamb placeholder
+values do not create questions that were never asked.
+
+Older server uploads that omit the survey (or include only a migrated legacy
+survey) preserve any custom answers already stored in the cloud while applying legacy wool/lactation corrections. The newer
+barn also preserves survey data if an older cloud omits that field on a pull.
+Do not downgrade a populated ranch database to old application binaries as a
+rollback strategy; recover with its backup and an explicit reconciliation plan.
 
 ## Publication and offline behavior
 

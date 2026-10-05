@@ -1,3 +1,4 @@
+import { questionsFor, defaultResponses, surveyText } from '/surveys.js';
 import { mountRanchConfiguration } from '/admin-configuration.js';
 const $ = (id) => document.getElementById(id);
 
@@ -111,6 +112,7 @@ loadDevices();
 let ranchInfo;
 let recordOffset = 0;
 let editing;
+let recordSurvey;
 let loadingRanch = false;
 let refreshRequested = false;
 let savingRecord = false;
@@ -139,14 +141,32 @@ function recordFields(row = {}) {
   const colors = available(mode?.tagSchema?.colors || [{ value: 'none', name: 'No hay' }]);
   if (row.color && !colors.some(c => c.value === row.color)) colors.push({ value: row.color, name: `${row.color} (histórico)` });
   options('record-color', colors, row.color);
-  for (const [field, fallback] of [['woolQuality', 'IDK'], ['lactation', 'idk']]) {
-    const choices = available(mode?.surveySchema?.find(s => s.field === field)?.options || [{ value: fallback, name: 'No corresponde' }]);
-    if (row[field] && !choices.some(c => c.value === row[field])) choices.push({ value: row[field], name: `${row[field]} (histórico)` });
-    options(`record-${field}`, choices, row[field]);
+  const questions = row.survey?.questions || questionsFor(ranchInfo.modes, $('record-type').value);
+  recordSurvey = row.survey ? structuredClone(row.survey) : { schemaVersion: 1, questions, responses: defaultResponses(questions) };
+  $('record-survey').replaceChildren();
+  for (const q of questions) {
+    const label = document.createElement('label'); label.append(document.createTextNode(q.display));
+    const input = document.createElement(q.type === 'choice' ? 'select' : 'input');
+    input.setAttribute('aria-label', q.display); input.required = q.required && !recordSurvey.legacy;
+    if (q.type === 'choice') {
+      for (const o of [{ value: '', name: 'Sin respuesta' }, ...q.options]) {
+        const option = document.createElement('option'); option.value = o.value; option.textContent = o.name; input.append(option);
+      }
+    } else {
+      input.type = q.type === 'number' ? 'number' : 'text'; input.step = 'any'; input.maxLength = q.maxLength || 500;
+      if (q.min != null) input.min = q.min; if (q.max != null) input.max = q.max;
+    }
+    input.value = recordSurvey.responses[q.field] ?? '';
+    input.oninput = () => { recordSurvey.responses[q.field] = input.value === '' ? null : q.type === 'number' ? Number(input.value) : input.value; };
+    label.append(input); $('record-survey').append(label);
   }
+  if (editing.action === 'edit') {
+    const note = document.createElement('p'); note.textContent = recordSurvey.legacy ? 'Encuesta histórica importada. Los valores se conservaron; los nombres personalizados de esa fecha no estaban guardados.' : 'Estas preguntas corresponden a la esquila original, aunque la configuración haya cambiado.'; $('record-survey').append(note);
+  }
+
 }
 function openRecord(action, row = {}) {
-  editing = { action, ...(ranchInfo.selectedId ? { serverId: ranchInfo.selectedId } : {}), ...(row.id ? { id: row.id, updated_at: row.updated_at } : {}) };
+  editing = { action, ...(action === 'add' ? { configurationRevision: ranchInfo.configurationRevision } : {}), ...(ranchInfo.selectedId ? { serverId: ranchInfo.selectedId } : {}), ...(row.id ? { id: row.id, updated_at: row.updated_at } : {}) };
   $('editor-title').textContent = action === 'delete' ? `Eliminar ${row.tag}` : action === 'add' ? 'Agregar registro' : `Editar ${row.tag}`;
   $('editor-note').textContent = action === 'delete' ? 'El registro se eliminará de los conteos. El cambio llegará al galpón cuando vuelva a conectarse.' : 'Los cambios se guardan en la nube y llegan al galpón al sincronizar. Al editar se conserva la fecha original.';
   const stations = Array.from({ length: Math.max(selectedShearers().length || 6, row.station || 0) }, (_, i) => ({ value: String(i + 1), name: stationName(i + 1) })).filter(s => selectedShearers()[Number(s.value) - 1]?.active !== false || Number(s.value) === row.station);
@@ -192,7 +212,7 @@ async function loadRanch(initial = false) {
     for (const record of data.rows) {
       const row = document.createElement('tr');
       const pending = !ranchInfo.servers.length || ranchInfo.servers.some(s => !s.applied_revision || BigInt(s.applied_revision) < BigInt(record.revision));
-      row.append(...[dateText(record.date), record.tag, stationName(record.station), record.type, record.color, record.woolQuality, record.lactation,
+      row.append(...[dateText(record.date), record.tag, stationName(record.station), record.type, record.color, surveyText(record.survey),
         `${record.deleted_at ? 'Eliminado · ' : ''}${pending ? 'Pendiente en galpón' : 'Recibido en galpón'}`].map(cell));
       const actions = cell('');
       if (!record.deleted_at) actions.append(button('Editar', () => openRecord('edit', record)), button('Eliminar', () => openRecord('delete', record)));
@@ -233,13 +253,14 @@ async function sendRecord(body) {
 $('record-form').addEventListener('submit', event => {
   event.preventDefault();
   const fields = {};
-  if (editing.action !== 'delete') for (const key of ['tag','station','type','color','woolQuality','lactation']) fields[key] = $(`record-${key}`).value;
+  if (editing.action !== 'delete') for (const key of ['tag','station','type','color']) fields[key] = $(`record-${key}`).value;
+  if (editing.action !== 'delete') fields.surveyResponses = { ...recordSurvey.responses };
   const intent = { ...editing, ...fields };
   const prior = JSON.parse(localStorage.getItem(attemptKey) || 'null');
   const same = prior && JSON.stringify({ ...prior, submissionId: undefined }) === JSON.stringify(intent);
   sendRecord({ ...intent, submissionId: same ? prior.submissionId : crypto.randomUUID() });
 });
-$('record-type').addEventListener('change', () => recordFields());
+$('record-type').addEventListener('change', () => recordFields(editing.action === 'edit' ? { survey: recordSurvey } : {}));
 $('record-cancel').addEventListener('click', () => $('ranch-editor').close());
 $('history-close').addEventListener('click', () => $('ranch-history').close());
 $('ranch-add').addEventListener('click', () => ranchInfo && openRecord('add'));

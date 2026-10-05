@@ -10,7 +10,7 @@ const seed = () => validateConfiguration({ schemaVersion: 1, name: 'Galpón de p
 const envelope = (revision, configuration = seed()) => ({ deviceId: '01999999-9999-7999-8999-999999999999', revision, updatedAt: '2026-09-22T12:00:00.000Z', configuration });
 
 test('manifest validation bounds every configurable field and preserves fixed counting semantics', () => {
-  for (const mutate of [c => { c.schemaVersion = 2; }, c => { c.shearers = []; }, c => { c.shearers = Array(25).fill({ name: 'A' }); },
+  for (const mutate of [c => { c.schemaVersion = 3; }, c => { c.shearers = []; }, c => { c.shearers = Array(25).fill({ name: 'A' }); },
     c => c.shearers.forEach(s => { s.active = false; }), c => { c.modes[0].type = 'unknown'; }, c => { c.modes[0].bulk = true; },
     c => { c.modes[0].tagSchema.colors[0].color = 'url(https://example.com)'; }, c => { c.modes[0].tagSchema.colors[0].active = 'false'; },
     c => c.modes[0].tagSchema.colors.push(c.modes[0].tagSchema.colors[0]), c => { c.modes[0].tagSchema.textSchema[1].max = 100; },
@@ -52,7 +52,7 @@ test('configuration revisions commit durably, retain in-progress forms, reject m
   assert.equal(cache.apply(envelope(2, revised)), false);
   assert.throws(() => cache.apply(envelope(1)));
   assert.throws(() => cache.apply(envelope(2)));
-  assert.throws(() => cache.apply(envelope(3, { ...seed(), schemaVersion: 2 })));
+  assert.throws(() => cache.apply(envelope(3, { ...seed(), schemaVersion: 3 })));
   assert.throws(() => cache.apply({ ...envelope(3), deviceId: '01999999-9999-7999-8999-999999999998' }));
   assert.equal(createLocalConfiguration(db, 'server-a', seed()).current().revision, 2);
   assert.equal(createLocalConfiguration(db, 'server-b', seed()).current().revision, 0);

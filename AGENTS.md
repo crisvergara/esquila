@@ -62,7 +62,9 @@ can be maintained without turning this file into a second README.
     to the authenticated server, validated and persisted locally before use.
     Retiring choices preserves history and station numbers. An in-progress
     animal and its retries retain their starting configuration. Configuration
-    failures must not block counting or record synchronization.
+    failures must not block counting or record synchronization. Each shearing
+    event retains its question/answer snapshot; later manifest edits must never
+    reinterpret historical responses, and legacy sync must not erase them.
 
 11. **Background hosting stays awake.** The Mac shell prevents automatic idle
     sleep while it is running, including with all windows closed. Preserve
