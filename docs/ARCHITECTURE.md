@@ -111,12 +111,26 @@ tradeoff is up to one second of foreground display/mode propagation latency.
 ## Phone connection discovery
 
 The phone-setup page refreshes `/tagger-info` every five seconds and on focus.
-The response includes a QR and text URL generated from the same network snapshot,
-plus alternate LAN interfaces. VPN, loopback, and link-local addresses are not
-advertised. No usable IPv4 address means no QR; an unavailable server clears the
-last QR instead of leaving an obsolete link visible. Operators can select the
-interface on the phone’s LAN. This is address discovery, not proof that a phone
-can connect through router isolation or VPN policies.
+One local-interface snapshot supplies explicit HTTP links and locally encoded
+QR images for `/tagger/` and `/mobilemonitor/`, plus alternate LAN interfaces.
+Network selection changes both targets together. PNG endpoints are `/qr.png`
+and `/mobile-monitor-qr.png`; responses disable caching. Neither generation nor
+LAN page loading performs an internet/DNS/cloud check. Optional startup email
+attaches both codes independently and can fail without blocking local display.
+
+VPN, loopback, and link-local addresses are not advertised. No usable IPv4
+address means no QR; an unavailable server clears old QR images. The Mac QR
+window retries a failed initial page load until the local process recovers or
+the window closes. Browser `navigator.onLine` is not used to gate LAN requests:
+a network without internet can still reach the barn. Address discovery is not
+proof that a phone can connect through router isolation or VPN policies.
+
+The mobile monitor uses the same short-request live-state store and validated
+cached manifest as the tagger/TV, with independent responsive CSS. It keeps
+station numbers, historical/inactive counts and configured color contrast,
+shows stale data warnings on LAN loss, and uses a separate web manifest so a
+saved monitor shortcut never targets the tagger. It requires local server
+connectivity to refresh, but no internet.
 
 ## Barn record corrections
 

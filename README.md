@@ -117,7 +117,9 @@ view, not a live LAN feed. Names reflect the latest station configuration.
 | `POST` | `/mode` | Switch the active tagging mode |
 | `GET` | `/api/live` | Current counts and mode for short local polling requests |
 | `GET` | `/sse` | Legacy mode stream for older clients |
-| `GET` | `/qr.png` | QR code image pointing to the tagger URL |
+| `GET` | `/qr.png` | Locally generated QR pointing to the tagger; no internet required |
+| `GET` | `/mobile-monitor-qr.png` | Locally generated QR pointing to the mobile monitor |
+| `GET` | `/tagger-info` | One LAN snapshot with both links/QR images and interface choices |
 | `GET` | `/sheep` | List all sheep records (or filter by `?tag=X`) |
 | `GET/POST/DELETE` | `/treatments`, `/treatment-presets`, `/treatment-counts`, `/vaccination-summary` | Legacy treatment endpoints kept for the transition; the cloud is the system of record now |
 
@@ -168,7 +170,7 @@ npm run build
 npm start
 ```
 
-The server starts on port **3001**. On first boot after this upgrade it migrates the SQLite database to the sync-safe schema (a local pre-migration backup file is written first) and queues all historical rows for upload. On startup it emails a QR code to the configured address so shearers can easily navigate to the tagger on their phones.
+The server starts on port **3001**. On first boot after this upgrade it migrates the SQLite database to the sync-safe schema (a local pre-migration backup file is written first) and queues all historical rows for upload. The Mac sheep menu → **Configurar teléfonos…** displays tagger and mobile-monitor QR codes without internet. When AWS email is configured, startup also attempts to email both codes; email delivery needs internet and never blocks local access.
 
 ### Run esquila-cloud
 
@@ -189,12 +191,13 @@ For local frontend development: `npm run dev:cloud` proxies `/api` to a local cl
 |-----|-------------|
 | `http://<host>:3001/tagger` | Tagger UI — for shearers on their phones (LAN) |
 | `http://<host>:3001/records/` | Recent-record editor, also opened from the Mac sheep menu |
-| `http://<host>:3001/tagger-setup` | QR code and phone setup instructions |
+| `http://<host>:3001/tagger-setup` | Tagger + mobile-monitor QR codes and offline phone setup instructions |
 | `http://<host>:3001/monitor` | Desktop monitor — shows all stations at a glance (LAN) |
-| `http://<host>:3001/mobilemonitor` | Mobile monitor — same info, phone-friendly (LAN) |
+| `http://<host>:3001/mobilemonitor/` | Phone monitor: daily total, count/last tag per shearer, and LAN status |
 | `https://<cloud-host>/` | EsquilaDB PWA — sheep records & treatment tracking (offline-capable) |
 | `https://<cloud-host>/admin` | Ranch configuration, monitor, shearing management, and device enrollment |
 | `http://<host>:3001/qr.png` | QR code linking to the tagger |
+| `http://<host>:3001/mobile-monitor-qr.png` | QR code linking to the mobile monitor |
 
 ## Data & Backups
 

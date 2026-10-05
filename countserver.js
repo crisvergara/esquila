@@ -5,7 +5,6 @@ import QRCode from "qrcode";
 import os from "os";
 import process from "process";
 import { createHash } from "node:crypto";
-import { PassThrough } from "node:stream";
 import { createReadStream, readFileSync, writeFileSync, existsSync, copyFileSync } from "node:fs";
 import { execFile } from "node:child_process";
 import path from "node:path";
@@ -37,7 +36,8 @@ const taggingModes = JSON.parse(
 );
 let ranchConfiguration;
 
-const taggerConnectionInfo = () => getTaggerConnectionInfo(os.networkInterfaces(), os.hostname(), port);
+const taggerConnectionInfo = address => getTaggerConnectionInfo(os.networkInterfaces(), os.hostname(), port, address);
+const qrOptions = { errorCorrectionLevel: "M", margin: 4, width: 512 };
 
 // Shearer names are editable at runtime (Mac/Pi onboarding wizard). The live
 // copy lives in the data directory (CWD); the repo file only seeds it.
@@ -828,18 +828,14 @@ app.get("/count/events", (req, res) => {
   res.on("close", () => countEmitter.off("update", sendCounts));
 });
 
-app.get("/qr.png", (req, res) => {
-  const info = taggerConnectionInfo();
-  if (!info.url) return res.status(503).json({ error: "Conecta este equipo al WiFi del galpón." });
-  res.type("png");
-  // The Mac's address can change after reconnecting to WiFi. Never let the
-  // setup window reuse a QR code cached for an earlier address.
+app.get(["/qr.png", "/mobile-monitor-qr.png"], async (req, res, next) => {
+  const info = taggerConnectionInfo(req.query.address);
   res.setHeader("Cache-Control", "no-store, max-age=0");
-  QRCode.toFileStream(res, info.url, {
-    errorCorrectionLevel: "M",
-    margin: 4,
-    width: 512,
-  });
+  if (!info.url) return res.status(503).json({ error: "Conecta este equipo al WiFi del galpón. No hace falta internet." });
+  try {
+    const url = req.path === '/mobile-monitor-qr.png' ? info.mobileMonitorUrl : info.url;
+    res.type('png').send(await QRCode.toBuffer(url, qrOptions));
+  } catch (error) { next(error); }
 });
 
 app.post("/mode", bodyParser.json(), (req, res) => {
@@ -1099,14 +1095,13 @@ app.get("/tagger-setup.js", (req, res) => {
 app.get("/tagger-info", async (req, res, next) => {
   res.setHeader("Cache-Control", "no-store, max-age=0");
   try {
-    const info = taggerConnectionInfo();
-    const selected = info.addresses.find(entry => entry.address === req.query.address);
-    if (selected) info.url = selected.url;
-    // One snapshot keeps the displayed link and QR identical during WiFi changes.
-    const qrDataUrl = info.url ? await QRCode.toDataURL(info.url, {
-      errorCorrectionLevel: "M", margin: 4, width: 512,
-    }) : null;
-    res.json({ ...info, qrDataUrl });
+    const info = taggerConnectionInfo(req.query.address);
+    // Both images and links use one LAN snapshot. No DNS, cloud, or email call.
+    const [qrDataUrl, mobileMonitorQrDataUrl] = info.url ? await Promise.all([
+      QRCode.toDataURL(info.url, qrOptions),
+      QRCode.toDataURL(info.mobileMonitorUrl, qrOptions),
+    ]) : [null, null];
+    res.json({ ...info, qrDataUrl, mobileMonitorQrDataUrl });
   } catch (error) { next(error); }
 });
 
@@ -1374,55 +1369,25 @@ if (CLOUD_SYNC_URL && CLOUD_SYNC_TOKEN) {
   console.log("Cloud sync disabled — set CLOUD_SYNC_URL and CLOUD_SYNC_TOKEN to enable");
 }
 
-app.listen(port, async () => {
-  const taggerUrl = taggerConnectionInfo().url;
-
-  const mobileMonitorUrl = `http://${
-    Object.values(os.networkInterfaces())
-      .flat()
-      .find((addr) => !addr.internal && addr.family === "IPv4")?.address
-  }:${port}/mobilemonitor`;
-
-  if (hasAwsCredentials && taggerUrl) try {
-    // Create a PassThrough stream to collect QR code data
-    const pass = new PassThrough();
-    const chunks = [];
-
-    // Collect data as it's written
-    pass.on("data", (chunk) => {
-      chunks.push(chunk);
-    });
-
-    pass.on("end", async () => {
-      // Convert chunks to buffer
-      const qrBuffer = Buffer.concat(chunks);
-
-      // Don't let a failed email (no network / no AWS creds) crash the server.
-      const info = await transporter.sendMail({
-        from: "esquila@sheepplusplus.com",
-        to: email,
-        subject: "QR code generated for sheep app!",
-        text: `The QR code has been generated for the sheep app and is attached.
-The URL is ${taggerUrl}.
-
-The mobile monitor URL is ${mobileMonitorUrl}.`,
-        attachments: [
-          {
-            filename: "qr.png",
-            content: qrBuffer,
-            contentType: "image/png",
-          },
-        ],
-      }).catch((err) => {
-        console.error("Failed to email QR code:", err.message);
-      });
-    });
-
-    // Generate QR code to the PassThrough stream
-    QRCode.toFileStream(pass, taggerUrl);
-  } catch (err) {
-    console.error("Failed to generate QR code:", err);
-  }
-
+app.listen(port, () => {
   console.log(`Go count some sheep! App listening on port ${port}`);
+  const info = taggerConnectionInfo();
+  // Optional delivery requires internet; local QR display never waits for it.
+  if (hasAwsCredentials && info.url) {
+    const emailCodes = async () => {
+      const [taggerQr, monitorQr] = await Promise.all([
+        QRCode.toBuffer(info.url, qrOptions), QRCode.toBuffer(info.mobileMonitorUrl, qrOptions),
+      ]);
+      await transporter.sendMail({
+        from: "esquila@sheepplusplus.com", to: email,
+        subject: "Esquila: códigos para registrar y ver el monitor",
+        text: `Conecta el teléfono al WiFi del galpón. No necesitas internet para usar estas direcciones.\n\nRegistrar ovejas: ${info.url}\nMonitor del teléfono: ${info.mobileMonitorUrl}\n\nTambién puedes ver ambos códigos sin internet en el menú de Esquila → Configurar teléfonos…`,
+        attachments: [
+          { filename: "qr.png", content: taggerQr, contentType: "image/png" },
+          { filename: "monitor-qr.png", content: monitorQr, contentType: "image/png" },
+        ],
+      });
+    };
+    emailCodes().catch(() => console.error('No se pudo enviar el correo. Los códigos locales siguen disponibles en Configurar teléfonos.'));
+  }
 });
