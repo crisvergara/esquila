@@ -167,7 +167,9 @@ and encrypted configuration stay in Application Support outside the app bundle.
 
 ## Operational notes
 
-- The app listens on port 3001 on the Mac's network interfaces.
+- The app binds explicitly to `0.0.0.0:3001`, accepting IPv4 connections on
+  all of the Mac's network interfaces. Phones use the current LAN address
+  shown in **Configurar teléfonos…**, not `0.0.0.0` as a destination.
 - macOS may ask whether Esquila may accept incoming connections; choose
   **Allow**, otherwise phones cannot reach it.
 - Esquila prevents automatic idle sleep while it is open, including when all

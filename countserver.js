@@ -1394,8 +1394,9 @@ if (CLOUD_SYNC_URL && CLOUD_SYNC_TOKEN) {
   console.log("Cloud sync disabled — set CLOUD_SYNC_URL and CLOUD_SYNC_TOKEN to enable");
 }
 
-app.listen(port, () => {
-  console.log(`Go count some sheep! App listening on port ${port}`);
+// QR codes advertise IPv4 LAN addresses; bind all IPv4 interfaces explicitly.
+app.listen(port, "0.0.0.0", () => {
+  console.log(`Go count some sheep! App listening on 0.0.0.0:${port}`);
   const info = taggerConnectionInfo();
   // Optional delivery requires internet; local QR display never waits for it.
   if (hasAwsCredentials && info.url) {
