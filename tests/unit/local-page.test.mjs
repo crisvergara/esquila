@@ -14,6 +14,8 @@ test('phone QR window recovers from initial server failure and retries stop on c
   });
   await Promise.resolve(); assert.equal(loads, 1); assert.equal(scheduled, 1);
   window.webContents.emit('did-fail-load', {}, -102, 'refused', 'http://127.0.0.1:3001/tagger-setup', true);
+  window.webContents.emit('did-finish-load');
+  assert.equal(cancelled, 0, 'an error document finishing must not cancel recovery');
   assert.equal(scheduled, 1, 'failure event and rejected promise must share one retry');
   pending(); await Promise.resolve(); assert.equal(loads, 2); assert.equal(scheduled, 2);
   ready = true; pending(); await Promise.resolve(); assert.equal(loads, 3); assert.equal(scheduled, 2);
@@ -21,10 +23,7 @@ test('phone QR window recovers from initial server failure and retries stop on c
   assert.equal(scheduled, 2, 'subresource failures must not reload the whole page');
   window.webContents.emit('did-fail-load', {}, -102, 'refused', 'http://127.0.0.1:3001/tagger-setup', true);
   assert.equal(scheduled, 3);
-  window.webContents.emit('did-finish-load');
-  assert.equal(cancelled, 1, 'a successful manual reload cancels an outstanding retry');
-  window.webContents.emit('did-fail-load', {}, -102, 'refused', 'http://127.0.0.1:3001/tagger-setup', true);
   const late = pending; destroyed = true; window.emit('closed'); late();
-  assert.equal(cancelled, 2); assert.equal(loads, 3);
+  assert.equal(cancelled, 1); assert.equal(loads, 3);
   assert.equal(window.webContents.listenerCount('did-fail-load'), 0);
 });

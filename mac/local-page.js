@@ -10,17 +10,16 @@ export function loadLocalPage(window, url, { schedule = setTimeout, cancel = cle
     if (closed || window.isDestroyed() || timer !== undefined) return;
     timer = schedule(() => { timer = undefined; load(); }, 2000);
   }
+  // An error document may itself finish loading; only a successful loadURL
+  // stops retrying. Do not cancel retries on a generic did-finish-load event.
   const failed = (_event, code, _description, failedUrl, isMainFrame) => {
     if (isMainFrame && code !== -3 && failedUrl === url) retry();
   };
-  const loaded = () => { if (timer !== undefined) { cancel(timer); timer = undefined; } };
   window.webContents.on('did-fail-load', failed);
-  window.webContents.on('did-finish-load', loaded);
   window.once('closed', () => {
     closed = true;
     if (timer !== undefined) cancel(timer);
     window.webContents.removeListener('did-fail-load', failed);
-    window.webContents.removeListener('did-finish-load', loaded);
   });
   load();
 }
