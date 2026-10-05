@@ -50,15 +50,32 @@ another window has changed the row, cancel and reopen it before editing again.
 The editor is also available at `http://<mac-name>.local:3001/records/` on the
 trusted ranch WiFi.
 
-Choose **Configurar teléfonos…** from the sheep menu to display a QR code and
-step-by-step instructions. Each tagger phone scans that code while connected
-to the barn WiFi, adds **Esquila Tagger** to its home screen, and selects its
-shearing station once. The QR window refreshes its address every five seconds and
-when brought back into focus. If the Mac has multiple network connections, choose
-the address on the phone’s WiFi under **Red del teléfono**. No QR is shown with
-only VPN/loopback connectivity or when the current address cannot be verified.
-The station remains selected between sheep and after
-the phone app is reopened; **Cancelar** returns to station selection.
+Choose **Configurar teléfonos…** from the sheep menu to display two QR codes:
+
+- **Registrar ovejas** opens the tagger. Select the phone's shearing station once;
+  it remains selected between sheep and after reopening. **Cancelar** returns to
+  station selection.
+- **Ver monitor en el teléfono** opens the mobile monitor with today's total,
+  each shearer's count, latest tag/color and elapsed time. It fits narrow phones,
+  preserves inactive stations with counts, and marks retained data as stale if
+  the local server becomes unreachable. Its own home-screen shortcut opens the
+  monitor, not the tagger. Replace older monitor shortcuts created with the old
+  tagger manifest.
+
+Both QR codes are generated **on this Mac without internet**. Keep the Mac and
+phones connected to the same barn WiFi even when it reports no internet. WiFi
+and internet are different: removing the router's internet uplink is supported;
+disconnecting the Mac from the local network removes the address phones need.
+Optional QR delivery by email does need internet. The local window never waits
+for email or cloud sync. If a phone's scanner will not open a code offline,
+type its displayed `http://` address directly into the browser.
+
+The window refreshes both addresses every five seconds and when focused. If the
+Mac has multiple connections, choose the phone's network under **Red del
+teléfono**. No QR is shown with only VPN/loopback/link-local connectivity or when
+the current server address cannot be obtained. Opening the Mac QR window during
+local server startup/recovery retries automatically instead of leaving a failed
+navigation stuck. Local API failures hide stale QR images and retry visibly.
 
 Shearers open the tagger from another device on the same WiFi at:
 

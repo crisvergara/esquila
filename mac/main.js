@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { createUpdater, verifyInstaller } from "./updater.js";
 import { stageNativeUpdate } from "./native-update.js";
+import { loadLocalPage } from "./local-page.js";
 import { keepServerAwake } from "./server-power.js";
 import { cloudOrigin, fetchRanchManifest, ranchAdminUrl } from './ranch-connection.js';
 
@@ -226,14 +227,14 @@ function createTaggerSetupWindow() {
   }
   taggerSetupWindow = new BrowserWindow({
     title: "Configurar teléfonos — Esquila",
-    width: 680,
-    height: 820,
+    width: 980,
+    height: 850,
     minWidth: 520,
     minHeight: 680,
     backgroundColor: "#1d2129",
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
-  taggerSetupWindow.loadURL(`${SERVER_ORIGIN}/tagger-setup`);
+  loadLocalPage(taggerSetupWindow, `${SERVER_ORIGIN}/tagger-setup`);
   taggerSetupWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith(`${SERVER_ORIGIN}/tagger`)) shell.openExternal(url);
     return { action: "deny" };

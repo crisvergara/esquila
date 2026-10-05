@@ -28,7 +28,13 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
   receive mode changes, and recover from offline status without exhausting HTTP
   connections (the original stream client reproduced a navigation timeout);
 - phone-setup address refresh after network changes, interface selection, recovery,
-  and hiding stale QR codes after failure or loss of LAN connectivity;
+  and hiding both stale QR codes after failure or loss of LAN connectivity;
+- cold startup with external server sockets blocked and failed cloud/email,
+  real PNG decoding for both QR targets and alternate interfaces, and successful
+  LAN requests even when the browser reports no internet;
+- mobile monitor at 320/390/640/800 px, long names, daily totals, green/black
+  contrast, its separate shortcut manifest, stale-data feedback and local restart
+  recovery; the QR screen also fits 320 px and desktop layouts;
 - sheep, ram, and bulk-lamb tagger flows plus live monitor updates;
 - tag-prefix digit limits, station persistence, and a response-loss retry after the server has already committed the count;
 - all ranch API validation boundaries, maximum bulk payload, and idempotent retries;
@@ -54,6 +60,9 @@ worker/retry (removed afterward), and configurable non-production ports. It refu
 This job runs on macOS and builds only the ARM64 DMG/ZIP. It verifies the executable architecture, code signature (ad-hoc on PRs; Developer ID plus notarization on main), DMG checksum, Bonjour service declaration, and local-network permission description.
 
 The Mac window lifecycle is indirectly covered by the same ranch server and browser onboarding contracts. A fully automated macOS GUI test is intentionally omitted because login-item, tray, fullscreen, and local-network permission dialogs are controlled by macOS and are substantially less reliable on headless GitHub runners. Those remain release-candidate smoke tests on a real Mac.
+
+QR-window unit coverage checks failed startup navigation, repeated retries,
+main-frame filtering, successful reload recovery and cancelling retries on close.
 
 Power-lifecycle regression coverage checks that background hosting keeps its
 idle-sleep assertion through window closure and cancelled quitting, releases it

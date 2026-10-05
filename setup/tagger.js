@@ -2,6 +2,9 @@ const urlElement = document.getElementById('tagger-url');
 const alternativeElement = document.getElementById('alternative');
 const statusElement = document.getElementById('status');
 const qrElement = document.getElementById('tagger-qr');
+const monitorUrlElement = document.getElementById('monitor-url');
+const monitorQrElement = document.getElementById('monitor-qr');
+const monitorAlternativeElement = document.getElementById('monitor-alternative');
 const networkElement = document.getElementById('network');
 let selectedAddress = '';
 let refreshing = false;
@@ -9,11 +12,10 @@ let refreshAgain = false;
 let lastUrl;
 
 function clearConnection(message) {
-  qrElement.hidden = true;
-  qrElement.removeAttribute('src');
-  urlElement.removeAttribute('href');
-  urlElement.textContent = 'Dirección no disponible';
+  for (const image of [qrElement, monitorQrElement]) { image.hidden = true; image.removeAttribute('src'); }
+  for (const link of [urlElement, monitorUrlElement]) { link.removeAttribute('href'); link.textContent = 'Dirección no disponible'; }
   alternativeElement.textContent = '';
+  monitorAlternativeElement.textContent = '';
   statusElement.textContent = message;
 }
 
@@ -25,27 +27,32 @@ async function refreshConnection() {
       cache: 'no-store', signal: AbortSignal.timeout(5000),
     });
     if (!response.ok) throw new Error('No se pudo obtener la dirección del tagger.');
-    const { url, friendlyUrl, qrDataUrl, addresses } = await response.json();
+    const { url, friendlyUrl, qrDataUrl, addresses, mobileMonitorUrl, mobileMonitorQrDataUrl, friendlyMobileMonitorUrl } = await response.json();
     networkElement.replaceChildren(new Option('Automática', ''));
     for (const entry of addresses || []) networkElement.add(new Option(`${entry.address} (${entry.interface})`, entry.address));
     if (!(addresses || []).some(entry => entry.address === selectedAddress)) selectedAddress = '';
     networkElement.value = selectedAddress;
     networkElement.disabled = !addresses?.length;
-    if (!url || !qrDataUrl) {
-      clearConnection('No hay una dirección de red local. Conecta este Mac al WiFi del galpón; una VPN no reemplaza esa conexión.');
+    if (!url || !qrDataUrl || !mobileMonitorUrl || !mobileMonitorQrDataUrl) {
+      clearConnection('No hay una dirección de red local. Conecta este Mac al WiFi del galpón, aunque esa red no tenga internet. Una VPN no reemplaza esa conexión.');
       return;
     }
     if (qrElement.src !== qrDataUrl) qrElement.src = qrDataUrl;
     qrElement.hidden = false;
     urlElement.textContent = url;
     urlElement.href = url;
+    if (monitorQrElement.src !== mobileMonitorQrDataUrl) monitorQrElement.src = mobileMonitorQrDataUrl;
+    monitorQrElement.hidden = false;
+    monitorUrlElement.textContent = mobileMonitorUrl;
+    monitorUrlElement.href = mobileMonitorUrl;
+    monitorAlternativeElement.textContent = friendlyMobileMonitorUrl ? `Dirección alternativa: ${friendlyMobileMonitorUrl}` : '';
     alternativeElement.textContent = friendlyUrl && friendlyUrl !== url ? `Dirección alternativa: ${friendlyUrl}` : '';
     statusElement.textContent = lastUrl && lastUrl !== url
-      ? 'La dirección cambió. Escanea este código nuevamente; un acceso guardado con la dirección anterior puede dejar de funcionar.'
-      : 'Dirección actualizada. La conexión desde el teléfono se confirma cuando aparecen los esquiladores.';
+      ? 'La dirección cambió. Escanea el código que necesitas nuevamente; un acceso guardado con la dirección anterior puede dejar de funcionar.'
+      : 'Códigos listos para la red local. Escanea uno y comprueba que aparezcan los esquiladores.';
     lastUrl = url;
   } catch (error) {
-    clearConnection(`No se pudo verificar la dirección actual. ${error.message} Pulsa Actualizar conexión.`);
+    clearConnection(`No se pudo contactar al servidor local de Esquila. ${error.message} No necesitas internet. Se reintentará automáticamente; también puedes pulsar Actualizar conexión.`);
   } finally {
     refreshing = false;
     if (refreshAgain) { refreshAgain = false; refreshConnection(); }

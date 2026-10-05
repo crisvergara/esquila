@@ -1,44 +1,66 @@
 <!doctype html>
 <html lang="es">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Configurar teléfonos — Esquila</title>
-    <style>
-      * { box-sizing: border-box; }
-      body { margin: 0; padding: 28px; background: #1d2129; color: #fff; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; text-align: center; }
-      main { max-width: 620px; margin: 0 auto; }
-      h1 { margin: 0 0 8px; font-size: 30px; }
-      .intro { margin: 0 auto 20px; color: #c7ccd5; line-height: 1.45; }
-      .qr { display: block; width: min(380px, 80vw); height: auto; margin: 0 auto 18px; padding: 14px; border-radius: 16px; background: #fff; }
-      .url { display: block; padding: 13px 16px; border: 1px solid #576174; border-radius: 10px; background: #282e39; color: #7edcff; font-size: 18px; font-weight: 650; overflow-wrap: anywhere; }
-      .alternative { min-height: 22px; margin: 9px 0 22px; color: #aeb6c5; font-size: 14px; overflow-wrap: anywhere; }
-      ol { margin: 0 auto; padding-left: 26px; max-width: 500px; color: #e3e6eb; text-align: left; line-height: 1.55; }
-      li + li { margin-top: 8px; }
-      [hidden] { display: none !important; }
-      select, button { padding: 12px; margin: 8px; font-size: 16px; max-width: 100%; }
-      .status { color: #ffcf70; }
-    </style>
-  </head>
-  <body>
-    <main>
-      <h1>Configurar un teléfono</h1>
-      <p class="intro">El teléfono y este Mac deben estar conectados al mismo WiFi del galpón.</p>
-      <label for="network">Red del teléfono</label>
-      <select id="network"><option value="">Automática</option></select>
-      <button id="refresh" type="button">Actualizar conexión</button>
-      <img class="qr" id="tagger-qr" hidden alt="Código QR para abrir Esquila Tagger" />
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Conectar teléfonos — Esquila</title>
+  <style>
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; padding: clamp(16px, 3vw, 28px); background: #1d2129; color: #fff; font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    main { max-width: 1000px; margin: 0 auto; }
+    h1 { margin: 0 0 8px; font-size: clamp(24px, 4vw, 32px); }
+    .intro { color: #d0d6df; margin: 0 0 12px; }
+    .local-note { padding: 12px 16px; border-left: 4px solid #81dca3; background: #243a32; }
+    .network-controls { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 20px 0; }
+    select, button { min-height: 46px; padding: 10px 12px; font: inherit; max-width: 100%; border: 1px solid #8592a7; border-radius: 8px; }
+    select { min-width: 0; background: #fff; color: #151a21; }
+    button { background: #334c68; color: white; cursor: pointer; }
+    :focus-visible { outline: 3px solid #ffc971; outline-offset: 3px; }
+    .codes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr)); gap: 18px; }
+    .code-card { min-width: 0; border: 1px solid #576174; border-radius: 14px; padding: 18px; background: #262d38; }
+    h2 { margin: 0 0 8px; font-size: 23px; }
+    .code-card > p { margin: 0 0 18px; color: #d0d6df; }
+    .qr { display: block; width: min(100%, 280px); height: auto; margin: 0 auto 18px; border-radius: 8px; background: white; }
+    .url { display: block; padding: 12px; border: 1px solid #6e7c90; border-radius: 8px; color: #8adfff; font-weight: 650; overflow-wrap: anywhere; }
+    .alternative { margin: 10px 0 0 !important; font-size: 14px; color: #bfc9d9; overflow-wrap: anywhere; }
+    ol { padding-left: 24px; color: #e3e6eb; }
+    li + li { margin-top: 8px; }
+    .status { color: #ffda8f; }
+    .help { color: #c7ccd5; }
+  </style>
+</head>
+<body><main>
+  <h1>Conectar teléfonos al galpón</h1>
+  <p class="intro">El teléfono y este Mac deben estar en la misma red del galpón.</p>
+  <p class="local-note"><strong>No necesitas internet.</strong> Ambos códigos se generan en este Mac. Mantén el WiFi conectado aunque diga «sin internet».</p>
+  <div class="network-controls">
+    <label for="network">Red del teléfono</label>
+    <select id="network"><option value="">Automática</option></select>
+    <button id="refresh" type="button">Actualizar conexión</button>
+  </div>
+  <div class="codes">
+    <section class="code-card" aria-labelledby="tagger-heading">
+      <h2 id="tagger-heading">Registrar ovejas</h2>
+      <p>Para los teléfonos de los esquiladores. Elige una estación después de abrir.</p>
+      <img class="qr" id="tagger-qr" hidden alt="Código QR para registrar ovejas" />
       <a class="url" id="tagger-url">Buscando la dirección del tagger…</a>
       <p class="alternative" id="alternative"></p>
-      <ol>
-        <li>Abre la cámara del teléfono y escanea el código.</li>
-        <li>Comprueba que aparezcan los nombres de los esquiladores.</li>
-        <li>En iPhone, toca Compartir y luego <strong>Agregar a inicio</strong>. En Android, abre el menú del navegador y toca <strong>Agregar a pantalla principal</strong>.</li>
-        <li>Abre el nuevo icono <strong>Esquila Tagger</strong> y elige el esquilador de ese teléfono.</li>
-      </ol>
-      <p class="alternative">Si el teléfono dice que no puede conectarse, confirma que no esté usando una red de invitados o una VPN. Algunas redes impiden que dos dispositivos WiFi se comuniquen entre sí.</p>
-      <p class="status" id="status" role="status"></p>
-    </main>
-    <script src="/tagger-setup.js"></script>
-  </body>
+    </section>
+    <section class="code-card" aria-labelledby="monitor-heading">
+      <h2 id="monitor-heading">Ver monitor en el teléfono</h2>
+      <p>Revisa el total de hoy y la última caravana de cada esquilador.</p>
+      <img class="qr" id="monitor-qr" hidden alt="Código QR para abrir el monitor móvil" />
+      <a class="url" id="monitor-url">Buscando la dirección del monitor…</a>
+      <p class="alternative" id="monitor-alternative"></p>
+    </section>
+  </div>
+  <p class="status" id="status" role="status"></p>
+  <ol>
+    <li>Abre la cámara del teléfono y escanea el código de la opción que necesitas.</li>
+    <li>Abre el enlace que empieza con <strong>http://</strong>. Si el lector no funciona sin internet, escribe la dirección en el navegador.</li>
+    <li>Para guardarlo: en Android, abre el menú del navegador y toca <strong>Agregar a pantalla principal</strong>. En iPhone, toca Compartir y <strong>Agregar a inicio</strong>.</li>
+  </ol>
+  <p class="help">Si no conecta, conserva la red WiFi del galpón y confirma que no sea una red de invitados ni una VPN. Algunas redes impiden la comunicación entre dispositivos. Enviar estos códigos por correo sí requiere internet.</p>
+</main><script src="/tagger-setup.js"></script></body>
 </html>
