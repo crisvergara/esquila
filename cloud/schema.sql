@@ -49,6 +49,8 @@ CREATE TABLE IF NOT EXISTS devices (
   last_seen_at timestamptz
 );
 
+ALTER TABLE shearing_events ADD COLUMN IF NOT EXISTS survey jsonb;
+
 -- Latest shearing event per tag = current sheep status.
 CREATE OR REPLACE VIEW sheep_latest AS
   SELECT DISTINCT ON (tag)

@@ -6,7 +6,7 @@ import { createRanchSync } from '../../shared/ranch-sync.js';
 import { validateShearingFields } from '../../shared/shearing-validation.js';
 function fixture() {
   const db = new Database(':memory:');
-  db.exec(`CREATE TABLE counts(id TEXT PRIMARY KEY,tag TEXT,station INTEGER,color TEXT,lactation TEXT,type TEXT,woolQuality TEXT,date TEXT,updated_at TEXT,deleted_at TEXT,origin TEXT);
+  db.exec(`CREATE TABLE counts(id TEXT PRIMARY KEY,tag TEXT,station INTEGER,color TEXT,lactation TEXT,type TEXT,woolQuality TEXT,date TEXT,updated_at TEXT,deleted_at TEXT,origin TEXT,survey_json TEXT);
     CREATE TABLE sync_outbox(seq INTEGER PRIMARY KEY,tbl TEXT,row_id TEXT);
     CREATE TABLE lamb_sequence(singleton INTEGER PRIMARY KEY,value INTEGER); INSERT INTO lamb_sequence VALUES(1,0);`);
   return { db, sync: createRanchSync(db) };
@@ -66,5 +66,25 @@ test('historical nullable station and survey fields remain importable', () => {
   sync.apply({ rows: [row(1, { station: null, color: null, lactation: null, type: null, wool_quality: null })], cursor: '1' });
   assert.equal(db.prepare('SELECT station FROM counts').get().station, null);
   assert.equal(sync.cursor(), '1');
+  db.close();
+});
+
+test('survey pulls are atomic and older cloud responses cannot erase a saved custom survey', () => {
+  const { db, sync } = fixture();
+  const survey = { schemaVersion: 1, questions: [{ field: 'notes', display: 'Observaciones', type: 'text', required: false, active: true, maxLength: 500 }], responses: { notes: 'Revisar' } };
+  const first = row(1, { survey });
+  const bad = row(2, { survey: { ...survey, responses: { notes: 42 } } });
+  assert.throws(() => sync.apply({ rows: [first, bad], cursor: '2' }));
+  assert.equal(sync.cursor(), '0');
+  assert.equal(db.prepare('SELECT count(*) AS n FROM counts').get().n, 0);
+  sync.apply({ rows: [first], cursor: '1' });
+  const legacy = { ...first, revision: '2', updated_at: '2026-09-19T13:00:00Z' }; delete legacy.survey;
+  sync.apply({ rows: [legacy], cursor: '2' });
+  assert.deepEqual(JSON.parse(db.prepare('SELECT survey_json FROM counts').get().survey_json), survey);
+  assert.equal(db.prepare('SELECT count(*) AS n FROM sync_outbox').get().n, 0);
+  // A cloud upgraded after an old server uploaded the row sends an explicit
+  // migrated snapshot, rather than omitting the field entirely.
+  sync.apply({ rows: [{ ...legacy, revision: '3', survey: { schemaVersion: 1, legacy: true, questions: [], responses: {} } }], cursor: '3' });
+  assert.deepEqual(JSON.parse(db.prepare('SELECT survey_json FROM counts').get().survey_json), survey);
   db.close();
 });

@@ -1,3 +1,4 @@
+import { answerText } from '../shared/surveys';
 import { useState, useEffect, useReducer } from "react";
 
 import "./Tagger.css";
@@ -64,23 +65,20 @@ function CodeSelect({ codeSchema, onCancel, setCode }) {
   );
 }
 
-function SurveySelect({ surveySchema, onCancel, setSurvey }) {
-  return (
-    <>
-      <header className="App-header">
-        <button onClick={onCancel} className="Cancel-button">
-          Cancelar
-        </button>
-      </header>
-      <section className="Tag-buttons">
-        {surveySchema.options.map((option) => (
-          <button key={option.value} onClick={() => setSurvey(option.value)}>
-            {option.name}
-          </button>
-        ))}
-      </section>
-    </>
-  );
+function SurveySelect({ surveySchema: q, onCancel, setSurvey }) {
+  const [value, setValue] = useState('');
+  return <>
+    <header className="App-header"><button onClick={onCancel} className="Cancel-button">Cancelar</button><p>{q.display}</p></header>
+    {(q.type || 'choice') === 'choice' ? <section className="Tag-buttons">
+      {q.options.map(o => <button key={o.value} onClick={() => setSurvey(o.value)}>{o.name}</button>)}
+      {q.required === false && <button onClick={() => setSurvey(null)}>Omitir pregunta</button>}
+    </section> : <form className="Survey-input" onSubmit={event => { event.preventDefault(); setSurvey(value === '' ? null : q.type === 'number' ? Number(value) : value); }}>
+      <label>{q.display}<input autoFocus type={q.type === 'number' ? 'number' : 'text'} inputMode={q.type === 'number' ? 'decimal' : undefined}
+        required={q.required !== false} min={q.min} max={q.max} step="any" maxLength={q.maxLength || 500} value={value} onChange={event => setValue(event.target.value)} /></label>
+      <button type="submit">Continuar</button>
+      {q.required === false && <button type="button" onClick={() => setSurvey(null)}>Omitir pregunta</button>}
+    </form>}
+  </>;
 }
 
 function DigitSelect({
@@ -162,7 +160,7 @@ function DigitSelect({
   );
 }
 
-function QuantityConfirmScreen({ quantity, station, shearers, onCancel, onSubmit }) {
+function QuantityConfirmScreen({ quantity, station, shearers, surveySchema, surveyResponses, onCancel, onSubmit }) {
   const name = shearers[station - 1]?.name ?? `Estación ${station}`;
 
   return (
@@ -175,7 +173,8 @@ function QuantityConfirmScreen({ quantity, station, shearers, onCancel, onSubmit
       </header>
       <section className="Tag-display">
         <p>Esqilador: {name}</p>
-        <p style={{}}>Qty: {quantity}</p>
+        <p>Cantidad: {quantity}</p>
+        {surveySchema?.map(q => <p key={q.field}>{q.display}: {answerText(q, surveyResponses[q.field])}</p>)}
       </section>
       <section className="Tag-buttons">
         <button onClick={(ev) => onSubmit(ev)}>OK</button>
@@ -201,9 +200,7 @@ function ConfirmScreen({
     ([field, response]) => {
       const schema = (surveySchema ?? []).find((schema) => schema.field === field);
       const fieldDisplay = schema?.display ?? field;
-      const optionName = schema?.options.find(
-        (option) => option.value === response
-      )?.name;
+      const optionName = schema ? answerText(schema, response) : String(response ?? 'Sin respuesta');
       return {
         display: fieldDisplay,
         optionName,
@@ -463,13 +460,13 @@ function TaggingApp() {
       station,
       tag,
       color: color.value,
-      ...surveyResponses,
+      surveyResponses,
     });
   };
 
   const onBulkSubmit = (event) => {
     event?.preventDefault();
-    return submit("/bulk", { quantity, station });
+    return submit("/bulk", { quantity, station, surveyResponses });
   };
 
   useEffect(() => {
@@ -568,6 +565,7 @@ function TaggingApp() {
     const surveySchema = mode.surveySchema[nextSurveyStepIndex];
     screen = (
       <SurveySelect
+        key={surveySchema.field}
         surveySchema={surveySchema}
         onCancel={onCancel}
         setSurvey={(value) => respondToSurvey(surveySchema.field, value)}
@@ -577,6 +575,8 @@ function TaggingApp() {
     screen = (
       <QuantityConfirmScreen
         quantity={quantity}
+        surveySchema={mode.surveySchema}
+        surveyResponses={surveyResponses}
         station={station}
         shearers={shearers}
         onCancel={onCancel}

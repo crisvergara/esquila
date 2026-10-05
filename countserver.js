@@ -1,3 +1,5 @@
+import { createSurvey, legacyFields, legacySurvey } from './shared/surveys.js';
+import { migrateBarnSurveys } from './shared/survey-migration.js';
 import express from "express";
 import bodyParser from "body-parser";
 import Database from "better-sqlite3";
@@ -328,6 +330,15 @@ if (process.env.ESQUILA_INITIAL_MANIFEST) {
     if (initial.revision >= ranchConfiguration.current().revision) ranchConfiguration.apply(initial);
   } catch { console.error('No se pudo aplicar la configuración inicial; se conserva la copia local.'); }
 }
+if (db.pragma('user_version', { simple: true }) < 5) {
+  if (db.prepare('SELECT 1 FROM counts LIMIT 1').get()) await db.backup(`esquila-pre-v5-${Date.now()}.sqlite`);
+  migrateBarnSurveys(db);
+}
+const recordWithSurvey = row => {
+  const { survey_json, ...record } = row;
+  return { ...record, survey: survey_json ? JSON.parse(survey_json) : legacySurvey(row) };
+};
+
 const getSettingsFromDb = db.prepare(`
   SELECT mode, email FROM settings
 `);
@@ -515,8 +526,8 @@ setInterval(async () => {
 }, 5000);
 
 const writeTagToDb = db.prepare(`
-  INSERT INTO counts (id, tag, station, color, lactation, type, woolQuality, date, updated_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO counts (id, tag, station, color, lactation, type, woolQuality, date, updated_at, survey_json)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const findCountSubmission = db.prepare(`
@@ -538,7 +549,8 @@ const insertCountTxn = db.transaction((row, submissionId) => {
     row.type,
     row.woolQuality,
     row.date,
-    row.updated_at
+    row.updated_at,
+    JSON.stringify(row.survey)
   );
   queueSyncRow.run("counts", row.id);
   if (submissionId) recordCountSubmission.run(submissionId, "single", row.date);
@@ -552,7 +564,8 @@ const writeTag = async (
   lactation = "idk",
   type = "oveja",
   woolQuality = "IDK",
-  submissionId = null
+  submissionId = null,
+  survey
 ) => {
   const dateString = new Date().toISOString();
 
@@ -566,13 +579,14 @@ const writeTag = async (
     woolQuality,
     date: dateString,
     updated_at: dateString,
+    survey,
   }, submissionId);
 
   await refreshCounts();
   return created;
 };
 
-const insertBulkCountTxn = db.transaction((station, quantity, submissionId) => {
+const insertBulkCountTxn = db.transaction((station, quantity, submissionId, survey) => {
   if (submissionId && findCountSubmission.get(submissionId)) return false;
   const dateString = new Date().toISOString();
   for (let i = 0; i < quantity; ++i) {
@@ -587,6 +601,8 @@ const insertBulkCountTxn = db.transaction((station, quantity, submissionId) => {
       woolQuality: "IDK",
       date: dateString,
       updated_at: dateString,
+      survey,
+      ...legacyFields(survey),
     };
     writeTagToDb.run(
       row.id,
@@ -597,7 +613,8 @@ const insertBulkCountTxn = db.transaction((station, quantity, submissionId) => {
       row.type,
       row.woolQuality,
       row.date,
-      row.updated_at
+      row.updated_at,
+      JSON.stringify(row.survey)
     );
     queueSyncRow.run("counts", row.id);
   }
@@ -606,8 +623,8 @@ const insertBulkCountTxn = db.transaction((station, quantity, submissionId) => {
   return true;
 });
 
-const writeBulkTags = async (station, quantity, submissionId = null) => {
-  const created = insertBulkCountTxn(station, quantity, submissionId);
+const writeBulkTags = async (station, quantity, submissionId = null, survey) => {
+  const created = insertBulkCountTxn(station, quantity, submissionId, survey);
   await refreshCounts();
   return created;
 };
@@ -660,13 +677,10 @@ const validateTagSubmission = (body) => {
     return { error: `tag must contain a valid prefix and ${digitsSchema.min}-${digitsSchema.max} digits` };
   }
 
-  for (const survey of taggingMode.surveySchema ?? []) {
-    if (!survey.options.some((option) => option.value === body?.[survey.field])) {
-      return { error: `invalid ${survey.field}` };
-    }
-  }
-
-  return { value: { type, station, color, tag } };
+  try {
+    const survey = createSurvey(configuration.modes, type, body);
+    return { value: { type, station, color, tag, survey, ...legacyFields(survey) } };
+  } catch (error) { return { error: error.message }; }
 };
 
 const getStatsFromDb = async () => {
@@ -696,10 +710,11 @@ app.post("/count", bodyParser.json(), (req, res) => {
     validation.value.tag,
     validation.value.station,
     validation.value.color,
-    req.body.lactation,
+    validation.value.lactation,
     validation.value.type,
-    req.body.woolQuality ?? "IDK",
-    submissionId
+    validation.value.woolQuality,
+    submissionId,
+    validation.value.survey
   )
     .then((created) => res.json({ ok: true, created, counts: countStatsByStation }))
     .catch((err) => {
@@ -720,7 +735,10 @@ app.post("/bulk", bodyParser.json(), (req, res) => {
     return res.status(400).json({ error: "invalid submissionId" });
   }
 
-  writeBulkTags(station, quantity, submissionId)
+  let survey;
+  try { survey = createSurvey(ranchConfiguration.forRevision(req.body.configurationRevision).modes, 'borrega', req.body); }
+  catch (error) { return res.status(400).json({ error: error.message }); }
+  writeBulkTags(station, quantity, submissionId, survey)
     .then((created) => res.json({ ok: true, created, counts: countStatsByStation }))
     .catch((err) => {
       console.error(err);
@@ -735,7 +753,8 @@ const recentRecords = db.prepare(`
 `);
 app.get("/api/records", (req, res) => {
   const filter = typeof req.query.tag === "string" ? req.query.tag.slice(0, 40) : "";
-  res.json({ rows: recentRecords.all(`%${filter}%`),
+  res.json({ rows: recentRecords.all(`%${filter}%`).map(recordWithSurvey),
+    configurationRevision: ranchConfiguration.current().revision,
     pending: db.prepare("SELECT COUNT(DISTINCT row_id) AS n FROM sync_outbox WHERE tbl = 'counts'").get().n,
     syncConfigured: Boolean(process.env.CLOUD_SYNC_URL && process.env.CLOUD_SYNC_TOKEN),
     configuration: ranchConfiguration.current().configuration });
@@ -743,7 +762,9 @@ app.get("/api/records", (req, res) => {
 
 const mutateRecord = db.transaction((body) => {
   const signature = JSON.stringify([body.action, body.id, body.updated_at, body.tag,
-    body.station, body.type, body.color, body.woolQuality, body.lactation]);
+    body.station, body.type, body.color, body.woolQuality, body.lactation,
+    ...(body.surveyResponses !== undefined ? [body.surveyResponses] : []),
+    ...(body.configurationRevision !== undefined ? [body.configurationRevision] : [])]);
   const receipt = db.prepare("SELECT * FROM record_mutations WHERE id = ?").get(body.submissionId);
   const fail = (status, message) => { throw Object.assign(new Error(message), { status }); };
   if (receipt) {
@@ -760,15 +781,18 @@ const mutateRecord = db.transaction((body) => {
   if (body.action === "delete") {
     db.prepare("UPDATE counts SET deleted_at = ?, updated_at = ? WHERE id = ?").run(now, now, id);
   } else {
+    if (!old && body.configurationRevision !== undefined && body.configurationRevision !== ranchConfiguration.current().revision) fail(409, 'La configuración cambió. Cierra el formulario y vuelve a abrirlo.');
     const validationError = validateShearingFields(body, readShearers().length, ranchConfiguration.current().configuration.modes, old, readShearers());
     if (validationError) fail(400, validationError);
+    const survey = createSurvey(ranchConfiguration.current().configuration.modes, body.type, body, old);
+    const fields = legacyFields(survey);
     if (old) {
       db.prepare(`UPDATE counts SET tag = ?, station = ?, color = ?, lactation = ?,
-        type = ?, woolQuality = ?, updated_at = ? WHERE id = ?`).run(
-        body.tag, Number(body.station), body.color, body.lactation, body.type, body.woolQuality, now, id);
+        type = ?, woolQuality = ?, updated_at = ?, survey_json = ? WHERE id = ?`).run(
+        body.tag, Number(body.station), body.color, fields.lactation, body.type, fields.woolQuality, now, JSON.stringify(survey), id);
     } else {
-      writeTagToDb.run(id, body.tag, Number(body.station), body.color, body.lactation,
-        body.type, body.woolQuality, now, now);
+      writeTagToDb.run(id, body.tag, Number(body.station), body.color, fields.lactation,
+        body.type, fields.woolQuality, now, now, JSON.stringify(survey));
     }
   }
   if (body.action !== "delete" && /^L[0-9]+$/.test(body.tag)) {
@@ -1248,6 +1272,7 @@ const toRemoteRow = {
     lactation: r.lactation,
     type: r.type,
     wool_quality: r.woolQuality,
+    survey: r.survey_json ? JSON.parse(r.survey_json) : legacySurvey(r),
     occurred_at: r.date,
     updated_at: r.updated_at,
     deleted_at: r.deleted_at,

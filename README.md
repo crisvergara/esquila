@@ -10,9 +10,14 @@ Three **modes** control what data is collected per animal:
 
 | Mode | Type | Description |
 |------|------|-------------|
-| `oveja` | Ewe | Tag entry + wool quality + lactation status survey |
-| `carnero` | Ram | Tag entry only |
-| `carnillero` | Lamb (bulk) | Enter a quantity, no individual tags |
+| `oveja` | Ewe | Individual tag + configurable survey (wool/lactation by default) |
+| `carnero` | Ram | Individual tag + optional configured survey |
+| `carnillero` | Lamb (bulk) | Quantity + optional survey shared by the batch |
+
+Configure questions in the cloud admin, including choice, text and numeric answers.
+The ranch caches the manifest for offline use. Both record editors preserve and
+edit the survey that was actually collected with each shearing event. See
+[configuration and migration details](docs/RANCH_CONFIGURATION.md).
 
 The active mode is changed centrally and refreshed on tagger devices through short local requests, normally within one second.
 
@@ -110,7 +115,7 @@ view, not a live LAN feed. Names reflect the latest station configuration.
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `POST` | `/count` | Log a single animal (tag, station, color, type, woolQuality, lactation) |
+| `POST` | `/count` | Log a single animal (tag, station, color, type, surveyResponses, configurationRevision) |
 | `GET/POST` | `/api/records` | List recent shearing records; retry-safe additions, edits, and tombstone deletions |
 | `POST` | `/bulk` | Log a batch of lambs by quantity and station |
 | `GET` | `/count` | Get current per-station stats (counted, last tag, breakdown by type) |

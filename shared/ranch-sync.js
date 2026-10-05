@@ -1,3 +1,4 @@
+import { validateSurvey, legacySurvey } from './surveys.js';
 // Apply a page and its cursor together. Remote rows never create upload echoes.
 export function createRanchSync(db) {
   db.transaction(() => {
@@ -19,6 +20,7 @@ export function createRanchSync(db) {
           (row.deleted_at != null && !instant(row.deleted_at)) ||
           (row.station != null && !Number.isInteger(row.station)) ||
           ['color','lactation','type','wool_quality','origin'].some(k => row[k] != null && typeof row[k] !== 'string')) throw new Error('Invalid sync row');
+      if (row.survey !== undefined && row.survey !== null) validateSurvey(row.survey);
       previous = BigInt(row.revision);
     }
     if (String(previous) !== page.cursor) throw new Error('Invalid sync cursor');
@@ -29,13 +31,16 @@ export function createRanchSync(db) {
         // A local edit made during the request must reach the cloud (and its audit)
         // before an equal/newer cloud version can replace it.
         if (db.prepare("SELECT 1 FROM sync_outbox WHERE tbl='counts' AND row_id=?").get(row.id)) break;
-        db.prepare(`INSERT INTO counts(id,tag,station,color,lactation,type,woolQuality,date,updated_at,deleted_at,origin)
-          VALUES(?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET tag=excluded.tag,station=excluded.station,
+        const prior = old?.survey_json ? JSON.parse(old.survey_json) : null;
+        const survey = !row.survey || (row.survey.legacy && prior && !prior.legacy)
+          ? legacySurvey(row, prior) : validateSurvey(row.survey);
+        db.prepare(`INSERT INTO counts(id,tag,station,color,lactation,type,woolQuality,date,updated_at,deleted_at,origin,survey_json)
+          VALUES(?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET tag=excluded.tag,station=excluded.station,
           color=excluded.color,lactation=excluded.lactation,type=excluded.type,woolQuality=excluded.woolQuality,
-          date=excluded.date,updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,origin=excluded.origin`).run(
+          date=excluded.date,updated_at=excluded.updated_at,deleted_at=excluded.deleted_at,origin=excluded.origin,survey_json=excluded.survey_json`).run(
           row.id,row.tag,row.station,row.color,row.lactation,row.type,row.wool_quality,
           new Date(row.occurred_at).toISOString(),new Date(row.updated_at).toISOString(),
-          row.deleted_at ? new Date(row.deleted_at).toISOString() : null,row.origin || 'ranch-server');
+          row.deleted_at ? new Date(row.deleted_at).toISOString() : null,row.origin || 'ranch-server',JSON.stringify(survey));
         changed++;
       }
       if (/^L\d+$/.test(row.tag) && Number.isSafeInteger(Number(row.tag.slice(1)))) {

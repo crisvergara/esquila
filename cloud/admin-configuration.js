@@ -1,3 +1,4 @@
+import { MAX_QUESTIONS } from '/surveys.js';
 import { MAX_STATIONS, validateConfiguration } from '/configuration-schema.js';
 
 const el = (tag, text, className) => {
@@ -69,6 +70,55 @@ export function mountRanchConfiguration({ api, onPublished }) {
     }
     parent.append(group);
   }
+  function surveys(parent, mode) {
+    mode.surveySchema ||= [];
+    for (const q of mode.surveySchema) { q.type ||= 'choice'; q.required ??= true; q.active ??= true; }
+    const questions = mode.surveySchema;
+    const group = el('section', '', 'config-surveys');
+    group.setAttribute('aria-label', `Encuesta ${modeName[mode.type]}`);
+    group.append(el('h3', 'Preguntas de la encuesta'), el('p', 'Las preguntas se guardan con cada esquila. Retirarlas o cambiar su nombre no modifica encuestas anteriores. Para cambiar el tipo, retira la pregunta y crea otra.', 'muted'));
+    if (mode.bulk) group.append(el('p', 'Las respuestas del lote se guardan en cada cordero. Puedes corregirlas individualmente en Registros.'));
+    questions.forEach((q, index) => {
+      const item = el('section', '', `config-question${q.active === false ? ' retired' : ''}`);
+      item.setAttribute('aria-label', `Pregunta ${index + 1}`);
+      const title = field('Pregunta', q.display, value => change(() => { q.display = value; }));
+      title.querySelector('input').maxLength = 160;
+      item.append(title, el('p', `Tipo: ${{ choice: 'Opciones', text: 'Texto', number: 'Número' }[q.type]}`, 'muted'));
+      const required = el('label', 'Respuesta obligatoria'), checkbox = el('input');
+      checkbox.type = 'checkbox'; checkbox.checked = q.required;
+      checkbox.onchange = () => change(() => { q.required = checkbox.checked; }); required.append(checkbox); item.append(required);
+      if (q.type === 'choice') choices(item, q.options, 'Respuestas');
+      if (q.type === 'text') {
+        const limit = field('Máximo de caracteres', q.maxLength, value => change(() => { q.maxLength = value; }), 'number');
+        limit.querySelector('input').max = 500; item.append(limit);
+      }
+      if (q.type === 'number') for (const [key, label] of [['min', 'Valor mínimo (opcional)'], ['max', 'Valor máximo (opcional)']]) {
+        const limit = field(label, q[key] ?? '', () => {}, 'number'), input = limit.querySelector('input');
+        input.required = false; input.min = -1e9; input.max = 1e9; input.step = 'any';
+        input.oninput = () => change(() => { if (input.value === '') delete q[key]; else q[key] = Number(input.value); });
+        item.append(limit);
+      }
+      const controls = el('div', '', 'row');
+      controls.append(action(q.active ? 'Retirar pregunta' : 'Restaurar pregunta', () => { change(() => { q.active = !q.active; }); render(); }));
+      for (const [offset, label] of [[-1, 'Subir pregunta'], [1, 'Bajar pregunta']]) {
+        const move = action(label, () => { change(() => { [questions[index], questions[index + offset]] = [questions[index + offset], questions[index]]; }); render(); });
+        move.disabled = index + offset < 0 || index + offset >= questions.length; controls.append(move);
+      }
+      item.append(controls); group.append(item);
+    });
+    const typeLabel = el('label', 'Tipo de nueva pregunta'), type = el('select');
+    for (const [value, name] of [['choice', 'Opciones (incluye sí/no)'], ['text', 'Texto'], ['number', 'Número']]) {
+      const option = el('option', name); option.value = value; type.append(option);
+    }
+    typeLabel.append(type);
+    const add = action('Agregar pregunta', () => {
+      if (questions.length >= MAX_QUESTIONS) { error.textContent = 'Máximo 24 preguntas; restaura una pregunta anterior.'; return; }
+      change(() => questions.push({ field: `q_${crypto.randomUUID().replaceAll('-', '')}`, display: 'Nueva pregunta', type: type.value, active: true, required: true,
+        ...(type.value === 'choice' ? { options: [{ value: 'yes', name: 'Sí', active: true }, { value: 'no', name: 'No', active: true }] } : type.value === 'text' ? { maxLength: 500 } : {}) }));
+      render();
+    });
+    group.append(typeLabel, add); parent.append(group);
+  }
   function render() {
     fields.replaceChildren();
     fields.append(field('Nombre del galpón', draft.name, value => change(() => { draft.name = value; })));
@@ -97,11 +147,8 @@ export function mountRanchConfiguration({ api, onPublished }) {
         const row = el('div', '', 'row');
         row.append(field('Mínimo de dígitos', digits.min, v => change(() => { digits.min = v; }), 'number'), field('Máximo de dígitos', digits.max, v => change(() => { digits.max = v; }), 'number'));
         section.append(row);
-        for (const survey of mode.surveySchema || []) {
-          section.append(field(survey.field === 'woolQuality' ? 'Pregunta sobre lana' : 'Pregunta sobre lactancia', survey.display, v => change(() => { survey.display = v; })));
-          choices(section, survey.options, survey.field === 'woolQuality' ? 'Calidad de lana' : 'Lactancia');
-        }
       }
+      surveys(section, mode);
       fields.append(section);
     }
     disable(Boolean(pending()) || busy);
@@ -154,7 +201,7 @@ export function mountRanchConfiguration({ api, onPublished }) {
   }
   form.onsubmit = event => {
     event.preventDefault();
-    try { publish({ revision, configuration: validateConfiguration(draft), submissionId: crypto.randomUUID() }); }
+    try { publish({ revision, configuration: validateConfiguration({ ...draft, schemaVersion: 2 }), submissionId: crypto.randomUUID() }); }
     catch (e) { error.textContent = e.message; }
   };
   select.onchange = () => {
