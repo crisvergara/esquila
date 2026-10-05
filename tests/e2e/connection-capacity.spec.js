@@ -15,6 +15,14 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { await stopService(server); });
 
+test('ranch health is reachable through a non-loopback IPv4 address', async ({ request }) => {
+  const address = Object.values(os.networkInterfaces()).flat().find(entry => entry.family === 'IPv4' && !entry.internal)?.address;
+  expect(address, 'The test host must have an IPv4 network interface').toBeTruthy();
+  const response = await request.get(`http://${address}:3186/healthz`, { timeout: 5000 });
+  expect(response.status()).toBe(200);
+  expect(await response.json()).toEqual({ ok: true });
+});
+
 test('repeated tagger tabs do not block navigation or counting requests', async ({ browser, request }) => {
   const context = await browser.newContext();
   try {

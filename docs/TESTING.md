@@ -29,6 +29,7 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
   catch-up, malformed metadata isolation, and retained settings after revocation;
 - Mac enrollment preview, required review before saving, invalid token feedback,
   HTTPS/redirect/size validation, and credential-free per-server admin links;
+- the barn health endpoint accepts a non-loopback IPv4 connection, not just localhost;
 - eight tagger tabs plus a monitor in one browser can navigate, submit counts,
   receive mode changes, and recover from offline status without exhausting HTTP
   connections (the original stream client reproduced a navigation timeout);
