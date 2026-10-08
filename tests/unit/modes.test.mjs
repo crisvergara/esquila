@@ -86,3 +86,21 @@ test('pull snapshots survive legacy writers, restart and tombstones; malformed m
   assert.equal(sync.cursor(), '3'); assert.equal(db.prepare('SELECT count(*) AS n FROM counts').get().n, 1);
   assert.equal(db.prepare('SELECT count(*) AS n FROM sync_outbox').get().n, 0); db.close();
 });
+
+test('existing schema-2 caches above the new size cap stay readable until the operator upgrades them', () => {
+  const choices = Array.from({ length: 64 }, (_, i) => ({ value: `c_${i}`, name: 'x'.repeat(80), active: true }));
+  const modes = structuredClone(shearingModes);
+  for (const mode of modes) {
+    if (!mode.bulk) {
+      mode.tagSchema.colors = choices.map(o => ({ ...o, color: '#000000', text: '#ffffff' }));
+      mode.tagSchema.textSchema[0].options = choices.map((o, i) => ({ ...o, value: String.fromCharCode(65 + Math.floor(i / 26), 65 + i % 26) }));
+    }
+    mode.surveySchema = [0, 1].map(i => ({ field: `q${i}`, display: 'Question', options: choices }));
+  }
+  const old = validateConfiguration({ schemaVersion: 2, name: 'Existing barn', shearers: [{ name: 'Ana' }], modes });
+  const bytes = new TextEncoder().encode(JSON.stringify(old)).length;
+  assert.ok(bytes > 80000 && bytes < 96000, `Legacy fixture size: ${bytes}`);
+  assert.deepEqual(validateConfiguration(old), old);
+  const next = { ...old, schemaVersion: 3, modes: old.modes.map(m => ({ ...m, name: m.type, bulk: !!m.bulk })) };
+  assert.throws(() => validateConfiguration(next), /demasiado grande/);
+});

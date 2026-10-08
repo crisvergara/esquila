@@ -39,7 +39,7 @@ In **Configuración → Modos de conteo**, choose **Copiar configuración de** a
 and questions, then publish. Copy an individual mode for tag entry or a bulk
 mode for quantity counting. Modes can be reordered, renamed, retired and
 restored. At least one must remain active; the limit is 24 including retired
-modes. The whole manifest is limited to 80 KB. Restore old choices instead of
+modes. New schema-3 manifests are limited to 80 KB. Restore old choices instead of
 creating replacement identities unnecessarily.
 
 The original Ovejas, Carneros and Corderos are defaults, not a fixed list.

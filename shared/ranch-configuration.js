@@ -70,7 +70,7 @@ export function validateConfiguration(input) {
   });
   if (!modes.some(m => m.active !== false)) fail('Conserva al menos un modo activo.');
   const result = { schemaVersion: input.schemaVersion, name: text(input.name, 'Nombre del galpón'), shearers, modes };
-  if (new TextEncoder().encode(JSON.stringify(result)).length > 80000) fail('La configuración es demasiado grande. Reduce los modos o sus opciones.');
+  if (configurable && new TextEncoder().encode(JSON.stringify(result)).length > 80000) fail('La configuración es demasiado grande. Reduce los modos o sus opciones.');
   return result;
 }
 
