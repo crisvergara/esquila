@@ -42,6 +42,13 @@ wool quality and lactation; rams and lambs start with no questions. Lamb-batch
 answers apply to every animal in the batch and can be corrected individually.
 The animal modes themselves retain their individual/bulk counting semantics.
 
+The tagger shows each question as a large heading above its answers, with a
+question counter and required/optional indication. On portrait phones the heading stays visible
+while scrolling through choices; entering a question returns to the top and
+focuses its heading. The confirmation screen pairs each original question with
+its selected answer, including omitted responses. Short screens and text/number
+inputs scroll normally so a pinned heading cannot cover the answer controls.
+
 A question's identifier and type are permanent. To change its type or meaning,
 retire it and add a new question. Retired questions/options remain in the
 manifest so they can be restored. Limits are 24 retained questions per mode,

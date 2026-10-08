@@ -24,6 +24,9 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
   question snapshots after manifest changes, offline survey counts and corrections,
   response-loss retries, legacy uploads preserving custom answers, malformed
   survey batch rejection, and ram/lamb/manual-record surveys;
+- survey headings and question progress at 320/390 px, landscape and desktop widths,
+  scroll/focus recovery after the keypad and long answer lists, wrapping labels,
+  optional answers, and question/answer pairs in individual and bulk review;
 - live configuration retirement during an in-progress count and ambiguous retry,
   custom monitor swatches, historical record corrections, offline restart and
   catch-up, malformed metadata isolation, and retained settings after revocation;

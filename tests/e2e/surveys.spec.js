@@ -121,7 +121,9 @@ test('offline surveys survive manifest changes, ambiguous retries and restart; b
   await page.getByRole('button', { name: 'Omitir pregunta', exact: true }).click();
   await page.getByLabel('Peso (kg)', { exact: true }).fill('47.5');
   await page.getByRole('button', { name: 'Continuar', exact: true }).click();
-  await expect(page.getByText('Peso (kg): 47.5', { exact: true })).toBeVisible();
+  const weightSummary = page.locator('.Survey-summary > div').filter({ has: page.getByText('Peso (kg)', { exact: true }) });
+  await expect(weightSummary.locator('dt')).toHaveText('Peso (kg)');
+  await expect(weightSummary.locator('dd')).toHaveText('47.5');
   await page.route('**/count', async route => { await route.fetch(); await route.abort('failed'); });
   await page.getByRole('button', { name: 'OK', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Reintentar', exact: true })).toBeVisible();
@@ -199,6 +201,67 @@ test('offline surveys survive manifest changes, ambiguous retries and restart; b
   expect((await push({ batches: [{ table: 'shearing_events', rows: [good, bad] }] })).response.status).toBe(400);
   expect(await remoteRecord(good.id)).toBeUndefined();
   await context.close();
+});
+
+test('survey questions stay prominent and in view after the keypad and long answer lists', async ({ browser }, testInfo) => {
+  const settings = structuredClone((await config()).configuration);
+  const longQuestion = '¿Qué condición presenta este animal al finalizar la esquila? Revisa cuidadosamente las opciones antes de registrar tu respuesta.';
+  const longAnswer = 'Necesita una revisión adicional antes de regresar al potrero';
+  const questions = [
+    { field: 'condition', display: longQuestion, type: 'choice', options: Array.from({ length: 12 }, (_, i) => ({ value: `condition_${i}`, name: i === 11 ? longAnswer : `Condición ${i + 1}` })) },
+    { field: 'notes', display: '¿Qué observaciones debemos guardar para la próxima revisión?', type: 'text', required: false, maxLength: 100 },
+    { field: 'weight', display: '¿Cuánto pesa el animal en kilogramos?', type: 'number', min: 1, max: 150 },
+    // Labels need not be unique: each question/answer keeps its own stable id.
+    { field: 'second_condition', display: longQuestion, type: 'choice', options: [{ value: 'yes', name: 'Sí' }, { value: 'no', name: 'No' }] },
+  ];
+  settings.modes[0].surveySchema = questions;
+  settings.modes[2].surveySchema = questions;
+  const manifest = await publish(settings);
+  await waitFor(async () => (await local('/api/configuration')).data.revision === manifest.revision);
+  const before = (await records()).length;
+  for (const [width, height, bulk] of [[320, 568, false], [390, 844, true], [640, 360, false], [1280, 800, false]]) {
+    await local('/mode', { mode: bulk ? 'carnillero' : 'oveja' });
+    const context = await browser.newContext({ viewport: { width, height } });
+    try {
+      const page = await context.newPage();
+      await page.goto(`${barnBase}/tagger/`);
+      await page.getByRole('button', { name: 'Estación 1', exact: true }).click();
+      if (!bulk) {
+        await page.getByRole('button', { name: 'Verde', exact: true }).click();
+        await page.getByRole('button', { name: 'A', exact: true }).click();
+      }
+      for (const digit of bulk ? '2' : '12345') await page.getByRole('button', { name: digit, exact: true }).click();
+      await page.getByRole('button', { name: '✔', exact: true }).click();
+      const assertQuestion = async (index) => {
+        const heading = page.getByRole('heading', { name: questions[index].display, exact: true });
+        await expect(heading).toBeInViewport({ ratio: 1 });
+        await expect(heading).toBeFocused();
+        await expect(page.getByText(`Pregunta ${index + 1} de 4`, { exact: true })).toBeVisible();
+        expect(await heading.evaluate(node => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(28);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      };
+      await assertQuestion(0);
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      if (height > 500) await expect(page.getByRole('heading', { name: longQuestion, exact: true })).toBeInViewport({ ratio: 1 });
+      await page.getByRole('group', { name: longQuestion, exact: true }).getByRole('button', { name: longAnswer, exact: true }).click();
+      await assertQuestion(1);
+      await page.getByRole('button', { name: 'Omitir pregunta', exact: true }).click();
+      await assertQuestion(2);
+      await expect(page.locator('.Survey-header')).toHaveCSS('position', 'static');
+      await page.getByLabel(questions[2].display, { exact: true }).fill('42.5');
+      await page.getByRole('button', { name: 'Continuar', exact: true }).click();
+      await assertQuestion(3);
+      await page.screenshot({ path: testInfo.outputPath(`question-${width}.png`) });
+      await page.getByRole('button', { name: 'No', exact: true }).click();
+      const summary = page.locator('.Survey-summary');
+      await expect(summary.locator('dt')).toHaveText(questions.map(q => q.display));
+      await expect(summary.locator('dd')).toHaveText([longAnswer, 'Sin respuesta', '42.5', 'No']);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      // Inspect the review without recording a real/synthetic animal in this test.
+      await page.getByRole('button', { name: 'Cancelar', exact: true }).last().click();
+    } finally { await context.close(); }
+  }
+  expect((await records()).length).toBe(before);
 });
 
 test('rams and lamb batches use configured surveys; new manual records and tombstones sync', async ({ browser }) => {
