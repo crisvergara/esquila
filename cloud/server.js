@@ -286,7 +286,7 @@ app.get("/api/snapshot", deviceAuth, async (req, res, next) => {
   try {
     const [events, treatments, presets] = await Promise.all([
       pool.query(`
-        SELECT id, tag, station, color, lactation, type, wool_quality, mode, survey,
+        SELECT id, tag, station, color, lactation, type, wool_quality, mode,
                occurred_at, updated_at, origin
         FROM shearing_events WHERE deleted_at IS NULL
         ORDER BY occurred_at DESC

@@ -176,6 +176,9 @@ test('offline selection and frozen animals survive retirement, rename, lost resp
   expect((await records()).find(r => r.id === manualCloud.data.id).mode).toEqual({ id: bulkId, name: 'Lotes actuales', bulk: true });
   const correction = (await records()).find(r => r.id === manualCloud.data.id);
   expect((await local('/api/records', { ...correction, action: 'edit', type: individualId, tag: 'A65432', submissionId: crypto.randomUUID() })).response.status).toBe(400);
+  const flock = (await jsonRequest(`${cloudBase}/api/snapshot`, { token: server.token })).data.shearing_events.find(r => r.id === first.id);
+  expect(flock.mode).toEqual(first.mode);
+  expect(flock).not.toHaveProperty('survey'); // The vaccination PWA needs the mode label, not full survey payloads for every animal.
   // Missing or migrated legacy metadata must never erase the original mode snapshot.
   await stopService(barn);
   let current = await remoteRecord(first.id);
