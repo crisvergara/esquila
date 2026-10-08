@@ -225,3 +225,5 @@ the three animal types retain their database/counting semantics. See
 Cloud personal accounts, invitations, password reset and first-owner setup are
 documented in [docs/ADMIN_ACCOUNTS.md](docs/ADMIN_ACCOUNTS.md). Manage people at
 `https://<app>/admin/accounts`; accounts use email usernames and private passwords.
+
+Cloud admin screens, recent-scan browsing and corrections: [Cloud administration](docs/CLOUD_ADMIN.md).

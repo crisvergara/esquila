@@ -628,7 +628,8 @@ test("cloud enforces auth, roles, rollback, admin CSRF, and last-write-wins", as
   await expect(page.getByLabel("Contraseña de administración")).toBeVisible();
   await page.getByLabel("Contraseña de administración").fill(adminPassword);
   await page.getByRole("button", { name: "Iniciar sesión" }).click();
-  await expect(page.getByRole("heading", { name: "Esquila — Dispositivos" })).toBeVisible();
+  await page.getByRole("navigation", { name: "Administración" }).getByRole("link", { name: "Dispositivos" }).click();
+  await expect(page.getByRole("heading", { name: "Inscribir un dispositivo" })).toBeVisible();
 
   expect((await request.post(`${cloudBase}/api/admin/login`, { headers: { Origin: cloudBase }, data: { password: adminPassword } })).status()).toBe(200);
   expect((await request.post(`${cloudBase}/api/admin/devices`, { data: { name: "CSRF", role: "phone" } })).status()).toBe(403);
@@ -664,6 +665,7 @@ test("cloud admin manages shearing offline, retries lost receipts, and reconcile
   await page.getByLabel('Contraseña de administración').fill(adminPassword);
   await page.getByRole('button', { name: 'Iniciar sesión' }).click();
   await expect(page.getByRole('table', { name: 'Monitor por esquilador' })).toBeVisible();
+  await page.getByRole('navigation', { name: 'Administración' }).getByRole('link', { name: 'Registros', exact: false }).click();
   await page.getByRole('button', { name: 'Agregar registro', exact: true }).click();
   await page.locator('#record-tag').fill('A99881');
   await page.locator('#record-station').selectOption('2');
@@ -677,6 +679,8 @@ test("cloud admin manages shearing offline, retries lost receipts, and reconcile
   expect(lostReceipt.ok).toBe(true);
   await page.unroute('**/api/admin/shearing');
   await page.reload();
+  await page.getByRole('button', { name: 'Agregar registro', exact: true }).click();
+  await expect(page.locator('#ranch-error')).toContainText('Primero reintenta');
   await page.getByRole('button', { name: 'Reintentar mismo cambio' }).click();
   await expect(page.locator('#ranch-result')).toContainText('Guardado en la nube');
   expect(await listing('A99881')).toHaveLength(1);
@@ -708,6 +712,7 @@ test("cloud admin manages shearing offline, retries lost receipts, and reconcile
   expect(await listing('A99883')).toHaveLength(0);
   const history = (await admin('GET', `/api/admin/shearing/${tombstone.data.id}/history`)).data;
   expect(history).toHaveLength(2); expect(history[0].after_row.deleted_at).toBeTruthy();
+  await page.locator('#record-filter-details').evaluate(el => { el.open = true; });
   await page.locator('#ranch-deleted').check();
   await page.getByRole('button', { name: 'Buscar / Actualizar' }).click();
   await expect(page.locator('#ranch-rows')).toContainText('Eliminado');

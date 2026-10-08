@@ -1,0 +1,40 @@
+<section class="panel records-toolbar">
+  <div class="section-heading"><div><h2>Explorar esquilas</h2><p class="muted">Todos los días, del más reciente al más antiguo. Las correcciones viajan al galpón en su próxima sincronización.</p></div><button id="ranch-add" disabled>Agregar registro</button></div>
+  <form id="ranch-filters">
+    <div class="filter-primary"><label>Servidor<select aria-label="Servidor" id="ranch-server"><option value="">Todos los servidores e históricos</option><option value="unknown">Históricos sin servidor identificado</option></select></label>
+    <label>Buscar código<input id="ranch-tag" maxlength="40" type="search" placeholder="Código completo o parte del código"></label>
+    <label>Ordenar por<select aria-label="Ordenar por" id="ranch-sort"><option value="newest">Esquila más reciente</option><option value="oldest">Esquila más antigua</option><option value="uploaded">Última carga del servidor</option><option value="updated">Última modificación</option></select></label></div>
+    <details id="record-filter-details"><summary>Más filtros: fechas, esquilador, tipo y sincronización</summary><div class="filter-grid">
+      <label>Desde (Chile)<input id="ranch-from" type="date"></label><label>Hasta (Chile)<input id="ranch-to" type="date"></label>
+      <label>Esquilador / estación<select aria-label="Esquilador / estación" id="ranch-station"><option value="">Todas las estaciones</option></select></label>
+      <label>Tipo de animal<select aria-label="Tipo de animal" id="ranch-type"><option value="">Todos los tipos</option><option value="oveja">Ovejas</option><option value="carnero">Carneros</option><option value="borrega">Corderos</option></select></label>
+      <label>Color de caravana<select aria-label="Color de caravana" id="ranch-color"><option value="">Todos los colores</option></select></label>
+      <label>Sincronización<select aria-label="Sincronización" id="ranch-sync"><option value="">Todos los estados</option><option value="pending">Pendiente en galpón</option><option value="received">Recibido en galpón</option></select></label>
+      <label class="checkbox-label"><input id="ranch-deleted" type="checkbox">Incluir eliminados</label>
+    </div></details>
+    <div class="row"><button>Buscar / Actualizar</button><button id="ranch-reset" class="quiet" type="button">Limpiar filtros</button><button id="ranch-today" class="quiet" type="button">Hoy en Chile</button><span id="ranch-filter-summary" class="muted"></span></div>
+  </form>
+</section>
+<p id="ranch-error" class="error" role="alert"></p><p id="ranch-result" class="notice" role="status"></p>
+<section class="panel records-panel"><div class="section-heading"><div><h2>Registros de esquila</h2><p id="ranch-summary" role="status">Cargando registros…</p></div><label>Por página<select aria-label="Por página" id="ranch-limit"><option>25</option><option selected>50</option><option>100</option></select></label></div>
+<p id="ranch-scope" class="muted"></p>
+<div class="scroll" role="region" aria-label="Tabla de registros" tabindex="0"><table aria-label="Registros de esquila"><thead><tr><th>Esquila / carga (Chile)</th><th>Código</th><th>Estación</th><th>Tipo / color</th><th>Servidor</th><th>Sincronización</th><th>Acciones</th></tr></thead><tbody id="ranch-rows"></tbody></table></div>
+<div id="ranch-empty" class="empty-state" hidden><h3>No hay registros con estos filtros</h3><p>Prueba con todas las fechas o incluye los históricos sin servidor identificado. Los conteos sin internet aparecerán después de sincronizar.</p></div>
+<div class="pagination"><button id="ranch-prev" class="quiet">Anterior</button><span id="ranch-page"></span><button id="ranch-next" class="quiet">Siguiente</button></div>
+<p class="muted">La tabla y las confirmaciones se actualizan al buscar o guardar, para que nuevas cargas no muevan los registros mientras los revisas. La confirmación indica recepción por el servidor elegido; sin filtro, por todos los servidores inscritos.</p></section>
+  <dialog id="ranch-editor" aria-labelledby="editor-title">
+    <h2 id="editor-title">Registro de esquila</h2>
+    <p id="editor-note"></p>
+    <form id="record-form">
+      <div class="row">
+        <label>Código<input id="record-tag" required maxlength="20"></label>
+        <label>Estación<select aria-label="Estación" id="record-station"></select></label>
+        <label>Tipo<select aria-label="Tipo" id="record-type"><option value="oveja">Oveja</option><option value="carnero">Carnero</option><option value="borrega">Cordero</option></select></label>
+        <label>Color<select aria-label="Color" id="record-color"></select></label>
+        <div id="record-survey" class="record-survey"></div>
+      </div>
+      <p id="editor-error" class="error" role="alert"></p>
+      <div class="row"><button id="record-save">Guardar</button><button type="button" id="record-cancel">Cerrar</button></div>
+    </form>
+  </dialog>
+  <dialog id="ranch-history" aria-labelledby="history-title"><h2 id="history-title">Historial del registro</h2><p>Se conservan las versiones aceptadas y los intentos locales descartados por una corrección más reciente. Se muestran los últimos 50 cambios.</p><div id="history-rows"></div><button id="history-close">Cerrar historial</button></dialog>

@@ -51,6 +51,10 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
 - recent-record editor additions, edits, deletion confirmations, response-loss retries across reload/restart, stale-editor rejection, offline reconciliation, and stale tombstone replay;
 - edits made during a cloud upload whose response is lost, plus durable lamb-number reservation after manual corrections and restart;
 - ranch restart safety for lamb numbering and synchronization;
+- dedicated admin screens and navigation, legacy configuration deep links, mobile
+  layout, bookmarkable filters/pages, Chile date boundaries, authenticated server
+  attribution (including spoofed origins), upload replay timestamps, legacy
+  unattributed history, and server-specific acknowledgement filters;
 - cloud monitor/record management, lost admin receipts across reload, concurrent
   duplicate submissions, stale editors, deleted-row history, and admin/phone/CSRF
   boundaries;

@@ -171,7 +171,11 @@ test('invalid remote metadata cannot block count synchronization, and revocation
   await page.getByLabel('Contraseña de administración').fill(password);
   await page.getByRole('button', { name: 'Iniciar sesión' }).click();
   await expect(page.getByLabel('Nombre del galpón', { exact: true })).toHaveValue('Galpón principal');
+  await page.getByRole('navigation', { name: 'Administración' }).getByRole('link', { name: 'Dispositivos' }).click();
+  page.on('dialog', dialog => dialog.accept());
   await page.locator('#devices tr').filter({ hasText: 'Galpón principal' }).getByRole('button', { name: 'Eliminar' }).click();
+  await expect(page.locator('#devices')).not.toContainText('Galpón principal');
+  await page.getByRole('navigation', { name: 'Administración' }).getByRole('link', { name: 'Configuración' }).click();
   await expect(page.getByLabel('Nombre del galpón', { exact: true })).toHaveValue('Otro galpón');
   await expect(page).toHaveURL(new RegExp(`server=${other.id}`));
   expect((await jsonRequest(`${cloudBase}/api/server/configuration`, { token: server.token })).response.status).toBe(401);

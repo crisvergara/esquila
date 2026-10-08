@@ -182,13 +182,30 @@ API trusts the ranch WiFi and grants no additional cloud roles to phones.
 
 ## Cloud ranch management and bidirectional shearing sync
 
-`/admin` serves a password-protected monitor and paginated record editor in
-addition to device enrollment. `GET /api/admin/ranch` reports the last heartbeat
-per server device, version/hostname/platform, uptime, mode, configured shearers,
-local outbox size, and cloud rows awaiting acknowledgement (including deletes).
-`GET /api/admin/shearing` filters by Chile date and code, returns 100 rows per
-page, and optionally includes tombstones. Monitor totals ignore the code filter
-and exclude deleted records. Both local and cloud monitors use `America/Santiago`.
+The authenticated admin uses separate overview (`/admin`), record browser
+(`/admin/records`), configuration, device and account pages with shared
+navigation. Legacy Mac configuration deep links remain supported. See
+[CLOUD_ADMIN.md](CLOUD_ADMIN.md) for operator workflows.
+`GET /api/admin/ranch` reports the last heartbeat per server device,
+version/hostname/platform, uptime, mode, configured shearers, local outbox size,
+and cloud rows awaiting acknowledgement (including deletes).
+`GET /api/admin/shearing` supports server attribution, inclusive Chile date
+ranges, code, station, type, color, deletion and acknowledgement filters, with
+bounded 25/50/100-row pagination and stable tie-break ordering. The browser opens
+across all dates; the original API's default day remains compatible. Monitor
+totals ignore code/detail filters and exclude deleted records. Both monitors use
+`America/Santiago`. Filter/sort/page state is bookmarkable. The browser refreshes
+on search/save rather than shifting records underneath an ongoing review.
+
+Cloud-only `shearing_record_servers` metadata attributes uploads to authenticated
+server UUIDs in the same transaction as each upload batch, independently of
+client-supplied `origin`. First/latest upload instants survive equal/older retries.
+Manual cloud additions retain their selected server context without inventing
+an upload timestamp. Old records with ambiguous origins stay unattributed and
+browsable; revoking a device preserves its historical identity/name. Attribution
+never changes event payloads, SQLite schemas, or the shared-flock replication
+scope. A record's acknowledgement is relative to the selected server or all
+active enrolled servers when no server is selected.
 Station names and record-editor choices come from the selected server's
 published manifest, falling back to its last report for older installations;
 historical name assignments are not stored. Contact older than three minutes is marked stale;

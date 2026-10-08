@@ -1,3 +1,4 @@
+import { parseRecordFilters, browseShearing } from './shearing-browser.js';
 import { createSurvey, legacyFields, legacySurvey } from '../shared/surveys.js';
 import express from 'express';
 import { uuidv7 } from '../shared/uuidv7.js';
@@ -8,7 +9,6 @@ import { MAX_STATIONS, UUID } from '../shared/ranch-configuration.js';
 const cursorPattern = /^(0|[1-9]\d{0,17})$/;
 const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const normalized = row => ({ ...row, date: row.occurred_at, woolQuality: row.wool_quality, survey: row.survey || legacySurvey(row) });
-const validDay = value => /^\d{4}-\d{2}-\d{2}$/.test(value) && !Number.isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value;
 
 export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
   app.post('/api/sync/ranch', deviceAuth, express.json({ limit: '32kb' }), async (req, res, next) => {
@@ -52,25 +52,16 @@ export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
   });
 
   app.get('/api/admin/shearing', adminAuth, async (req, res, next) => {
-    const tag = typeof req.query.tag === 'string' ? req.query.tag.slice(0, 40) : '';
-    const day = typeof req.query.day === 'string' ? req.query.day : ranchDay();
-    const offset = Number(req.query.offset || 0);
-    if ((day && !validDay(day)) || !Number.isSafeInteger(offset) || offset < 0 || offset > 1_000_000) return res.status(400).json({ error: 'Filtros inválidos.' });
-    const includeDeleted = req.query.deleted === '1';
-    const filter = `(${includeDeleted ? 'true' : 'deleted_at IS NULL'}) AND tag ILIKE $1 AND ($2::date IS NULL OR (occurred_at AT TIME ZONE 'America/Santiago')::date = $2::date)`;
+    let filters;
+    try { filters = parseRecordFilters(req.query); }
+    catch (error) { return res.status(400).json({ error: error.message }); }
     try {
       const client = await pool.connect();
       try {
         await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-        const args = [`%${tag}%`, day || null];
-        const rows = (await client.query(`SELECT * FROM shearing_events WHERE ${filter} ORDER BY occurred_at DESC, id DESC LIMIT 100 OFFSET $3`, [...args, offset])).rows;
-        const total = Number((await client.query(`SELECT count(*) AS n FROM shearing_events WHERE ${filter}`, args)).rows[0].n);
-        // Monitor totals use the selected day, independently of the code filter.
-        const totals = (await client.query(`SELECT station, type, count(*)::int AS count FROM shearing_events
-          WHERE deleted_at IS NULL AND ($1::date IS NULL OR (occurred_at AT TIME ZONE 'America/Santiago')::date = $1::date)
-          GROUP BY station, type ORDER BY station`, [day || null])).rows;
+        const data = await browseShearing(client, filters);
         await client.query('COMMIT');
-        res.json({ rows: rows.map(normalized), total, totals, day, offset });
+        res.json({ ...data, rows: data.rows.map(normalized) });
       } catch (error) { await client.query('ROLLBACK').catch(() => {}); throw error; }
       finally { client.release(); }
     } catch (error) { next(error); }
@@ -112,10 +103,10 @@ export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
         if (!old || old.deleted_at) fail(404, 'El registro ya no existe. Actualiza la tabla.');
         if (old.updated_at.toISOString() !== b.updated_at) fail(409, 'El registro cambió. Cierra el formulario y vuelve a abrirlo.');
       }
-      let survey, fields;
+      let survey, fields, target;
       if (b.action !== 'delete') {
         if (b.serverId && !UUID.test(b.serverId)) fail(400, 'Galpón inválido.');
-        const target = b.serverId || (await client.query("SELECT d.id FROM devices d LEFT JOIN ranch_status r ON r.device_id=d.id WHERE d.role='server' ORDER BY r.received_at DESC NULLS LAST,d.created_at DESC LIMIT 1")).rows[0]?.id;
+        target = b.serverId || (await client.query("SELECT d.id FROM devices d LEFT JOIN ranch_status r ON r.device_id=d.id WHERE d.role='server' ORDER BY r.received_at DESC NULLS LAST,d.created_at DESC LIMIT 1")).rows[0]?.id;
         if (target && !(await client.query("SELECT 1 FROM devices WHERE id=$1 AND role='server'", [target])).rowCount) fail(404, 'Galpón desconocido.');
         const manifest = target ? (await client.query('SELECT configuration,revision FROM ranch_configurations WHERE device_id=$1', [target])).rows[0] : null;
         const configuration = manifest?.configuration;
@@ -140,6 +131,8 @@ export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
         row = (await client.query(`INSERT INTO shearing_events(id,tag,station,color,lactation,type,wool_quality,occurred_at,updated_at,origin,survey)
           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8,'cloud-admin',$9) RETURNING *`, [id,b.tag,Number(b.station),b.color,fields.lactation,b.type,fields.woolQuality,now,survey])).rows[0];
       }
+      if (!old && target) await client.query(`INSERT INTO shearing_record_servers(record_id,server_id,server_name)
+        SELECT $1,id,name FROM devices WHERE id=$2 ON CONFLICT DO NOTHING`, [id,target]);
       const result = { ok: true, id, updated_at: row.updated_at.toISOString(), revision: row.revision, duplicate: false };
       await client.query('INSERT INTO admin_record_mutations VALUES($1,$2,$3)', [b.submissionId, JSON.stringify(request), result]);
       await client.query('COMMIT');
