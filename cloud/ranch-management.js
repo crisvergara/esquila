@@ -1,3 +1,4 @@
+import { validModeId, recordedMode, modeForRecord } from '../shared/modes.js';
 import { parseRecordFilters, browseShearing } from './shearing-browser.js';
 import { createSurvey, legacyFields, legacySurvey } from '../shared/surveys.js';
 import express from 'express';
@@ -8,7 +9,7 @@ import { MAX_STATIONS, UUID } from '../shared/ranch-configuration.js';
 
 const cursorPattern = /^(0|[1-9]\d{0,17})$/;
 const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-const normalized = row => ({ ...row, date: row.occurred_at, woolQuality: row.wool_quality, survey: row.survey || legacySurvey(row) });
+const normalized = row => ({ ...row, date: row.occurred_at, woolQuality: row.wool_quality, mode: recordedMode(row), survey: row.survey || legacySurvey(row) });
 
 export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
   app.post('/api/sync/ranch', deviceAuth, express.json({ limit: '32kb' }), async (req, res, next) => {
@@ -17,7 +18,7 @@ export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
     if (typeof cursor !== 'string' || !cursorPattern.test(cursor) || !information ||
         !Array.isArray(information.shearers) || information.shearers.length < 1 || information.shearers.length > MAX_STATIONS ||
         information.shearers.some(s => !s || typeof s.name !== 'string' || !s.name.trim() || s.name.length > 80) ||
-        !['oveja', 'carnero', 'carnillero'].includes(information.mode) ||
+        !validModeId(information.mode) || (information.modeName !== undefined && (typeof information.modeName !== 'string' || information.modeName.length > 80)) ||
         !Number.isSafeInteger(information.pending) || information.pending < 0 ||
         !Number.isFinite(information.uptime) || information.uptime < 0 ||
         ['hostname', 'version', 'platform'].some(k => typeof information[k] !== 'string' || information[k].length > 100)) {
@@ -26,7 +27,7 @@ export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
     try {
       const head = (await pool.query('SELECT revision FROM shearing_sync_clock WHERE singleton')).rows[0].revision;
       if (BigInt(cursor) > BigInt(head)) return res.status(409).json({ error: 'sync cursor is ahead of cloud; database recovery requires review' });
-      const safeInfo = { shearers: information.shearers.map(s => ({ name: s.name, active: s.active !== false })), mode: information.mode,
+      const safeInfo = { shearers: information.shearers.map(s => ({ name: s.name, active: s.active !== false })), mode: information.mode, modeName: information.modeName,
         pending: information.pending, uptime: Math.floor(information.uptime), hostname: information.hostname,
         version: information.version, platform: information.platform };
       await pool.query(`INSERT INTO ranch_status(device_id, applied_revision, information) VALUES ($1, $2, $3)
@@ -103,7 +104,7 @@ export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
         if (!old || old.deleted_at) fail(404, 'El registro ya no existe. Actualiza la tabla.');
         if (old.updated_at.toISOString() !== b.updated_at) fail(409, 'El registro cambió. Cierra el formulario y vuelve a abrirlo.');
       }
-      let survey, fields, target;
+      let survey, fields, target, savedMode;
       if (b.action !== 'delete') {
         if (b.serverId && !UUID.test(b.serverId)) fail(400, 'Galpón inválido.');
         target = b.serverId || (await client.query("SELECT d.id FROM devices d LEFT JOIN ranch_status r ON r.device_id=d.id WHERE d.role='server' ORDER BY r.received_at DESC NULLS LAST,d.created_at DESC LIMIT 1")).rows[0]?.id;
@@ -117,6 +118,7 @@ export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
         if (error) fail(400, error);
         survey = createSurvey(configuration?.modes || shearingModes, b.type, b, old ? normalized(old) : null);
         fields = legacyFields(survey);
+        savedMode = modeForRecord(configuration?.modes || shearingModes, b.type, old);
       }
       const now = new Date(Math.max(Date.now(), old ? old.updated_at.getTime() + 1 : 0)).toISOString();
       const id = old?.id || uuidv7();
@@ -126,10 +128,10 @@ export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
         row = (await client.query('UPDATE shearing_events SET deleted_at = $1, updated_at = $1 WHERE id = $2 RETURNING *', [now, id])).rows[0];
       } else if (old) {
         row = (await client.query(`UPDATE shearing_events SET tag=$1, station=$2, color=$3, lactation=$4,
-          type=$5, wool_quality=$6, updated_at=$7, survey=$9 WHERE id=$8 RETURNING *`, [b.tag, Number(b.station), b.color, fields.lactation, b.type, fields.woolQuality, now, id, survey])).rows[0];
+          type=$5, wool_quality=$6, updated_at=$7, survey=$9, mode=$10 WHERE id=$8 RETURNING *`, [b.tag, Number(b.station), b.color, fields.lactation, b.type, fields.woolQuality, now, id, survey, savedMode])).rows[0];
       } else {
-        row = (await client.query(`INSERT INTO shearing_events(id,tag,station,color,lactation,type,wool_quality,occurred_at,updated_at,origin,survey)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8,'cloud-admin',$9) RETURNING *`, [id,b.tag,Number(b.station),b.color,fields.lactation,b.type,fields.woolQuality,now,survey])).rows[0];
+        row = (await client.query(`INSERT INTO shearing_events(id,tag,station,color,lactation,type,wool_quality,occurred_at,updated_at,origin,survey,mode)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8,'cloud-admin',$9,$10) RETURNING *`, [id,b.tag,Number(b.station),b.color,fields.lactation,b.type,fields.woolQuality,now,survey,savedMode])).rows[0];
       }
       if (!old && target) await client.query(`INSERT INTO shearing_record_servers(record_id,server_id,server_name)
         SELECT $1,id,name FROM devices WHERE id=$2 ON CONFLICT DO NOTHING`, [id,target]);

@@ -1,3 +1,5 @@
+import { validateRecordedMode, reconcileRecordedMode } from '../shared/modes.js';
+import { migrateCloudModes } from '../shared/mode-migration.js';
 import { adminPaths, renderAdminPage } from './admin-layout.js';
 import { validateSurvey, legacySurvey, legacyFields } from '../shared/surveys.js';
 import { migrateCloudSurveys } from '../shared/survey-migration.js';
@@ -48,6 +50,7 @@ pool.on("error", () => {
 const schema = await readFile(path.join(__dirname, "schema.sql"), "utf8");
 await pool.query(schema);
 await migrateCloudSurveys(pool);
+await migrateCloudModes(pool);
 console.log("Schema applied");
 
 const app = express();
@@ -64,7 +67,7 @@ app.use((req, res, next) => {
     req.path.startsWith("/admin") ||
     req.path === "/admin.js" ||
     req.path === "/admin-configuration.js" ||
-    req.path === "/configuration-schema.js" || req.path === '/surveys.js' ||
+    req.path === "/configuration-schema.js" || req.path === '/surveys.js' || req.path === '/modes.js' ||
     req.path === "/login.js" ||
     req.path.startsWith("/api/admin")
   ) {
@@ -121,19 +124,19 @@ const UPSERTS = {
   shearing_events: {
     columns: [
       "id", "tag", "station", "color", "lactation", "type",
-      "wool_quality", "occurred_at", "updated_at", "deleted_at", "origin", "survey",
+      "wool_quality", "occurred_at", "updated_at", "deleted_at", "origin", "survey", "mode",
     ],
     required: ["id", "tag", "occurred_at", "updated_at"],
     sql: `
       INSERT INTO shearing_events
-        (id, tag, station, color, lactation, type, wool_quality, occurred_at, updated_at, deleted_at, origin, survey)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        (id, tag, station, color, lactation, type, wool_quality, occurred_at, updated_at, deleted_at, origin, survey, mode)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       ON CONFLICT (id) DO UPDATE SET
         tag = excluded.tag, station = excluded.station, color = excluded.color,
         lactation = excluded.lactation, type = excluded.type,
         wool_quality = excluded.wool_quality, occurred_at = excluded.occurred_at,
         updated_at = excluded.updated_at, deleted_at = excluded.deleted_at,
-        origin = excluded.origin, survey = excluded.survey
+        origin = excluded.origin, survey = excluded.survey, mode = excluded.mode
       WHERE excluded.updated_at > shearing_events.updated_at
     `,
   },
@@ -194,6 +197,10 @@ app.post("/api/sync/push", deviceAuth, express.json({ limit: "20mb" }), async (r
         try { row.survey = validateSurvey(row.survey); }
         catch { return res.status(400).json({ error: 'invalid survey' }); }
       }
+      if (batch.table === 'shearing_events' && row?.mode !== undefined) {
+        try { row.mode = validateRecordedMode(row.mode); }
+        catch { return res.status(400).json({ error: 'invalid mode' }); }
+      }
       for (const field of UPSERTS[batch.table].required) {
         if (row[field] === undefined || row[field] === null || row[field] === "") {
           return res
@@ -216,8 +223,10 @@ app.post("/api/sync/push", deviceAuth, express.json({ limit: "20mb" }), async (r
       const spec = UPSERTS[batch.table];
       for (const row of batch.rows) {
         if (batch.table === 'shearing_events') {
+          const old = (row.survey === undefined || row.survey.legacy || !row.mode || row.mode.legacy)
+            ? (await client.query('SELECT type,survey,mode FROM shearing_events WHERE id=$1', [row.id])).rows[0] : null;
+          row.mode = reconcileRecordedMode(row.mode, old, row);
           if (row.survey === undefined || row.survey.legacy) {
-            const old = (await client.query('SELECT survey FROM shearing_events WHERE id=$1', [row.id])).rows[0];
             // An upgraded old Mac may send an explicit migrated survey. Treat
             // it like an old writer, never replacing a richer event snapshot.
             if (row.survey === undefined || (old?.survey && !old.survey.legacy)) row.survey = legacySurvey(row, old?.survey);
@@ -234,6 +243,7 @@ app.post("/api/sync/push", deviceAuth, express.json({ limit: "20mb" }), async (r
           const different = spec.columns.some((key, i) => {
             const current = existing[key] instanceof Date ? existing[key].toISOString() : existing[key];
             const incoming = ['occurred_at','updated_at','deleted_at'].includes(key) && values[i] ? new Date(values[i]).toISOString() : values[i];
+            if (key === 'mode') return JSON.stringify(validateRecordedMode(current)) !== JSON.stringify(validateRecordedMode(incoming));
             return key === 'survey' ? JSON.stringify(validateSurvey(current)) !== JSON.stringify(validateSurvey(incoming)) : current !== incoming;
           });
           if (different) await client.query(`INSERT INTO shearing_audit(row_id,source,before_row,after_row,dedupe)
@@ -276,7 +286,7 @@ app.get("/api/snapshot", deviceAuth, async (req, res, next) => {
   try {
     const [events, treatments, presets] = await Promise.all([
       pool.query(`
-        SELECT id, tag, station, color, lactation, type, wool_quality,
+        SELECT id, tag, station, color, lactation, type, wool_quality, mode, survey,
                occurred_at, updated_at, origin
         FROM shearing_events WHERE deleted_at IS NULL
         ORDER BY occurred_at DESC
@@ -360,6 +370,7 @@ for (const name of ['admin.js','admin-shell.js','admin-ui.js','admin-records.js'
   app.get(`/${name}`, (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname,name)));
 }
 app.get('/admin.css', (_req, res) => res.type('text/css').sendFile(path.join(__dirname,'admin.css')));
+app.get('/modes.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, '../shared/modes.js')));
 app.get('/surveys.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, '../shared/surveys.js')));
 app.get('/configuration-schema.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, '../shared/ranch-configuration.js')));
 

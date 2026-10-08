@@ -1,3 +1,4 @@
+import { modeIdForType } from './modes.js';
 // Portable, bounded survey data shared by the cloud, barn, and browser.
 export const MAX_QUESTIONS = 24;
 const fail = message => { throw new Error(message); };
@@ -39,7 +40,7 @@ export function validateQuestions(rows = []) {
   return result;
 }
 export function questionsFor(modes, type) {
-  return validateQuestions(modes.find(m => m.type === (type === 'borrega' ? 'carnillero' : type))?.surveySchema || [])
+  return validateQuestions(modes.find(m => m.type === modeIdForType(type))?.surveySchema || [])
     .filter(q => q.active).map(q => ({ ...q, ...(q.options ? { options: q.options.filter(o => o.active) } : {}) }));
 }
 export function validateResponses(questions, input, { historical = false } = {}) {

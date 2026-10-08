@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS devices (
 );
 
 ALTER TABLE shearing_events ADD COLUMN IF NOT EXISTS survey jsonb;
+ALTER TABLE shearing_events ADD COLUMN IF NOT EXISTS mode jsonb;
 
 -- Latest shearing event per tag = current sheep status.
 CREATE OR REPLACE VIEW sheep_latest AS

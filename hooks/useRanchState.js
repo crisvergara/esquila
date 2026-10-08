@@ -26,11 +26,12 @@ export function refreshRanchState() {
       const response = await fetch(`/api/live${query}`, { cache: 'no-store', signal: controller.signal });
       if (!response.ok) throw new Error(`Estado del galpón: ${response.status}`);
       const next = await response.json();
-      if (!next.counts || typeof next.counts !== 'object' || !['oveja', 'carnero', 'carnillero'].includes(next.mode)) throw new Error('Estado del galpón inválido');
+      if (!next.counts || typeof next.counts !== 'object' || typeof next.mode !== 'string') throw new Error('Estado del galpón inválido');
       failures = 0;
       if (!next.configuration && (!state.loaded || next.configurationId !== state.configurationId)) throw new Error('Configuración del galpón pendiente');
       const serialized = next.configuration ? JSON.stringify(next.configuration) : configurationJSON;
       const configuration = serialized === configurationJSON ? state.configuration : validateConfiguration(next.configuration);
+      if (!configuration.modes.some(m => m.type === next.mode && m.active !== false)) throw new Error('Modo del galpón inválido');
       configurationJSON = serialized;
       state = { counts: next.counts, mode: next.mode, error: null, loaded: true, configuration,
         configurationRevision: next.configurationRevision, configurationId: next.configurationId };

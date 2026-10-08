@@ -161,7 +161,7 @@ test("migrates a legacy ranch database once and backs it up", async () => {
   await stopService(service);
 
   const migrated = new Database(legacyPath, { readonly: true });
-  expect(migrated.pragma("user_version", { simple: true })).toBe(5);
+  expect(migrated.pragma("user_version", { simple: true })).toBe(6);
   expect(migrated.prepare("SELECT COUNT(*) AS n FROM counts").get().n).toBe(1);
   expect(migrated.prepare("SELECT COUNT(*) AS n FROM treatments").get().n).toBe(1);
   expect(migrated.prepare("SELECT COUNT(*) AS n FROM sync_outbox").get().n).toBe(2);
@@ -233,7 +233,7 @@ test("tagger covers sheep, ram, bulk, live monitor, persistence, and ambiguous r
   await expect(monitor.getByText("AC98765", { exact: true })).toBeVisible();
 
   await ranchPost("/mode", { mode: "carnillero" });
-  await expect(tagger.getByText("¿Cuantos cordilleros hay?")).toBeVisible();
+  await expect(tagger.getByText("¿Cuántos animales hay?")).toBeVisible();
   await tagger.getByRole("button", { name: "Cancela", exact: true }).click();
   await tagger.getByRole("button", { name: "Beto", exact: true }).click();
   await tagger.getByRole("button", { name: "3", exact: true }).click();

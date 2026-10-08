@@ -1,7 +1,8 @@
+import { modeChoices, modeName, recordTypeForMode, recordedMode, editableMode } from '/modes.js';
 import { questionsFor, defaultResponses, surveyText } from '/surveys.js';
 import { $, api, cell, node, button, options, dateText } from '/admin-ui.js';
 import { updateNavigation } from '/admin-shell.js';
-let ranchInfo, editing, recordSurvey, savingRecord = false, loading = false;
+let ranchInfo, editing, originalRecord, recordSurvey, savingRecord = false, loading = false;
 let currentRows = [];
 let loadGeneration = 0;
 const attemptKey = 'esquila-admin-record-attempt';
@@ -33,7 +34,7 @@ function renderRows() {
     const row = node('tr'); row.dataset.id = record.id;
     const date = cell(dateText(record.date)); date.append(node('small', record.last_uploaded_at ? `Carga: ${dateText(record.last_uploaded_at)}` : record.origin === 'cloud-admin' ? 'Agregado en la nube' : 'Carga histórica no registrada'));
     const code = cell(''); code.append(node('span', record.tag, 'record-code'));
-    const kind = cell({ oveja:'Oveja',carnero:'Carnero',borrega:'Cordero' }[record.type] || record.type);
+    const kind = cell(recordedMode(record).name);
     const color = ranchInfo.modes.flatMap(m => m.tagSchema?.colors || []).find(c => c.value === record.color);
     kind.append(node('small', color?.name || record.color));
     const source = cell(record.servers.length ? record.servers.map(s => s.name + (s.revoked ? ' (revocado)' : '')).join(', ') : 'Sin servidor identificado');
@@ -44,7 +45,7 @@ function renderRows() {
     if (!record.deleted_at) controls.append(button('Editar', () => prepareRecord('edit', record)), button('Eliminar', () => prepareRecord('delete', record)));
     controls.append(button('Historial', () => history(record.id))); actions.append(controls);
     row.append(date, code, cell(filters.server === ranchInfo.selectedId ? stationName(record.station) : `Estación ${record.station}`), kind, source, status, actions);
-    ['Esquila / carga (Chile)', 'Código', 'Estación', 'Tipo / color', 'Servidor', 'Sincronización', 'Acciones'].forEach((label, i) => { row.children[i].dataset.label = label; });
+    ['Esquila / carga (Chile)', 'Código', 'Estación', 'Modo / color', 'Servidor', 'Sincronización', 'Acciones'].forEach((label, i) => { row.children[i].dataset.label = label; });
     $('ranch-rows').append(row);
   }
 }
@@ -68,6 +69,10 @@ async function loadRecords() {
     const colors = new Map(ranchInfo.modes.flatMap(m => m.tagSchema?.colors || []).map(c => [c.value,c.name]));
     data.colors.forEach(c => { if (!colors.has(c)) colors.set(c,c); }); if (filters.color && !colors.has(filters.color)) colors.set(filters.color, filters.color);
     options('ranch-color', [{value:'',name:'Todos los colores'}, ...[...colors].map(([value,name])=>({value,name}))], filters.color);
+    const types = new Map(ranchInfo.modes.map(m => [recordTypeForMode(m), modeName(m)]));
+    data.types.forEach(t => { if (!types.has(t.value)) types.set(t.value, t.name || t.value); });
+    if (filters.type && !types.has(filters.type)) types.set(filters.type, filters.type);
+    options('ranch-type', [{ value: '', name: 'Todos los modos' }, ...[...types].map(([value, name]) => ({ value, name }))], filters.type);
     renderRows();
     $('ranch-summary').textContent = `${data.total} registros · Mostrando ${data.rows.length ? data.offset + 1 : 0}–${data.offset + data.rows.length}.`;
     $('ranch-page').textContent = `Página ${Math.floor(data.offset / data.limit) + 1} de ${Math.max(1, Math.ceil(data.total / data.limit))}`;
@@ -93,7 +98,7 @@ async function prepareRecord(action, row = {}) {
   } catch (error) { $('ranch-error').textContent = error.message; }
 }
 function recordFields(row = {}) {
-  const mode = ranchInfo.modes.find(m => m.type === $('record-type').value);
+  const mode = editableMode(ranchInfo.modes, { ...row, type: $('record-type').value });
   const available = values => {
     const active = values.filter(v => v.active !== false || v.value === row.color || v.value === row.woolQuality || v.value === row.lactation);
     return active;
@@ -126,13 +131,14 @@ function recordFields(row = {}) {
 
 }
 function openRecord(action, row = {}) {
+  originalRecord = row;
   editing = { action, ...(action === 'add' ? { configurationRevision: ranchInfo.configurationRevision } : {}), ...(ranchInfo.selectedId ? { serverId: ranchInfo.selectedId } : {}), ...(row.id ? { id: row.id, updated_at: row.updated_at } : {}) };
   if (localStorage.getItem(attemptKey)) { $('ranch-error').textContent = 'Primero reintenta el cambio sin confirmación.'; return; }
   $('editor-title').textContent = action === 'delete' ? `Eliminar ${row.tag}` : action === 'add' ? 'Agregar registro' : `Editar ${row.tag}`;
   $('editor-note').textContent = action === 'delete' ? 'El registro se eliminará de los conteos. El cambio llegará al galpón cuando vuelva a conectarse.' : 'Los cambios se guardan en la nube y llegan al galpón al sincronizar. Al editar se conserva la fecha original.';
   const stations = Array.from({ length: Math.max(selectedShearers().length || 6, row.station || 0) }, (_, i) => ({ value: String(i + 1), name: stationName(i + 1) })).filter(s => selectedShearers()[Number(s.value) - 1]?.active !== false || Number(s.value) === row.station);
   options('record-station', stations, String(row.station || 1));
-  $('record-tag').value = row.tag || ''; $('record-type').value = row.type || 'oveja'; recordFields(row);
+  $('record-tag').value = row.tag || ''; options('record-type', modeChoices(ranchInfo.modes, row), row.type); recordFields(row);
   for (const el of $('record-form').querySelectorAll('input, select')) el.disabled = action === 'delete';
   $('record-save').textContent = action === 'delete' ? 'Confirmar eliminación' : 'Guardar';
   $('editor-error').textContent = ''; $('ranch-editor').showModal();
@@ -147,7 +153,7 @@ async function history(id) {
       const entry = node('article', null, 'history-entry'), comparison = node('div', null, 'history-comparison');
       for (const [label, value] of [['Antes', row.before_row], ['Después', row.after_row]]) {
         const panel = node('div'); panel.append(node('strong', label));
-        panel.append(node('p', value ? `${value.tag} · Estación ${value.station} · ${value.type} · ${value.color}\n${value.deleted_at ? 'Eliminado' : 'Vigente'} · Esquila: ${dateText(value.occurred_at)}\n${surveyText(value.survey)}` : 'No existía este registro.'));
+        panel.append(node('p', value ? `${value.tag} · Estación ${value.station} · ${recordedMode(value).name} · ${value.color}\n${value.deleted_at ? 'Eliminado' : 'Vigente'} · Esquila: ${dateText(value.occurred_at)}\n${surveyText(value.survey)}` : 'No existía este registro.'));
         comparison.append(panel);
       }
       entry.append(title, comparison); $('history-rows').append(entry);
@@ -191,7 +197,7 @@ $('record-form').addEventListener('submit', event => {
   const same = prior && JSON.stringify({ ...prior, submissionId: undefined }) === JSON.stringify(intent);
   sendRecord({ ...intent, submissionId: same ? prior.submissionId : crypto.randomUUID() });
 });
-$('record-type').addEventListener('change', () => recordFields(editing.action === 'edit' ? { survey: recordSurvey } : {}));
+$('record-type').addEventListener('change', () => recordFields(editing.action === 'edit' ? { ...(originalRecord.type === $('record-type').value ? originalRecord : {}), survey: recordSurvey } : {}));
 $('record-cancel').addEventListener('click', () => $('ranch-editor').close());
 $('history-close').addEventListener('click', () => $('ranch-history').close());
 $('ranch-add').addEventListener('click', () => ranchInfo && openRecord('add'));

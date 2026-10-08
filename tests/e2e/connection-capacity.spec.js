@@ -43,7 +43,7 @@ test('repeated tagger tabs do not block navigation or counting requests', async 
     await monitor.goto(`${base}/monitor/`, { timeout: 8000 });
     await expect(monitor.getByText('L0001', { exact: true })).toBeVisible();
     await request.post(`${base}/mode`, { data: { mode: 'carnillero' } });
-    for (const page of pages) await expect(page.getByText('¿Cuantos cordilleros hay?')).toBeVisible();
+    for (const page of pages) await expect(page.getByText('¿Cuántos animales hay?')).toBeVisible();
     await context.setOffline(true);
     await expect(monitor.getByRole('alert')).toContainText('Sin conexión con el galpón');
     await context.setOffline(false);

@@ -1,3 +1,4 @@
+import { validModeId, modeIdForType } from '../shared/modes.js';
 import { ranchDay } from '../shared/ranchdate.js';
 import { MAX_STATIONS, UUID } from '../shared/ranch-configuration.js';
 
@@ -18,7 +19,7 @@ export function parseRecordFilters(query) {
   if ([f.day, f.from, f.to].some(day => day && !validDay(day)) || (f.from && f.to && f.from > f.to) ||
       (f.server && f.server !== 'unknown' && !UUID.test(f.server)) ||
       (f.station && (!/^\d+$/.test(f.station) || Number(f.station) < 1 || Number(f.station) > MAX_STATIONS)) ||
-      (f.type && !['oveja', 'carnero', 'borrega'].includes(f.type)) || f.tag.length > 40 || f.color.length > 80 ||
+      (f.type && !validModeId(modeIdForType(f.type))) || f.tag.length > 40 || f.color.length > 80 ||
       !['', 'pending', 'received'].includes(f.sync) || !['', '0', '1', 'only'].includes(f.deleted) ||
       !Object.hasOwn(orders, f.sort) || ![25, 50, 100].includes(f.limit) ||
       !Number.isSafeInteger(f.offset) || f.offset < 0 || f.offset > 1_000_000) throw new Error('Filtros inválidos.');
@@ -63,10 +64,11 @@ export async function browseShearing(client, f) {
   const totals = (await client.query(`SELECT e.station,e.type,count(*)::int AS count FROM shearing_events e
     WHERE e.deleted_at IS NULL ${monitorConstraints.length ? `AND ${monitorConstraints.join(' AND ')}` : ''}
     GROUP BY e.station,e.type ORDER BY e.station`, monitorArgs)).rows;
+  const types = (await client.query("SELECT DISTINCT ON(type) type AS value,mode->>'name' AS name FROM shearing_events WHERE type IS NOT NULL ORDER BY type,occurred_at DESC,id DESC")).rows;
   const colors = (await client.query('SELECT DISTINCT color FROM shearing_events WHERE color IS NOT NULL ORDER BY color LIMIT 256')).rows.map(r => r.color);
   const servers = (await client.query(`SELECT id,name,false AS revoked FROM devices WHERE role='server'
     UNION ALL SELECT DISTINCT ON (s.server_id) s.server_id AS id,s.server_name AS name,true AS revoked
       FROM shearing_record_servers s WHERE NOT EXISTS(SELECT 1 FROM devices d WHERE d.id=s.server_id)
     ORDER BY name,id`)).rows;
-  return { rows, total, totals, offset, limit: f.limit, day: f.day, colors, servers };
+  return { rows, total, totals, offset, limit: f.limit, day: f.day, colors, types, servers };
 }

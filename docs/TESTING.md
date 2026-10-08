@@ -19,6 +19,13 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
 - remote manifest editing (including green/black and custom colors), seven
   stations, durable publication retries after lost responses/reload, stale
   revisions, CSRF and phone/server scoping;
+- named individual/bulk mode creation, ordering and retirement through the cloud
+  UI; local/Mac selection without cloud access or server restart; automatic
+  fallback for a retired selection; snapshots through in-progress retirement,
+  response-loss retries, offline restart, corrections and tombstone sync;
+- SQLite v5-to-v6 atomic/idempotent mode migration, unknown legacy labels,
+  malformed mode batch rollback, preserved metadata on legacy writes, and
+  historical editing without a matching current manifest;
 - dynamic survey configuration (choice/text/number, ordering, optional answers),
   SQLite v4-to-v5 rollback/restart safety, idempotent cloud backfill, original
   question snapshots after manifest changes, offline survey counts and corrections,

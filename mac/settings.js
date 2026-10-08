@@ -100,3 +100,29 @@ document.getElementById("form").onsubmit = async (event) => {
   }
 };
 updateForm();
+
+const modeSelect = document.getElementById('local-mode');
+const modeStatus = document.getElementById('mode-status');
+const modeSave = document.getElementById('save-mode');
+const modeRefresh = document.getElementById('refresh-modes');
+async function loadModes() {
+  modeSelect.disabled = modeSave.disabled = modeRefresh.disabled = true;
+  try {
+    const state = await window.esquila.loadModes();
+    modeSelect.replaceChildren(...state.modes.map(mode => { const option = document.createElement('option'); option.value = mode.type; option.textContent = mode.name; return option; }));
+    modeSelect.value = state.mode;
+    modeSelect.disabled = modeSave.disabled = false;
+    modeStatus.textContent = 'Modo actual: ' + modeSelect.selectedOptions[0].textContent;
+  } catch { modeStatus.textContent = 'No se pudo leer el modo del servidor local. Reintenta con Actualizar lista.'; }
+  finally { modeRefresh.disabled = false; }
+}
+modeRefresh.onclick = loadModes;
+modeSave.onclick = async () => {
+  modeSelect.disabled = modeSave.disabled = modeRefresh.disabled = true;
+  try {
+    await window.esquila.setMode(modeSelect.value);
+    modeStatus.textContent = 'Modo guardado. Se usará con el próximo animal, sin reiniciar el servidor.';
+  } catch (error) { modeStatus.textContent = 'No se confirmó el cambio. Actualiza la lista para comprobarlo. ' + error.message; }
+  finally { modeSelect.disabled = modeSave.disabled = modeRefresh.disabled = false; }
+};
+loadModes();

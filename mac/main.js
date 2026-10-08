@@ -423,6 +423,19 @@ async function openRanchAdmin() {
 function requireSettingsWindow(event) {
   if (!settingsWindow || event.sender !== settingsWindow.webContents || event.senderFrame !== settingsWindow.webContents.mainFrame) throw new Error('Ventana no autorizada.');
 }
+async function localModeRequest(method, body) {
+  const response = await fetch(`${SERVER_ORIGIN}/mode`, { method, redirect: 'error', signal: AbortSignal.timeout(5000),
+    ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || 'No se pudo cambiar el modo.');
+  return data;
+}
+ipcMain.handle('settings:modes', event => { requireSettingsWindow(event); return localModeRequest('GET'); });
+ipcMain.handle('settings:mode', (event, mode) => {
+  requireSettingsWindow(event);
+  if (typeof mode !== 'string' || mode.length > 40) throw new Error('Modo inválido.');
+  return localModeRequest('POST', { mode });
+});
 ipcMain.handle('settings:preview', async (event, values) => {
   requireSettingsWindow(event);
   const previous = await readConfig();

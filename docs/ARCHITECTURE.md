@@ -57,7 +57,7 @@ lid closure, shutdown, and battery exhaustion can still interrupt LAN service.
   it is not a separately mutable sheep row.
 
 Schema definitions are canonical in `countserver.js`, `shared/ranch-sync.js`,
-`shared/survey-migration.js`, and `cloud/schema.sql`. A schema change must include migration behavior for
+`shared/survey-migration.js`, `shared/mode-migration.js`, and `cloud/schema.sql`. A schema change must include migration behavior for
 existing barn databases, fresh-install behavior, synchronization mapping, and
 tests for both old and new data.
 
@@ -131,6 +131,37 @@ station numbers, historical/inactive counts and configured color contrast,
 shows stale data warnings on LAN loss, and uses a separate web manifest so a
 saved monitor shortcut never targets the tagger. It requires local server
 connectivity to refresh, but no internet.
+
+## Versioned modes
+
+Configuration schema 3 replaces the fixed three modes with up to 24 retained
+mode definitions. Each has a stable `type` ID, editable name, active flag,
+immutable individual/bulk behavior, and its own tag rules and survey. Schema 1
+and 2 remain readable. `shared/modes.js` centralizes identity, legacy aliases,
+snapshot validation and historical editor fallback. Cloud editing retires
+missing modes instead of deleting history and bounds the total manifest to 80 KB.
+
+`settings.mode` is the local operational selection, exposed by `GET/POST /mode`
+and the Mac/local setup screens. It persists without network access or restart.
+Manifest application retains an active selection; a retired/missing selection
+falls back to the first active mode. In-progress tagger entries freeze both mode
+and revision, so an update does not relabel an animal or invalidate its retry.
+
+SQLite v6 stores `counts.mode_json`; PostgreSQL stores `shearing_events.mode`.
+New records snapshot `{id, name, bulk}` and individual tag rules (color IDs,
+prefixes and digit bounds). Writes commit snapshot, survey, receipt and outbox
+together. Edits preserve that snapshot unless the mode is explicitly corrected;
+shared historical records can be validated without that mode in today's local
+manifest. New records may only use active configured modes. Custom-mode totals
+use a separate keyed map, keeping legacy total fields safe from mode ID collisions.
+All bulk modes share the durable L-code sequence.
+
+Backfills mark legacy snapshots inferred from stored type, preserve event
+identity/timestamps/tombstones, and never invent historical custom names. The
+SQLite migration is backed up and atomic. Cloud migration takes the normal
+revision lock and publishes audit/cursor changes. Upload/pull validate snapshots
+before committing; missing or legacy metadata never replaces a richer snapshot.
+These payloads follow the existing LWW, tombstone and conflict-audit rules.
 
 ## Versioned shearing surveys
 

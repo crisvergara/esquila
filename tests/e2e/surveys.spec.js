@@ -78,7 +78,7 @@ test('admin builds, reorders and retires survey questions without JSON; migratio
   await page.getByRole('button', { name: 'Publicar configuración' }).click();
   await expect(page.locator('#configuration-status')).toContainText('Publicada: revisión 1');
   const saved = (await config()).configuration;
-  expect(saved.schemaVersion).toBe(2);
+  expect(saved.schemaVersion).toBe(3);
   expect(saved.modes[0].surveySchema.filter(q => q.active).map(q => q.display)).toEqual(['¿Está sana?', 'Observaciones', 'Peso (kg)']);
   // Existing PostgreSQL rows are backfilled on boot without replacing dates or ids.
   await stopService(cloud);
@@ -86,6 +86,7 @@ test('admin builds, reorders and retires survey questions without JSON; migratio
   await pool.query(`INSERT INTO ${schema}.shearing_events(id,tag,type,wool_quality,lactation,occurred_at,updated_at,deleted_at) VALUES($1,'A99999','oveja','EXCELLENT','dry','2020-01-01','2020-01-02','2020-01-03')`, [oldId]);
   cloud = startCloud(); await waitForHealth(cloudBase, cloud);
   const migrated = await remoteRecord(oldId);
+  expect(migrated.mode).toEqual({ id: 'oveja', name: 'Ovejas', bulk: false, legacy: true });
   expect(migrated.survey.legacy).toBe(true);
   expect(migrated.survey.responses).toEqual({ woolQuality: 'EXCELLENT', lactation: 'dry' });
   expect(migrated.updated_at.toISOString()).toBe('2020-01-02T00:00:00.000Z');
@@ -280,7 +281,7 @@ test('rams and lamb batches use configured surveys; new manual records and tombs
   for (const row of (await records()).filter(r => r.type === 'borrega')) expect(row.survey.responses.batch_notes).toBe('Revisados');
   const context = await browser.newContext(); const page = await context.newPage();
   await page.goto(`${barnBase}/records/`); await page.getByRole('button', { name: 'Agregar registro', exact: true }).click();
-  await page.getByLabel('Tipo', { exact: true }).selectOption('carnero');
+  await page.getByLabel('Modo', { exact: true }).selectOption('carnero');
   await page.getByLabel('Código', { exact: true }).fill('AC54321');
   await page.getByLabel('¿Tiene cuernos?', { exact: true }).selectOption('no');
   await page.getByRole('button', { name: 'Guardar', exact: true }).click();

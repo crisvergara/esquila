@@ -1,3 +1,4 @@
+import { modeName } from '../shared/modes.js';
 import { answerText } from '../shared/surveys';
 import { useState, useEffect, useReducer, useRef } from "react";
 
@@ -474,7 +475,7 @@ function TaggingApp() {
 
   const onBulkSubmit = (event) => {
     event?.preventDefault();
-    return submit("/bulk", { quantity, station, surveyResponses });
+    return submit("/bulk", { quantity, station, type: mode.type, surveyResponses });
   };
 
   useEffect(() => {
@@ -560,7 +561,7 @@ function TaggingApp() {
     screen = (
       <DigitSelect
         display={quantity}
-        headerText={"¿Cuantos cordilleros hay?"}
+        headerText={"¿Cuántos animales hay?"}
         canSubmit={quantity.length >= 1}
         disableDigits={false}
         onCancel={onCancel}
@@ -611,7 +612,7 @@ function TaggingApp() {
     );
   }
 
-  return <div className="App"><p className="Current-mode" aria-label="Modo de conteo">{({ oveja: 'Ovejas', carnero: 'Carneros', carnillero: 'Corderos' })[mode.type]}</p>
+  return <div className="App"><p className="Current-mode" aria-label="Modo de conteo">{modeName(mode)}</p>
     {entrySchema && (entrySchema.revision !== configurationRevision || mode.type !== liveMode.type) && <p role="status">La configuración cambió. Se usará con el próximo animal.</p>}
     {connectionError && <p role="alert">{connectionError}</p>}{screen}</div>;
 }

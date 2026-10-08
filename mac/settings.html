@@ -14,7 +14,7 @@
     .sub { color: #aaa; margin: 0 0 24px; }
     .card { background: #1a1e24; border-radius: 14px; padding: 22px; margin-bottom: 18px; }
     label { display: block; margin: 13px 0 6px; font-weight: 600; }
-    input { width: 100%; padding: 11px; border-radius: 8px; border: 2px solid #454b57; background: #282c34; color: white; font-size: 17px; }
+    input, select { width: 100%; padding: 11px; border-radius: 8px; border: 2px solid #454b57; background: #282c34; color: white; font-size: 17px; }
     input:focus { outline: none; border-color: #61dafb; }
     .name { display: grid; grid-template-columns: 32px 1fr 38px; gap: 8px; align-items: center; margin: 8px 0; }
     .num { color: #61dafb; font-weight: 700; }
@@ -32,6 +32,13 @@
 <main>
   <h1>Esquila 🐑</h1>
   <p class="sub">Configuración del servidor del galpón</p>
+  <section class="card" aria-labelledby="mode-title">
+    <h2 id="mode-title">Modo de conteo</h2>
+    <p class="hint">Elige qué se registra en todos los teléfonos. Funciona sin internet. Los animales ya iniciados conservan su modo hasta terminar.</p>
+    <label for="local-mode">Modo activo</label><select id="local-mode" disabled></select>
+    <div class="actions"><button id="refresh-modes" class="secondary">Actualizar lista</button><button id="save-mode" disabled>Aplicar modo</button></div>
+    <p id="mode-status" role="status"></p>
+  </section>
   <form id="form">
     <section class="card" id="local-stations">
       <h2>Esquiladores</h2>

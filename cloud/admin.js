@@ -1,3 +1,4 @@
+import { recordTypeForMode, modeName } from '/modes.js';
 import { $, api, cell, node, dateText, options } from '/admin-ui.js';
 import { updateNavigation } from '/admin-shell.js';
 const screen = document.body.dataset.screen;
@@ -28,12 +29,15 @@ else if (screen === 'configuration') {
       const data = await api('GET', `/api/admin/shearing?${new URLSearchParams({ day: $('ranch-day').value, limit: '25' })}`);
       const names = info.configuration?.shearers || info.servers.find(s => s.id === info.selectedId)?.information?.shearers || [];
       const stations = new Map();
-      names.forEach((s, i) => { if (s.active !== false) stations.set(i + 1, {}); });
-      for (const total of data.totals) { if (!stations.has(total.station)) stations.set(total.station, {}); stations.get(total.station)[total.type] = total.count; }
+      names.forEach((s, i) => { if (s.active !== false) stations.set(i + 1, Object.create(null)); });
+      for (const total of data.totals) { if (!stations.has(total.station)) stations.set(total.station, Object.create(null)); stations.get(total.station)[total.type] = total.count; }
+      const types = new Map(info.modes.filter(m => m.active !== false || data.totals.some(t => t.type === recordTypeForMode(m))).map(m => [recordTypeForMode(m), modeName(m)]));
+      for (const t of data.types) if (!types.has(t.value) && data.totals.some(total => total.type === t.value)) types.set(t.value, t.name || t.value);
+      $('ranch-total-head').replaceChildren(...['Estación', ...types.values(), 'Total'].map(t => node('th', t)));
       $('ranch-totals').replaceChildren(); let sum = 0;
       for (const [station, counts] of [...stations].sort((a,b) => a[0] - b[0])) {
         const total = Object.values(counts).reduce((a,b) => a + b, 0); sum += total;
-        const row = node('tr'); row.append(...[`${station}: ${names[station - 1]?.name || 'Sin nombre'}`, counts.oveja || 0, counts.carnero || 0, counts.borrega || 0, total].map(cell)); $('ranch-totals').append(row);
+        const row = node('tr'); row.append(...[`${station}: ${names[station - 1]?.name || 'Sin nombre'}`, ...[...types.keys()].map(type => counts[type] || 0), total].map(cell)); $('ranch-totals').append(row);
       }
       $('ranch-summary').textContent = `${sum} animales registrados. Actualizado: ${dateText(info.serverTime)}.`;
       const fresh = info.servers.filter(s => s.received_at && Date.parse(info.serverTime) - Date.parse(s.received_at) <= 180000);
@@ -42,7 +46,7 @@ else if (screen === 'configuration') {
       for (const server of info.servers) {
         const card = node('article', null, 'server-card');
         card.append(node('h3', server.name), node('span', fresh.includes(server) ? 'Contacto reciente' : 'Sin contacto reciente', `badge ${fresh.includes(server) ? 'received' : 'pending'}`), node('p', `Último contacto: ${dateText(server.received_at || server.last_seen_at)}`, 'muted'), node('p', `${server.pending_to_ranch} cambios de nube pendientes en este galpón (incluye eliminaciones).`));
-        if (server.information) card.append(node('p', `${server.information.hostname} · v${server.information.version} · ${server.information.pending} cambios locales pendientes`, 'muted'));
+        if (server.information) card.append(node('p', `${server.information.hostname} · Modo: ${server.information.modeName || server.information.mode} · v${server.information.version} · ${server.information.pending} cambios locales pendientes`, 'muted'));
         else card.append(node('p', 'Este servidor aún no ha informado su estado.', 'muted'));
         const links = node('div', null, 'row');
         for (const [path, label] of [['records','Ver registros'],['configuration','Configurar']]) { const a = node('a', label); a.href = `/admin/${path}?server=${server.id}`; links.append(a); }

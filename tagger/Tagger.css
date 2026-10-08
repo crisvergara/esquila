@@ -379,7 +379,7 @@
 @media (prefers-reduced-motion: reduce) {
   .Submission-spinner { animation: none; }
 }
-.Current-mode { margin: 0; padding: .3rem; color: #aaa; font-size: 1rem; text-align: center; }
+.Current-mode { margin: 0; padding: .5rem .75rem; background: #e2e8f0; color: #334155; font-size: 1rem; font-weight: 600; text-align: center; overflow-wrap: anywhere; }
 
 .Survey-screen {
   flex: 1;
