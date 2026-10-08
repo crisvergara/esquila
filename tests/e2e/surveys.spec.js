@@ -152,6 +152,7 @@ test('offline surveys survive manifest changes, ambiguous retries and restart; b
   await waitFor(async () => (await records())[0].pending === 0);
   await stopService(barn); // cloud corrections wait durably for an offline barn
   await login(cloudPage);
+  await cloudPage.getByRole('navigation', { name: 'Administración' }).getByRole('link', { name: 'Registros' }).click();
   const row = cloudPage.locator('#ranch-rows tr').filter({ hasText: 'A12345' });
   await row.getByRole('button', { name: 'Editar', exact: true }).click();
   await cloudPage.getByLabel('¿Está sana?', { exact: true }).selectOption('yes');
@@ -228,6 +229,7 @@ test('rams and lamb batches use configured surveys; new manual records and tombs
   await waitFor(async () => !(await records()).some(r => r.id === manual.id));
   expect((await remoteRecord(manual.id)).survey.responses.horns).toBe('no');
   await login(page);
+  await page.getByRole('navigation', { name: 'Administración' }).getByRole('link', { name: 'Registros' }).click();
   await page.getByRole('button', { name: 'Agregar registro', exact: true }).click();
   await page.locator('#record-type').selectOption('carnero');
   await page.locator('#record-tag').fill('AC56789');

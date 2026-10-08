@@ -1,275 +1,59 @@
-import { questionsFor, defaultResponses, surveyText } from '/surveys.js';
-import { mountRanchConfiguration } from '/admin-configuration.js';
-const $ = (id) => document.getElementById(id);
-
-async function api(method, path, body) {
-  const response = await fetch(path, {
-    method,
-    headers: body ? { "Content-Type": "application/json" } : {},
-    body: body ? JSON.stringify(body) : undefined,
-    signal: AbortSignal.timeout(15000),
-  });
-  if (response.status === 401) {
-    location.reload();
-    throw new Error("Sesión vencida");
-  }
-  if (!response.ok) {
-    const result = await response.json().catch(() => ({}));
-    throw Object.assign(new Error(result.error ?? `Error ${response.status}`), { status: response.status });
-  }
-  return response.json();
-}
-
-function cell(text) {
-  const td = document.createElement("td");
-  td.textContent = text;
-  return td;
-}
-
-async function loadDevices() {
-  try {
-    const devices = await api("GET", "/api/admin/devices");
-    const tbody = $("devices");
-    tbody.replaceChildren();
-    for (const device of devices) {
-      const row = document.createElement("tr");
-      row.append(cell(device.name), cell(device.role));
-      row.append(cell(device.last_seen_at
-        ? new Date(device.last_seen_at).toLocaleString("es-CL")
-        : "nunca"));
-      const action = document.createElement("td");
-      const remove = document.createElement("button");
-      remove.className = "danger";
-      remove.textContent = "Eliminar";
-      remove.addEventListener("click", () => revoke(device.id));
-      action.append(remove);
-      row.append(action);
-      tbody.append(row);
-    }
-  } catch (err) {
-    $("error").textContent = err.message;
-  }
-}
-
-async function createDevice() {
-  $("error").textContent = "";
-  try {
-    const device = await api("POST", "/api/admin/devices", {
-      name: $("name").value,
-      role: $("role").value,
-    });
-    const qr = $("qr");
-    qr.replaceChildren();
-    const explanation = document.createElement("p");
-    const value = document.createElement("p");
-    value.className = "token";
-    if (device.role === "server") {
-      explanation.textContent = 'Primero publica la configuración de este galpón. Luego copia este token en la configuración de Esquila para descargarla:';
-      value.textContent = device.token;
-      const link = document.createElement('a'); link.href = `/admin?server=${device.id}#configuration`; link.textContent = 'Configurar este galpón';
-      // Keep the one-time credential visible while configuring the new server.
-      link.onclick = event => { event.preventDefault(); location.hash = 'configuration'; $('configuration-server').value = device.id; $('configuration-server').dispatchEvent(new Event('change')); };
-      qr.append(explanation, value, link);
-    } else {
-      explanation.textContent = `Escanéalo con el teléfono de ${device.name}:`;
-      const image = document.createElement("img");
-      image.src = device.qrDataUrl;
-      image.alt = "Código QR de inscripción";
-      value.textContent = device.enrollUrl;
-      qr.append(explanation, image, value);
-    }
-    $("name").value = "";
-    await loadDevices();
-    await loadRanch();
-  } catch (err) {
-    $("error").textContent = err.message;
-  }
-}
-
-async function revoke(id) {
-  $("error").textContent = "";
-  try {
-    await api("DELETE", `/api/admin/devices/${encodeURIComponent(id)}`);
-    if (new URL(location.href).searchParams.get('server') === id) {
-      location.replace('/admin#configuration');
-      return;
-    }
-    await loadDevices();
-    await loadRanch();
-  } catch (err) {
-    $("error").textContent = err.message;
-  }
-}
-
-$("create").addEventListener("click", createDevice);
-$("logout").addEventListener("click", async () => {
-  await api("POST", "/api/admin/logout");
-  location.replace("/admin");
-});
-
-loadDevices();
-
-let ranchInfo;
-let recordOffset = 0;
-let editing;
-let recordSurvey;
-let loadingRanch = false;
-let refreshRequested = false;
-let savingRecord = false;
-const attemptKey = 'esquila-admin-record-attempt';
-const dateText = value => value ? new Date(value).toLocaleString('es-CL', { timeZone: 'America/Santiago' }) : 'Sin contacto';
-const selectedShearers = () => ranchInfo?.configuration?.shearers || ranchInfo?.servers.find(s => s.id === ranchInfo.selectedId)?.information?.shearers || [];
-const stationName = station => `${station}: ${selectedShearers()[station - 1]?.name || 'Sin nombre'}`;
-const configurationUI = mountRanchConfiguration({ api, onPublished: async () => { await loadDevices(); await loadRanch(); } });
-function button(text, action) {
-  const element = document.createElement('button');
-  element.type = 'button'; element.textContent = text; element.addEventListener('click', action);
-  return element;
-}
-function options(id, values, selected) {
-  $(id).replaceChildren(...values.map(value => {
-    const option = document.createElement('option'); option.value = value.value; option.textContent = value.name;
-    option.selected = value.value === selected; return option;
-  }));
-}
-function recordFields(row = {}) {
-  const mode = ranchInfo.modes.find(m => m.type === $('record-type').value);
-  const available = values => {
-    const active = values.filter(v => v.active !== false || v.value === row.color || v.value === row.woolQuality || v.value === row.lactation);
-    return active;
+import { $, api, cell, node, dateText, options } from '/admin-ui.js';
+import { updateNavigation } from '/admin-shell.js';
+const screen = document.body.dataset.screen;
+if (screen === 'overview' && location.hash === '#configuration') {
+  location.replace(`/admin/configuration${location.search}`);
+} else if (screen === 'records') await import('/admin-records.js');
+else if (screen === 'devices') await import('/admin-devices.js');
+else if (screen === 'configuration') {
+  const { mountRanchConfiguration } = await import('/admin-configuration.js');
+  const refresh = async () => {
+    const id = new URL(location.href).searchParams.get('server');
+    const info = await api('GET', `/api/admin/ranch${id ? `?server=${encodeURIComponent(id)}` : ''}`);
+    ui.setServers(info.servers); updateNavigation(id || info.selectedId);
   };
-  const colors = available(mode?.tagSchema?.colors || [{ value: 'none', name: 'No hay' }]);
-  if (row.color && !colors.some(c => c.value === row.color)) colors.push({ value: row.color, name: `${row.color} (histórico)` });
-  options('record-color', colors, row.color);
-  const questions = row.survey?.questions || questionsFor(ranchInfo.modes, $('record-type').value);
-  recordSurvey = row.survey ? structuredClone(row.survey) : { schemaVersion: 1, questions, responses: defaultResponses(questions) };
-  $('record-survey').replaceChildren();
-  for (const q of questions) {
-    const label = document.createElement('label'); label.append(document.createTextNode(q.display));
-    const input = document.createElement(q.type === 'choice' ? 'select' : 'input');
-    input.setAttribute('aria-label', q.display); input.required = q.required && !recordSurvey.legacy;
-    if (q.type === 'choice') {
-      for (const o of [{ value: '', name: 'Sin respuesta' }, ...q.options]) {
-        const option = document.createElement('option'); option.value = o.value; option.textContent = o.name; input.append(option);
+  const ui = mountRanchConfiguration({ api, onPublished: refresh });
+  try { await refresh(); } catch (e) { $('configuration-error').textContent = e.message; }
+} else if (screen === 'overview') {
+  let busy = false, initialized = false;
+  async function refresh() {
+    if (busy) return; busy = true;
+    try {
+      const requested = new URL(location.href).searchParams.get('server');
+      const info = await api('GET', `/api/admin/ranch${requested ? `?server=${encodeURIComponent(requested)}` : ''}`);
+      if (!initialized) { $('ranch-day').value = info.day; initialized = true; }
+      options('overview-server', info.servers.map(s => ({ value: s.id, name: s.name })), info.selectedId);
+      updateNavigation(requested);
+      $('overview-records').href = `/admin/records${info.selectedId ? `?server=${info.selectedId}` : ''}`;
+      const data = await api('GET', `/api/admin/shearing?${new URLSearchParams({ day: $('ranch-day').value, limit: '25' })}`);
+      const names = info.configuration?.shearers || info.servers.find(s => s.id === info.selectedId)?.information?.shearers || [];
+      const stations = new Map();
+      names.forEach((s, i) => { if (s.active !== false) stations.set(i + 1, {}); });
+      for (const total of data.totals) { if (!stations.has(total.station)) stations.set(total.station, {}); stations.get(total.station)[total.type] = total.count; }
+      $('ranch-totals').replaceChildren(); let sum = 0;
+      for (const [station, counts] of [...stations].sort((a,b) => a[0] - b[0])) {
+        const total = Object.values(counts).reduce((a,b) => a + b, 0); sum += total;
+        const row = node('tr'); row.append(...[`${station}: ${names[station - 1]?.name || 'Sin nombre'}`, counts.oveja || 0, counts.carnero || 0, counts.borrega || 0, total].map(cell)); $('ranch-totals').append(row);
       }
-    } else {
-      input.type = q.type === 'number' ? 'number' : 'text'; input.step = 'any'; input.maxLength = q.maxLength || 500;
-      if (q.min != null) input.min = q.min; if (q.max != null) input.max = q.max;
-    }
-    input.value = recordSurvey.responses[q.field] ?? '';
-    input.oninput = () => { recordSurvey.responses[q.field] = input.value === '' ? null : q.type === 'number' ? Number(input.value) : input.value; };
-    label.append(input); $('record-survey').append(label);
+      $('ranch-summary').textContent = `${sum} animales registrados. Actualizado: ${dateText(info.serverTime)}.`;
+      const fresh = info.servers.filter(s => s.received_at && Date.parse(info.serverTime) - Date.parse(s.received_at) <= 180000);
+      $('overview-metrics').replaceChildren(...[[sum, 'Animales en la fecha elegida'], [`${fresh.length} / ${info.servers.length}`, 'Servidores con contacto reciente'], [info.servers.find(s => s.id === info.selectedId)?.pending_to_ranch ?? '—', 'Cambios pendientes en el galpón de referencia']].map(([value, label]) => { const card = node('div', null, 'metric'); card.append(node('strong', value), node('span', label)); return card; }));
+      $('ranch-servers').replaceChildren();
+      for (const server of info.servers) {
+        const card = node('article', null, 'server-card');
+        card.append(node('h3', server.name), node('span', fresh.includes(server) ? 'Contacto reciente' : 'Sin contacto reciente', `badge ${fresh.includes(server) ? 'received' : 'pending'}`), node('p', `Último contacto: ${dateText(server.received_at || server.last_seen_at)}`, 'muted'), node('p', `${server.pending_to_ranch} cambios de nube pendientes en este galpón (incluye eliminaciones).`));
+        if (server.information) card.append(node('p', `${server.information.hostname} · v${server.information.version} · ${server.information.pending} cambios locales pendientes`, 'muted'));
+        else card.append(node('p', 'Este servidor aún no ha informado su estado.', 'muted'));
+        const links = node('div', null, 'row');
+        for (const [path, label] of [['records','Ver registros'],['configuration','Configurar']]) { const a = node('a', label); a.href = `/admin/${path}?server=${server.id}`; links.append(a); }
+        card.append(links); $('ranch-servers').append(card);
+      }
+      if (!info.servers.length) { const empty = node('p', 'No hay servidores inscritos.'); const link = node('a','Inscribir un servidor'); link.href='/admin/devices'; empty.append(' ',link); $('ranch-servers').append(empty); }
+      $('ranch-error').textContent = '';
+    } catch (error) { $('ranch-error').textContent = `No se pudo actualizar. Los datos visibles pueden estar atrasados. ${error.message}`; }
+    finally { busy = false; }
   }
-  if (editing.action === 'edit') {
-    const note = document.createElement('p'); note.textContent = recordSurvey.legacy ? 'Encuesta histórica importada. Los valores se conservaron; los nombres personalizados de esa fecha no estaban guardados.' : 'Estas preguntas corresponden a la esquila original, aunque la configuración haya cambiado.'; $('record-survey').append(note);
-  }
-
+  $('overview-server').onchange = () => { const url = new URL(location.href); url.searchParams.set('server', $('overview-server').value); history.replaceState(null, '', url); refresh(); };
+  $('overview-refresh').onclick = refresh; $('ranch-day').onchange = refresh;
+  await refresh(); setInterval(() => { if (!document.hidden) refresh(); }, 10000);
 }
-function openRecord(action, row = {}) {
-  editing = { action, ...(action === 'add' ? { configurationRevision: ranchInfo.configurationRevision } : {}), ...(ranchInfo.selectedId ? { serverId: ranchInfo.selectedId } : {}), ...(row.id ? { id: row.id, updated_at: row.updated_at } : {}) };
-  $('editor-title').textContent = action === 'delete' ? `Eliminar ${row.tag}` : action === 'add' ? 'Agregar registro' : `Editar ${row.tag}`;
-  $('editor-note').textContent = action === 'delete' ? 'El registro se eliminará de los conteos. El cambio llegará al galpón cuando vuelva a conectarse.' : 'Los cambios se guardan en la nube y llegan al galpón al sincronizar. Al editar se conserva la fecha original.';
-  const stations = Array.from({ length: Math.max(selectedShearers().length || 6, row.station || 0) }, (_, i) => ({ value: String(i + 1), name: stationName(i + 1) })).filter(s => selectedShearers()[Number(s.value) - 1]?.active !== false || Number(s.value) === row.station);
-  options('record-station', stations, String(row.station || 1));
-  $('record-tag').value = row.tag || ''; $('record-type').value = row.type || 'oveja'; recordFields(row);
-  for (const el of $('record-form').querySelectorAll('input, select')) el.disabled = action === 'delete';
-  $('record-save').textContent = action === 'delete' ? 'Confirmar eliminación' : 'Guardar';
-  $('editor-error').textContent = ''; $('ranch-editor').showModal();
-}
-async function history(id) {
-  $('history-rows').replaceChildren(); $('ranch-history').showModal();
-  try {
-    const rows = await api('GET', `/api/admin/shearing/${id}/history`);
-    for (const row of rows) {
-      const title = document.createElement('h3');
-      title.textContent = `${dateText(row.recorded_at)} — ${row.source === 'stale-push' ? 'Corrección local descartada (versión más antigua)' : row.source === 'admin' ? 'Administrador' : 'Galpón'}`;
-      const data = document.createElement('pre'); data.textContent = JSON.stringify({ antes: row.before_row, despues: row.after_row }, null, 2);
-      $('history-rows').append(title, data);
-    }
-  } catch (error) { $('history-rows').textContent = error.message; }
-}
-async function loadRanch(initial = false) {
-  if (loadingRanch) { refreshRequested = true; return; }
-  loadingRanch = true;
-  try {
-    const server = new URL(location.href).searchParams.get('server');
-    ranchInfo = await api('GET', `/api/admin/ranch${server ? `?server=${encodeURIComponent(server)}` : ''}`);
-    configurationUI.setServers(ranchInfo.servers);
-    if (initial) $('ranch-day').value = ranchInfo.day;
-    $('ranch-servers').replaceChildren();
-    for (const server of ranchInfo.servers) {
-      const item = document.createElement('li');
-      const info = server.information;
-      const stale = !server.received_at || Date.parse(ranchInfo.serverTime) - Date.parse(server.received_at) > 180000;
-      item.textContent = `${server.name} — ${server.pending_to_ranch} cambios de nube pendientes en este galpón (incluye eliminaciones) — ${stale ? 'Sin contacto reciente / datos posiblemente atrasados' : 'Contacto reciente'} — ${dateText(server.received_at || server.last_seen_at)}. ` +
-        (info ? `${info.hostname} · ${info.platform} · v${info.version} · modo ${info.mode} · encendido ${Math.floor(info.uptime / 60)} min · ${info.pending} cambios locales pendientes.` : 'Actualiza la aplicación del galpón para informar su estado y recibir cambios.');
-      $('ranch-servers').append(item);
-    }
-    if (!ranchInfo.servers.length) $('ranch-servers').textContent = 'No hay un servidor del galpón inscrito. Los cambios quedarán pendientes.';
-    const query = new URLSearchParams({ day: $('ranch-day').value, tag: $('ranch-tag').value, offset: recordOffset, deleted: $('ranch-deleted').checked ? '1' : '0' });
-    const data = await api('GET', `/api/admin/shearing?${query}`);
-    $('ranch-rows').replaceChildren();
-    for (const record of data.rows) {
-      const row = document.createElement('tr');
-      const pending = !ranchInfo.servers.length || ranchInfo.servers.some(s => !s.applied_revision || BigInt(s.applied_revision) < BigInt(record.revision));
-      row.append(...[dateText(record.date), record.tag, stationName(record.station), record.type, record.color, surveyText(record.survey),
-        `${record.deleted_at ? 'Eliminado · ' : ''}${pending ? 'Pendiente en galpón' : 'Recibido en galpón'}`].map(cell));
-      const actions = cell('');
-      if (!record.deleted_at) actions.append(button('Editar', () => openRecord('edit', record)), button('Eliminar', () => openRecord('delete', record)));
-      actions.append(button('Historial', () => history(record.id)));
-      row.append(actions); $('ranch-rows').append(row);
-    }
-    const stations = new Map();
-    for (let i = 1; i <= selectedShearers().length; i++) if (selectedShearers()[i - 1].active !== false) stations.set(i, {});
-    for (const total of data.totals) { if (!stations.has(total.station)) stations.set(total.station, {}); stations.get(total.station)[total.type] = total.count; }
-    $('ranch-totals').replaceChildren();
-    let sum = 0;
-    for (const [station, counts] of [...stations].sort((a, b) => a[0] - b[0])) {
-      const total = Object.values(counts).reduce((a, b) => a + b, 0); sum += total;
-      const row = document.createElement('tr'); row.append(...[stationName(station), counts.oveja || 0, counts.carnero || 0, counts.borrega || 0, total].map(cell)); $('ranch-totals').append(row);
-    }
-    $('ranch-summary').textContent = `Total del monitor: ${sum}. Registros encontrados: ${data.total}. Mostrando ${data.rows.length ? recordOffset + 1 : 0}–${recordOffset + data.rows.length}.`;
-    $('ranch-prev').disabled = recordOffset === 0; $('ranch-next').disabled = recordOffset + data.rows.length >= data.total;
-    $('ranch-error').textContent = '';
-  } catch (error) { $('ranch-error').textContent = `No se pudo actualizar. Los datos visibles pueden estar atrasados. ${error.message}`; }
-  finally { loadingRanch = false; if (refreshRequested) { refreshRequested = false; loadRanch(); } }
-}
-async function sendRecord(body) {
-  if (savingRecord) return;
-  savingRecord = true; $('record-save').disabled = true;
-  try {
-    // Persist the exact intent before sending; reloading can safely retry a lost response.
-    localStorage.setItem(attemptKey, JSON.stringify(body));
-    const result = await api('POST', '/api/admin/shearing', body);
-    localStorage.removeItem(attemptKey);
-    $('ranch-editor').close();
-    $('ranch-result').replaceChildren(document.createTextNode('Guardado en la nube. Pendiente de confirmación del galpón en la próxima sincronización. '), button('Ver historial del cambio', () => history(result.id)));
-    await loadRanch();
-  } catch (error) {
-    $('editor-error').textContent = error.message;
-    $('ranch-result').replaceChildren(document.createTextNode(`No se confirmó el cambio: ${error.message}. `), button('Reintentar mismo cambio', () => sendRecord(body)));
-  } finally { savingRecord = false; $('record-save').disabled = false; }
-}
-$('record-form').addEventListener('submit', event => {
-  event.preventDefault();
-  const fields = {};
-  if (editing.action !== 'delete') for (const key of ['tag','station','type','color']) fields[key] = $(`record-${key}`).value;
-  if (editing.action !== 'delete') fields.surveyResponses = { ...recordSurvey.responses };
-  const intent = { ...editing, ...fields };
-  const prior = JSON.parse(localStorage.getItem(attemptKey) || 'null');
-  const same = prior && JSON.stringify({ ...prior, submissionId: undefined }) === JSON.stringify(intent);
-  sendRecord({ ...intent, submissionId: same ? prior.submissionId : crypto.randomUUID() });
-});
-$('record-type').addEventListener('change', () => recordFields(editing.action === 'edit' ? { survey: recordSurvey } : {}));
-$('record-cancel').addEventListener('click', () => $('ranch-editor').close());
-$('history-close').addEventListener('click', () => $('ranch-history').close());
-$('ranch-add').addEventListener('click', () => ranchInfo && openRecord('add'));
-$('ranch-filters').addEventListener('submit', event => { event.preventDefault(); recordOffset = 0; loadRanch(); });
-$('ranch-prev').addEventListener('click', () => { recordOffset = Math.max(0, recordOffset - 100); loadRanch(); });
-$('ranch-next').addEventListener('click', () => { recordOffset += 100; loadRanch(); });
-loadRanch(true);
-try {
-  const pending = JSON.parse(localStorage.getItem(attemptKey) || 'null');
-  if (pending) $('ranch-result').append(document.createTextNode('Hay un cambio sin confirmación. '), button('Reintentar mismo cambio', () => sendRecord(pending)));
-} catch { $('ranch-error').textContent = 'No se pudo leer el intento guardado en este navegador.'; }
-setInterval(() => { if (!document.hidden && !$('ranch-editor').open) loadRanch(); }, 10000);

@@ -2,9 +2,9 @@
 
 ## Operator workflow
 
-1. Sign in at `/admin`. Create a **servidor** device if the ranch does not already
+1. Sign in at `/admin` and open **Dispositivos**. Create a **servidor** device if the ranch does not already
    have one. Its token is shown once; keep it private.
-2. In **Configuración de galpones**, select the server. Set its name, stations,
+2. Open **Configuración** and select the server. Set its name, stations,
    tag colors, prefixes, digit limits, and survey choices, then choose
    **Publicar configuración**. No JSON editing or application rebuild is needed.
 3. For a new Mac, enter the cloud origin and that server's token in Esquila.
@@ -51,7 +51,7 @@ values. Publication validates the complete configuration before committing.
 Each new shearing event stores a snapshot of the questions actually asked,
 including their labels, choice labels, validation rules, and responses. Changing
 a question or answer label affects future animals only. The local **Registros
-recientes** screen and cloud **Galpón — Monitor y registros** show and edit the
+recientes** screen and cloud **Registros** show and edit the
 saved snapshot, even when a question or choice has since been retired. Changing
 an old record's animal type also preserves its original survey. No new question
 is retroactively added to a historical event. Manual new records use the current

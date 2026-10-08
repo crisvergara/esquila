@@ -1,3 +1,4 @@
+import { adminPaths, renderAdminPage } from './admin-layout.js';
 import { validateSurvey, legacySurvey, legacyFields } from '../shared/surveys.js';
 import { migrateCloudSurveys } from '../shared/survey-migration.js';
 // esquila-cloud: the remote hub. Receives sync pushes from the ranch server
@@ -74,7 +75,7 @@ app.use((req, res, next) => {
     res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+      "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     );
     if (req.secure)
       res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
@@ -240,6 +241,21 @@ app.post("/api/sync/push", deviceAuth, express.json({ limit: "20mb" }), async (r
             [row.id, existing, row, sha256(JSON.stringify([row.id, values, existing.revision]))]);
         }
       }
+      if (batch.table === 'shearing_events' && batch.rows.length) {
+        // One bounded query per batch. Identity comes from authentication, not origin.
+        // Equal/older retries retain the actual previous upload time.
+        await client.query(`INSERT INTO shearing_record_servers
+          (record_id,server_id,server_name,first_uploaded_at,last_uploaded_at,uploaded_updated_at)
+          SELECT id,$1,$2,now(),now(),max(updated_at)
+          FROM jsonb_to_recordset($3::jsonb) AS uploaded(id uuid,updated_at timestamptz) GROUP BY id
+          ON CONFLICT(record_id,server_id) DO UPDATE SET
+            server_name=excluded.server_name,
+            first_uploaded_at=COALESCE(shearing_record_servers.first_uploaded_at,excluded.first_uploaded_at),
+            last_uploaded_at=excluded.last_uploaded_at,uploaded_updated_at=excluded.uploaded_updated_at
+          WHERE shearing_record_servers.uploaded_updated_at IS NULL
+            OR excluded.uploaded_updated_at > shearing_record_servers.uploaded_updated_at`,
+        [req.device.id,req.device.name,JSON.stringify(batch.rows.map(row => ({id:row.id,updated_at:row.updated_at})))]);
+      }
       applied[batch.table] = (applied[batch.table] ?? 0) + batch.rows.length;
     }
     await client.query("COMMIT");
@@ -336,15 +352,14 @@ app.delete("/api/admin/devices/:id", adminAuth, async (req, res, next) => {
   }
 });
 
-app.get(["/admin", "/admin/accounts"], async (req, res) => {
-  const page = await adminSession(req) ? (req.path === "/admin/accounts" ? "admin-accounts.html" : "admin.html") : "login.html";
-  res.sendFile(path.join(__dirname, page));
+app.get(Object.keys(adminPaths), async (req, res) => {
+  if (await adminSession(req)) res.type('html').send(renderAdminPage(adminPaths[req.path]));
+  else res.sendFile(path.join(__dirname, 'login.html'));
 });
-
-app.get("/admin.js", (_req, res) => {
-  res.type("application/javascript").sendFile(path.join(__dirname, "admin.js"));
-});
-app.get('/admin-configuration.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, 'admin-configuration.js')));
+for (const name of ['admin.js','admin-shell.js','admin-ui.js','admin-records.js','admin-devices.js','admin-configuration.js']) {
+  app.get(`/${name}`, (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname,name)));
+}
+app.get('/admin.css', (_req, res) => res.type('text/css').sendFile(path.join(__dirname,'admin.css')));
 app.get('/surveys.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, '../shared/surveys.js')));
 app.get('/configuration-schema.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, '../shared/ranch-configuration.js')));
 

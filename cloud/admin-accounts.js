@@ -53,4 +53,3 @@ el('invite-form').addEventListener('submit', event => {
 });
 el('refresh').addEventListener('click', event => void busy(event.currentTarget, el('message'), loadAccounts));
 el('own-reset').addEventListener('click', event => void busy(event.currentTarget, el('message'), async () => { el('message').textContent = (await api('password/forgot', { email: user.email })).message; }));
-el('logout').addEventListener('click', event => void busy(event.currentTarget, el('message'), async () => { await api('logout', {}); location.href = '/admin'; }));

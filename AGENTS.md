@@ -16,6 +16,7 @@ can be maintained without turning this file into a second README.
 | Security and secret handling | [docs/SECURITY.md](docs/SECURITY.md) | Trust boundaries, credentials, authentication, public-repository rules, and known risks |
 | Cloud deployment and operations | [docs/DEPLOY.md](docs/DEPLOY.md) | PostgreSQL/Fly deployment, device enrollment, verification, cost controls, and recovery |
 | Barn Mac application | [mac/README.md](mac/README.md) | Installation, onboarding, settings, local-network access, data locations, and ARM64 builds |
+| Cloud admin navigation and records | [docs/CLOUD_ADMIN.md](docs/CLOUD_ADMIN.md) | Separate screens, filters, server attribution, corrections and acknowledgement |
 | Cloud admin accounts | [docs/ADMIN_ACCOUNTS.md](docs/ADMIN_ACCOUNTS.md) | Personal accounts, invitation/reset email, first-owner setup, and secret handling |
 | Ranch configuration | [docs/RANCH_CONFIGURATION.md](docs/RANCH_CONFIGURATION.md) | Remote editor, manifests, stable station/color identity, offline cache, and onboarding |
 | Raspberry Pi fallback | [pi/README.md](pi/README.md) | Legacy appliance install, kiosk onboarding, service operations, and recovery |
