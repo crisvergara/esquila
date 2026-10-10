@@ -15,6 +15,10 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
   device access; no real messages or production credentials are used;
 - UUIDv7 generation and Chile ranch-calendar behavior across summer and winter offsets;
 - legacy SQLite migration, pre-migration backup, vaccination conversion, and outbox backfill;
+- independent English/Spanish preferences for cloud administration, local controls
+  and tagger; unchanged ranch-authored content; offline counting/QR generation,
+  ambiguous-response retries, restart persistence, translated errors, native settings
+  integration, update-window copy, and small-screen layout;
 - the browser onboarding wizard, including validation and four-station configuration;
 - remote manifest editing (including green/black and custom colors), seven
   stations, durable publication retries after lost responses/reload, stale

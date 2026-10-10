@@ -1,3 +1,5 @@
+import '/shared/page-language.js';
+import { t } from '/shared/browser-language.js';
 const server = new URL(location.href).searchParams.get('server');
 export function updateNavigation(id) {
   for (const link of document.querySelectorAll('[data-nav]')) {
@@ -11,7 +13,7 @@ document.getElementById('logout').onclick = async () => {
   const button = document.getElementById('logout'); button.disabled = true;
   try {
     const response = await fetch('/api/admin/logout', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}', signal: AbortSignal.timeout(15000) });
-    if (!response.ok) throw new Error('No se pudo cerrar la sesión. Reintenta.');
+    if (!response.ok) throw new Error(t('No se pudo cerrar la sesión. Reintenta.'));
     location.replace('/admin');
   } catch (error) { document.getElementById('session-error').textContent = error.message; button.disabled = false; }
 };

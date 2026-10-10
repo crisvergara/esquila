@@ -203,7 +203,7 @@ test("tagger covers sheep, ram, bulk, live monitor, persistence, and ambiguous r
   await tagger.goto(`${ranchBase}/tagger/`);
 
   await tagger.getByRole("button", { name: "Ana", exact: true }).click();
-  await tagger.getByRole("button", { name: "No Hay", exact: true }).click();
+  await tagger.getByRole("button", { name: "Sin caravana", exact: true }).click();
   await tagger.getByRole("button", { name: "X", exact: true }).click();
   await clickDigits(tagger, testDigits.slice(0, 4));
   await expect(tagger.getByRole("button", { name: "✔" })).toBeDisabled();
@@ -217,9 +217,9 @@ test("tagger covers sheep, ram, bulk, live monitor, persistence, and ambiguous r
   await tagger.getByRole("button", { name: "OK", exact: true }).click();
   await expect(tagger.getByRole("heading", { name: "Conteo registrado" })).toBeVisible();
   await expect(monitor.getByText(primaryTag, { exact: true })).toBeVisible();
-  await expect(tagger.getByText("Elija un color")).toBeVisible();
+  await expect(tagger.getByText("Elige un color")).toBeVisible();
   await tagger.reload();
-  await expect(tagger.getByText("Elija un color")).toBeVisible();
+  await expect(tagger.getByText("Elige un color")).toBeVisible();
 
   await ranchPost("/mode", { mode: "carnero" });
   await expect(tagger.getByLabel('Modo de conteo')).toHaveText('Carneros');
@@ -234,7 +234,7 @@ test("tagger covers sheep, ram, bulk, live monitor, persistence, and ambiguous r
 
   await ranchPost("/mode", { mode: "carnillero" });
   await expect(tagger.getByText("¿Cuántos animales hay?")).toBeVisible();
-  await tagger.getByRole("button", { name: "Cancela", exact: true }).click();
+  await tagger.getByRole("button", { name: "Cancelar", exact: true }).click();
   await tagger.getByRole("button", { name: "Beto", exact: true }).click();
   await tagger.getByRole("button", { name: "3", exact: true }).click();
   await tagger.getByRole("button", { name: "✔" }).click();
@@ -243,15 +243,15 @@ test("tagger covers sheep, ram, bulk, live monitor, persistence, and ambiguous r
   await expect(monitor.getByText("L0003", { exact: true })).toBeVisible();
 
   await ranchPost("/mode", { mode: "oveja" });
-  await expect(tagger.getByText("Elija un color")).toBeVisible();
+  await expect(tagger.getByText("Elige un color")).toBeVisible();
   await tagger.getByRole("button", { name: "Cambiar esquilador" }).click();
   await tagger.getByRole("button", { name: "Carla", exact: true }).click();
   await tagger.getByRole("button", { name: "Rosa", exact: true }).click();
   await tagger.getByRole("button", { name: "C", exact: true }).click();
   await clickDigits(tagger, "55555");
   await tagger.getByRole("button", { name: "✔" }).click();
-  await tagger.getByRole("button", { name: "Bueno" }).click();
-  await tagger.getByRole("button", { name: "OK", exact: true }).click();
+  await tagger.getByRole("button", { name: "Buena" }).click();
+  await tagger.getByRole("button", { name: "Sí", exact: true }).click();
 
   let swallowedResponse = false;
   const ambiguousFailure = async (route) => {
@@ -437,8 +437,8 @@ test("record editor retries offline mutations across restart and reconciles edit
   await page.getByLabel("Código", { exact: true }).fill(`${editorPrefix}1`);
   await page.getByLabel("Estación", { exact: true }).selectOption("2");
   await page.getByLabel("Color", { exact: true }).selectOption("pink");
-  await page.getByLabel("Calidad", { exact: true }).selectOption("EXCELLENT");
-  await page.getByLabel("Lactante", { exact: true }).selectOption("dry");
+  await page.getByLabel("¿Cómo es la calidad de la lana?", { exact: true }).selectOption("EXCELLENT");
+  await page.getByLabel("¿La oveja está en lactancia?", { exact: true }).selectOption("dry");
   let lost = false;
   const loseResponse = async route => {
     if (!lost && route.request().method() === "POST") {
@@ -778,14 +778,14 @@ test("vaccination PWA survives offline reload and syncs directly to cloud", asyn
   await page.evaluate(() => navigator.serviceWorker.ready.then(() => true));
 
   await page.getByRole("row", { name: new RegExp(primaryTag) }).click();
-  await page.getByRole("button", { name: "Ver Detalle" }).click();
+  await page.getByRole("button", { name: "Ver detalle" }).click();
   await expect(page.getByText("Estación 1", { exact: false })).toBeVisible();
 
   await stopService(cloudService);
   cloudService = undefined;
   await page.getByRole("button", { name: "+ Manual" }).click();
   await page.getByPlaceholder("Nombre del medicamento...").fill("Clostridial E2E");
-  await page.getByPlaceholder("Dosis (ej. 2ml, 1 pastilla)...").fill("2 ml");
+  await page.getByPlaceholder("Dosis (ej. 2 ml, 1 pastilla)...").fill("2 ml");
   await page.getByRole("button", { name: "Guardar", exact: true }).click();
   await expect(page.getByText("Clostridial E2E", { exact: false })).toBeVisible();
   await expect(page.getByText("pendiente", { exact: true })).toBeVisible();
@@ -793,7 +793,7 @@ test("vaccination PWA survives offline reload and syncs directly to cloud", asyn
   await page.reload({ waitUntil: "domcontentloaded" });
   await page.getByPlaceholder("Filtrar por código...").fill(primaryTag);
   await page.getByRole("row", { name: new RegExp(primaryTag) }).click();
-  await page.getByRole("button", { name: "Ver Detalle" }).click();
+  await page.getByRole("button", { name: "Ver detalle" }).click();
   await expect(page.getByText("Clostridial E2E", { exact: false })).toBeVisible();
   await expect(page.getByText("pendiente", { exact: true })).toBeVisible();
 

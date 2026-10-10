@@ -106,6 +106,10 @@ jobs:
           hdiutil verify dist-mac/Esquila-*-arm64.dmg
           test "$(/usr/libexec/PlistBuddy -c 'Print :NSBonjourServices:0' dist-mac/mac-arm64/Esquila.app/Contents/Info.plist)" = "_http._tcp"
           /usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' dist-mac/mac-arm64/Esquila.app/Contents/Info.plist | grep -q WiFi
+          for locale in en es; do
+            plutil -lint "dist-mac/mac-arm64/Esquila.app/Contents/Resources/$locale.lproj/InfoPlist.strings"
+            /usr/libexec/PlistBuddy -c 'Print :NSLocalNetworkUsageDescription' "dist-mac/mac-arm64/Esquila.app/Contents/Resources/$locale.lproj/InfoPlist.strings" | grep -q WiFi
+          done
       - name: Verify Developer ID and stapled notarization
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: |
