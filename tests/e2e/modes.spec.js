@@ -216,6 +216,7 @@ test('offline selection and frozen animals survive retirement, rename, lost resp
 test('Mac configuration applies locally without saving connection settings or restarting, and reports failures', async ({ page }) => {
   await page.route('http://settings.test/**', async route => {
     const name = new URL(route.request().url()).pathname.slice(1) || 'settings.html';
+    if (['shared/i18n.js', 'shared/browser-language.js', 'shared/page-language.js', 'shared/locales/en.js', 'shared/locales/es.js'].includes(name)) return route.fulfill({ body: await readFile(name), contentType: 'text/javascript' });
     if (!['settings.html', 'settings.js'].includes(name)) return route.abort();
     await route.fulfill({ body: await readFile(path.join(root, 'mac', name)), contentType: name.endsWith('.js') ? 'text/javascript' : 'text/html' });
   });

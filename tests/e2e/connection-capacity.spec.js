@@ -32,7 +32,7 @@ test('repeated tagger tabs do not block navigation or counting requests', async 
       await page.goto(`${base}/tagger/`, { timeout: 8000, waitUntil: 'domcontentloaded' });
       // The station choice persists across tabs in this shared browser context.
       if (i === 0) await page.getByRole('button', { name: 'Ramiro', exact: true }).click();
-      await expect(page.getByText('Elija un color')).toBeVisible();
+      await expect(page.getByText('Elige un color')).toBeVisible();
     }
     expect((await request.get(`${base}/healthz`)).ok()).toBe(true);
     expect(await pages[7].evaluate(async () => (await fetch('/bulk', {

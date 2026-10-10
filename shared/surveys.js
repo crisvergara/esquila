@@ -100,11 +100,11 @@ export function legacySurvey(row, prior = null) {
 export function legacyFields(survey) {
   return { woolQuality: Object.hasOwn(survey.responses, 'woolQuality') ? survey.responses.woolQuality : 'IDK', lactation: Object.hasOwn(survey.responses, 'lactation') ? survey.responses.lactation : 'idk' };
 }
-export function answerText(q, value) {
-  return value == null ? 'Sin respuesta' : (q.type || 'choice') === 'choice' ? q.options.find(o => o.value === value)?.name || String(value) : String(value);
+export function answerText(q, value, translate = text => text) {
+  return value == null ? translate('Sin respuesta') : (q.type || 'choice') === 'choice' ? q.options.find(o => o.value === value)?.name || String(value) : String(value);
 }
-export function surveyText(survey) {
-  return survey?.questions.map(q => `${q.display}: ${answerText(q, survey.responses[q.field])}`).join('\n') || 'Sin encuesta';
+export function surveyText(survey, translate = text => text) {
+  return survey?.questions.map(q => `${q.display}: ${answerText(q, survey.responses[q.field], translate)}`).join('\n') || translate('Sin encuesta');
 }
 export function defaultResponses(questions) {
   return Object.fromEntries(questions.map(q => [q.field, q.type === 'choice' && q.required ? q.options[0]?.value ?? null : null]));

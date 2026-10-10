@@ -58,7 +58,7 @@
           "text": "#ffffff"
         },
         {
-          "name": "No Hay",
+          "name": "Sin caravana",
           "value": "none",
           "color": "#000000",
           "text": "#ffffff"
@@ -104,14 +104,14 @@
     "surveySchema": [
       {
         "field": "woolQuality",
-        "display": "Calidad",
+        "display": "¿Cómo es la calidad de la lana?",
         "options": [
           {
-            "name": "Malo",
+            "name": "Mala",
             "value": "BAD"
           },
           {
-            "name": "Bueno",
+            "name": "Buena",
             "value": "GOOD"
           },
           {
@@ -122,14 +122,14 @@
       },
       {
         "field": "lactation",
-        "display": "Lactante",
+        "display": "¿La oveja está en lactancia?",
         "options": [
           {
-            "name": "OK",
+            "name": "Sí",
             "value": "OK"
           },
           {
-            "name": "Seca",
+            "name": "No",
             "value": "dry"
           },
           {
@@ -199,7 +199,7 @@
           "text": "#ffffff"
         },
         {
-          "name": "No Hay",
+          "name": "Sin caravana",
           "value": "none",
           "color": "#000000",
           "text": "#ffffff"

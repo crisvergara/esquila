@@ -1,3 +1,4 @@
+import { t, errorText } from '../shared/browser-language.js';
 import "./MonitorApp.css";
 import useCounts from "../hooks/useCounts";
 import useCurrentTime from "../hooks/useCurrentTime";
@@ -14,7 +15,7 @@ function EsquiladorRow({ shearer, count }) {
   return (
     <div className="Esquilador-row">
       <div className="Esquilador-header">
-        <p>{shearer.name}{shearer.active === false ? ' (inactivo)' : ''}</p> <p>{count.counted}</p>
+        <p>{shearer.name}{shearer.active === false ? t(' (inactivo)') : ''}</p> <p>{count.counted}</p>
       </div>
       <div className="Esquilador-Tag-Display-none" style={colorStyle(count)}>
         {count.lastTag}
@@ -28,7 +29,7 @@ function MonitorApp() {
   const { counts, error: connectionError } = useCounts();
   const { shearers } = useShearers();
   const currentTime = useCurrentTime();
-  const stations = monitorStations(shearers, counts);
+  const stations = monitorStations(shearers, counts, t);
   const rowCount = Math.max(stations.length, 1);
   const rowFontHeight = Math.min(18, 62 / rowCount);
   return (
@@ -40,7 +41,7 @@ function MonitorApp() {
         {/*<img src="/qr.png" alt="QR Code" />*/}
         <p>{currentTime}</p>
       </header>
-      {connectionError && <p role="alert">{connectionError}</p>}
+      {connectionError && <p role="alert">{errorText(connectionError)}</p>}
       <section className="Esquilador-monitor">
         {stations.map(({ shearer, station }) => (
           <EsquiladorRow

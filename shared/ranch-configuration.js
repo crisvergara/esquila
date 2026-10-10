@@ -125,10 +125,10 @@ export function tagColorStyle(modes, value, type) {
 
 // A first enrollment may adopt fewer stations than an older local database.
 // Keep those historical counts visible without making their stations selectable.
-export function monitorStations(shearers, counts) {
+export function monitorStations(shearers, counts, translate = (source, value) => source.replace("{0}", value)) {
   const rows = new Map(shearers.map((shearer, index) => [index + 1, shearer]));
   for (const station of Object.keys(counts).map(Number)) {
-    if (!rows.has(station) && counts[station]?.counted) rows.set(station, { name: `Estación ${station} (histórica)`, active: false });
+    if (!rows.has(station) && counts[station]?.counted) rows.set(station, { name: translate('Estación {0} (histórica)', station), active: false });
   }
   return [...rows].filter(([station, shearer]) => shearer.active !== false || counts[station]?.counted)
     .sort(([a], [b]) => a - b).map(([station, shearer]) => ({ station, shearer }));
