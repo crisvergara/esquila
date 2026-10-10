@@ -2,10 +2,10 @@
 
 ## Operator workflow
 
-1. Sign in at `/admin`. Create a **servidor** device if the ranch does not already
+1. Sign in at `/admin` and open **Dispositivos**. Create a **servidor** device if the ranch does not already
    have one. Its token is shown once; keep it private.
-2. In **Configuración de galpones**, select the server. Set its name, stations,
-   tag colors, prefixes, digit limits, and survey choices, then choose
+2. Open **Configuración** and select the server. Set its name, stations,
+   modes, tag colors, prefixes, digit limits, and survey choices, then choose
    **Publicar configuración**. No JSON editing or application rebuild is needed.
 3. For a new Mac, enter the cloud origin and that server's token in Esquila.
    Choose **Cargar configuración del galpón**, review the ranch and stations,
@@ -32,6 +32,55 @@ their data and can be corrected while retaining a retired value. New entries
 cannot choose retired options. There are at most 64 retained choices per list;
 restore an old choice instead of repeatedly creating duplicates.
 
+## Configurable modes and local selection
+
+In **Configuración → Modos de conteo**, choose **Copiar configuración de** and
+**Agregar modo**. Give the copy a name, edit its colors, prefixes, digit limits
+and questions, then publish. Copy an individual mode for tag entry or a bulk
+mode for quantity counting. Modes can be reordered, renamed, retired and
+restored. At least one must remain active; the limit is 24 including retired
+modes. New schema-3 manifests are limited to 80 KB. Restore old choices instead of
+creating replacement identities unnecessarily.
+
+The original Ovejas, Carneros and Corderos are defaults, not a fixed list.
+Names can change; identifiers and individual/bulk behavior cannot. To change
+how a published mode counts, create a new mode and retire the old one. Bulk
+modes share the existing durable `L` sequence, so changing modes cannot reuse a
+number. Copied surveys/options have identities within their new mode.
+
+On the Mac, open **Configuración… → Modo de conteo**, select **Modo activo** and
+choose **Aplicar modo**. This does not save connection settings or restart the
+server. **Actualizar lista** refreshes the available modes from the local cache.
+The same selector is available on the local `/setup` page. It works without
+internet and remembers the choice across restarts. Phones follow the local
+server's choice; animals already started retain their original mode and manifest
+revision through completion and retries. If a new manifest retires the selected
+mode, the server selects its first active mode for new animals. Reordering or
+renaming an active selection does not change it.
+
+Each accepted count saves its stable mode ID, display name and counting method;
+individual records also save compact tag-validation rules. Both record editors,
+cloud filters and the cloud monitor support custom modes. Historical rows show
+the captured name even after a mode is renamed or retired. Correcting other
+fields keeps the snapshot; deliberately changing a record's mode captures the
+selected mode while preserving its original survey. A shared record remains
+editable when another server's manifest lacks its mode, using the saved rules.
+
+SQLite v6 adds `counts.mode_json`, with a pre-migration backup for existing
+records. PostgreSQL adds `shearing_events.mode` and backfills under the sync
+revision lock. Existing IDs, times, tombstones, receipts and outbox entries stay
+intact. Legacy records get an explicitly marked inferred mode from their stored
+type (`borrega` maps to the original Corderos mode); unknown types are labeled
+**Sin modo registrado**. Exact historical custom names cannot be reconstructed.
+Snapshots travel with records and audit history in both sync directions. Missing
+or legacy mode metadata from an older writer cannot erase a richer snapshot.
+
+Update each Mac before publishing modes. The editor publishes schema 3; older
+apps reject it and keep using their last compatible cached configuration. Reload
+phone tagger tabs after installing the Mac update. Deploying the cloud does not
+change the active local mode until its manifest is downloaded. There is no new
+public endpoint for configuration editing or credential in a mode manifest.
+
 ## Configurable shearing surveys
 
 In each animal mode, **Preguntas de la encuesta** lets an administrator add,
@@ -42,6 +91,13 @@ wool quality and lactation; rams and lambs start with no questions. Lamb-batch
 answers apply to every animal in the batch and can be corrected individually.
 The animal modes themselves retain their individual/bulk counting semantics.
 
+The tagger shows each question as a large heading above its answers, with a
+question counter and required/optional indication. On portrait phones the heading stays visible
+while scrolling through choices; entering a question returns to the top and
+focuses its heading. The confirmation screen pairs each original question with
+its selected answer, including omitted responses. Short screens and text/number
+inputs scroll normally so a pinned heading cannot cover the answer controls.
+
 A question's identifier and type are permanent. To change its type or meaning,
 retire it and add a new question. Retired questions/options remain in the
 manifest so they can be restored. Limits are 24 retained questions per mode,
@@ -51,7 +107,7 @@ values. Publication validates the complete configuration before committing.
 Each new shearing event stores a snapshot of the questions actually asked,
 including their labels, choice labels, validation rules, and responses. Changing
 a question or answer label affects future animals only. The local **Registros
-recientes** screen and cloud **Galpón — Monitor y registros** show and edit the
+recientes** screen and cloud **Registros** show and edit the
 saved snapshot, even when a question or choice has since been retired. Changing
 an old record's animal type also preserves its original survey. No new question
 is retroactively added to a historical event. Manual new records use the current
@@ -67,7 +123,7 @@ last-write-wins behavior, with the discarded cloud version in history.
 ### Upgrade and historical migration
 
 Deploy the cloud release and update the ranch Mac app before publishing the new
-survey format (configuration schema 2). Older Macs reject that format and keep
+manifest format (configuration schema 3, including surveys). Older Macs reject it and keep
 counting with their last cached configuration; they cannot collect newly added
 questions. Reload open tagger/record tabs after upgrading. Newly opened Macs
 continue to accept and migrate the original schema-1 manifests.
@@ -160,9 +216,11 @@ records as shared. Local connectivity still requires working ranch Wi-Fi.
 - `POST /api/sync/configuration`: server-token-scoped pull/acknowledgement; only
   revision-zero clients may bootstrap an as-yet unconfigured server.
 - `GET /api/configuration`: non-secret local manifest/status for the Mac shell.
-- `/count` and `/bulk` optionally accept `configurationRevision`, resolving only
+- `GET /mode` lists active cached modes and the local selection; `POST /mode`
+  persists an active mode ID without internet.
+- `/count` and `/bulk` carry the selected mode in `type` and optionally accept `configurationRevision`, resolving only
   locally stored versions. Unknown revisions fail closed.
 
-The manifest contains schema version, ranch name, station slots and the three
-mode schemas, wrapped in a device ID, monotonic revision and UTC publication
+The manifest contains schema version, ranch name, station slots and a variable
+list of mode schemas, wrapped in a device ID, monotonic revision and UTC publication
 timestamp. It contains no credential, remote command, download URL or code.

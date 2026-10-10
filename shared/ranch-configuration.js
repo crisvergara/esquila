@@ -1,3 +1,4 @@
+import { MAX_MODES, validModeId, modeName } from './modes.js';
 import { validateQuestions } from './surveys.js';
 // This schema is shared by the cloud, barn, and browser. It contains no secrets.
 export const MAX_STATIONS = 24;
@@ -31,28 +32,32 @@ function options(rows, label, color = false, prefix = false) {
 }
 
 export function validateConfiguration(input) {
-  if (!input || ![1, 2].includes(input.schemaVersion)) fail('Versión de configuración no compatible. Actualiza Esquila.');
+  if (!input || ![1, 2, 3].includes(input.schemaVersion)) fail('Versión de configuración no compatible. Actualiza Esquila.');
   if (!Array.isArray(input.shearers) || !input.shearers.length || input.shearers.length > MAX_STATIONS) fail(`Configura entre 1 y ${MAX_STATIONS} estaciones.`);
   const shearers = input.shearers.map(s => ({ name: text(s?.name, 'Esquilador'), active: active(s?.active) }));
   if (!shearers.some(s => s.active)) fail('Conserva al menos una estación activa.');
-  if (!Array.isArray(input.modes) || input.modes.length !== 3 || new Set(input.modes.map(m => m?.type)).size !== 3) fail('Se requieren los tres modos de esquila.');
-  const modes = MODE_TYPES.map(type => {
+  const configurable = input.schemaVersion === 3;
+  if (!Array.isArray(input.modes) || !input.modes.length || input.modes.length > (configurable ? MAX_MODES : 3) || (!configurable && input.modes.length !== 3) || new Set(input.modes.map(m => m?.type)).size !== input.modes.length) fail(`Configura entre 1 y ${MAX_MODES} modos, sin identificadores repetidos.`);
+  const modes = (configurable ? input.modes.map(m => m?.type) : MODE_TYPES).map(type => {
     const mode = input.modes.find(m => m?.type === type);
-    if (!mode) fail('Modo desconocido.');
-    if (type === 'carnillero') {
-      if (mode.bulk !== true || mode.tagSchema || (input.schemaVersion === 1 && mode.surveySchema)) fail('El modo corderos debe usar conteo por cantidad.');
-      return { type, bulk: true, ...(input.schemaVersion === 2 ? { surveySchema: validateQuestions(mode.surveySchema) } : {}) };
+    if (!mode || !validModeId(type)) fail('Modo desconocido.');
+    const identity = configurable ? { type, name: text(mode.name, 'Nombre del modo'), active: active(mode.active), bulk: mode.bulk } : { type };
+    if (configurable && typeof mode.bulk !== 'boolean') fail('Tipo de conteo inválido.');
+    if (MODE_TYPES.includes(type) && Boolean(mode.bulk) !== (type === 'carnillero')) fail('Conserva el tipo de conteo de los modos originales.');
+    if (configurable ? mode.bulk : type === 'carnillero') {
+      if (mode.bulk !== true || mode.tagSchema || (input.schemaVersion === 1 && mode.surveySchema)) fail('Un modo por cantidad no admite reglas de caravana.');
+      return { ...identity, bulk: true, ...(input.schemaVersion >= 2 ? { surveySchema: validateQuestions(mode.surveySchema) } : {}) };
     }
-    if (mode.bulk) fail('Ovejas y carneros requieren un código individual.');
+    if (mode.bulk) fail('Este modo requiere un código individual.');
     const schema = mode.tagSchema;
     if (!Array.isArray(schema?.textSchema) || schema.textSchema.length !== 2 || schema.textSchema[0]?.type !== 'code' || schema.textSchema[1]?.type !== 'digits') fail('Formato de código inválido.');
     const digits = schema.textSchema[1];
     if (!Number.isInteger(digits.min) || !Number.isInteger(digits.max) || digits.min < 1 || digits.max > 10 || digits.min > digits.max) fail('El código debe tener entre 1 y 10 dígitos.');
-    const result = { type, tagSchema: {
+    const result = { ...identity, tagSchema: {
       colors: options(schema.colors, 'Colores', true),
       textSchema: [{ type: 'code', options: options(schema.textSchema[0].options, 'Prefijos', false, true) }, { type: 'digits', min: digits.min, max: digits.max }],
     } };
-    if (input.schemaVersion === 2) result.surveySchema = validateQuestions(mode.surveySchema);
+    if (input.schemaVersion >= 2) result.surveySchema = validateQuestions(mode.surveySchema);
     else if (type === 'oveja') {
       if (!Array.isArray(mode.surveySchema) || mode.surveySchema.length !== 2) fail('Configura calidad de lana y lactancia para las ovejas.');
       result.surveySchema = ['woolQuality', 'lactation'].map(field => {
@@ -63,22 +68,30 @@ export function validateConfiguration(input) {
     } else if (mode.surveySchema?.length) fail('Los carneros no llevan encuesta.');
     return result;
   });
-  return { schemaVersion: input.schemaVersion, name: text(input.name, 'Nombre del galpón'), shearers, modes };
+  if (!modes.some(m => m.active !== false)) fail('Conserva al menos un modo activo.');
+  const result = { schemaVersion: input.schemaVersion, name: text(input.name, 'Nombre del galpón'), shearers, modes };
+  if (configurable && new TextEncoder().encode(JSON.stringify(result)).length > 80000) fail('La configuración es demasiado grande. Reduce los modos o sus opciones.');
+  return result;
 }
 
 // Removing a choice retires it; its stable identifier remains available to history.
 export function retainRetiredConfiguration(next, previous) {
-  if (previous.schemaVersion === 2 && next.schemaVersion !== 2) fail('No se puede volver al formato antiguo de preguntas. Actualiza la página.');
+  if (previous.schemaVersion > next.schemaVersion) fail('No se puede volver a un formato de configuración anterior. Actualiza la página.');
   const result = structuredClone(next);
+  if (result.schemaVersion === 3) for (const old of previous.modes) {
+    if (!result.modes.some(m => m.type === old.type)) result.modes.push({ ...old, name: modeName(old), bulk: !!old.bulk, active: false });
+  }
   const retain = (rows, old) => [...rows, ...old.filter(o => !rows.some(n => n.value === o.value)).map(o => ({ ...o, active: false }))];
   for (let i = result.shearers.length; i < previous.shearers.length; i++) result.shearers.push({ ...previous.shearers[i], active: false });
   for (const mode of result.modes) {
     const old = previous.modes.find(m => m.type === mode.type);
+    if (!old) continue;
+    if (!!mode.bulk !== !!old.bulk) fail('El tipo de conteo de un modo existente no puede cambiar; crea otro modo.');
     if (mode.tagSchema) {
       mode.tagSchema.colors = retain(mode.tagSchema.colors, old.tagSchema.colors);
       mode.tagSchema.textSchema[0].options = retain(mode.tagSchema.textSchema[0].options, old.tagSchema.textSchema[0].options);
     }
-    if (result.schemaVersion === 2) {
+    if (result.schemaVersion >= 2) {
       mode.surveySchema ||= [];
       for (const question of old.surveySchema || []) {
         const nextQuestion = mode.surveySchema.find(q => q.field === question.field);
@@ -94,7 +107,7 @@ export function retainRetiredConfiguration(next, previous) {
 }
 
 export function activeModes(modes) {
-  return modes.map(mode => ({ ...mode, ...(mode.tagSchema ? { tagSchema: {
+  return modes.filter(mode => mode.active !== false).map(mode => ({ ...mode, name: modeName(mode), ...(mode.tagSchema ? { tagSchema: {
     colors: mode.tagSchema.colors.filter(c => c.active !== false),
     textSchema: [{ ...mode.tagSchema.textSchema[0], options: mode.tagSchema.textSchema[0].options.filter(o => o.active !== false) }, mode.tagSchema.textSchema[1]],
   } } : {}), ...(mode.surveySchema ? { surveySchema: mode.surveySchema.filter(s => s.active !== false).map(s => ({ ...s, ...(s.options ? { options: s.options.filter(o => o.active !== false) } : {}) })) } : {}) }));

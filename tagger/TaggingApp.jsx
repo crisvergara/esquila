@@ -1,5 +1,6 @@
+import { modeName } from '../shared/modes.js';
 import { answerText } from '../shared/surveys';
-import { useState, useEffect, useReducer } from "react";
+import { useState, useEffect, useReducer, useRef } from "react";
 
 import "./Tagger.css";
 import StationSelect from "./StationSelect";
@@ -65,20 +66,45 @@ function CodeSelect({ codeSchema, onCancel, setCode }) {
   );
 }
 
-function SurveySelect({ surveySchema: q, onCancel, setSurvey }) {
+function SurveySelect({ surveySchema: q, step, total, onCancel, setSurvey }) {
   const [value, setValue] = useState('');
-  return <>
-    <header className="App-header"><button onClick={onCancel} className="Cancel-button">Cancelar</button><p>{q.display}</p></header>
-    {(q.type || 'choice') === 'choice' ? <section className="Tag-buttons">
+  const isChoice = (q.type || 'choice') === 'choice';
+  const heading = useRef(null);
+  useEffect(() => {
+    // The keypad or the previous answer can leave the document scrolled down.
+    // Announce and reveal each new question before the operator chooses an answer.
+    heading.current?.focus({ preventScroll: true });
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }, [q.field]);
+  return <section className={`Survey-screen${isChoice ? ' Survey-screen-choice' : ''}`}>
+    <header className="Survey-header">
+      <div className="Survey-toolbar">
+        <button onClick={onCancel} className="Cancel-button">Cancelar</button>
+        <p>Pregunta {step} de {total}</p>
+      </div>
+      <h1 id="survey-question" ref={heading} tabIndex={-1}>{q.display}</h1>
+      <p className="Survey-hint">{q.required === false ? 'Respuesta opcional' : 'Respuesta obligatoria'}</p>
+    </header>
+    {isChoice ? <div className="Survey-answers" role="group" aria-labelledby="survey-question">
       {q.options.map(o => <button key={o.value} onClick={() => setSurvey(o.value)}>{o.name}</button>)}
-      {q.required === false && <button onClick={() => setSurvey(null)}>Omitir pregunta</button>}
-    </section> : <form className="Survey-input" onSubmit={event => { event.preventDefault(); setSurvey(value === '' ? null : q.type === 'number' ? Number(value) : value); }}>
-      <label>{q.display}<input autoFocus type={q.type === 'number' ? 'number' : 'text'} inputMode={q.type === 'number' ? 'decimal' : undefined}
-        required={q.required !== false} min={q.min} max={q.max} step="any" maxLength={q.maxLength || 500} value={value} onChange={event => setValue(event.target.value)} /></label>
+      {q.required === false && <button className="Survey-skip" onClick={() => setSurvey(null)}>Omitir pregunta</button>}
+    </div> : <form className="Survey-input" onSubmit={event => { event.preventDefault(); setSurvey(value === '' ? null : q.type === 'number' ? Number(value) : value); }}>
+      <input aria-labelledby="survey-question" type={q.type === 'number' ? 'number' : 'text'} inputMode={q.type === 'number' ? 'decimal' : undefined}
+        required={q.required !== false} min={q.min} max={q.max} step="any" maxLength={q.maxLength || 500} value={value} onChange={event => setValue(event.target.value)} />
       <button type="submit">Continuar</button>
-      {q.required === false && <button type="button" onClick={() => setSurvey(null)}>Omitir pregunta</button>}
+      {q.required === false && <button className="Survey-skip" type="button" onClick={() => setSurvey(null)}>Omitir pregunta</button>}
     </form>}
-  </>;
+  </section>;
+}
+
+function SurveySummary({ surveySchema = [], surveyResponses }) {
+  if (!surveySchema.length) return null;
+  return <dl className="Survey-summary" aria-label="Respuestas de la encuesta">
+    {surveySchema.map(q => <div key={q.field}>
+      <dt>{q.display}</dt>
+      <dd>{answerText(q, surveyResponses[q.field])}</dd>
+    </div>)}
+  </dl>;
 }
 
 function DigitSelect({
@@ -174,8 +200,8 @@ function QuantityConfirmScreen({ quantity, station, shearers, surveySchema, surv
       <section className="Tag-display">
         <p>Esqilador: {name}</p>
         <p>Cantidad: {quantity}</p>
-        {surveySchema?.map(q => <p key={q.field}>{q.display}: {answerText(q, surveyResponses[q.field])}</p>)}
       </section>
+      <SurveySummary surveySchema={surveySchema} surveyResponses={surveyResponses} />
       <section className="Tag-buttons">
         <button onClick={(ev) => onSubmit(ev)}>OK</button>
         <button onClick={() => onCancel()}>Cancelar</button>
@@ -196,17 +222,6 @@ function ConfirmScreen({
 }) {
   const name = shearers[station - 1]?.name ?? `Estación ${station}`;
 
-  const displaySurveyResponses = Object.entries(surveyResponses).map(
-    ([field, response]) => {
-      const schema = (surveySchema ?? []).find((schema) => schema.field === field);
-      const fieldDisplay = schema?.display ?? field;
-      const optionName = schema ? answerText(schema, response) : String(response ?? 'Sin respuesta');
-      return {
-        display: fieldDisplay,
-        optionName,
-      };
-    }
-  );
   return (
     <>
       <header className="App-header">
@@ -225,14 +240,8 @@ function ConfirmScreen({
         >
           {tag}
         </p>
-        <>
-          {displaySurveyResponses.map((response) => (
-            <p key={response.display}>
-              {response.display}: {response.optionName}
-            </p>
-          ))}
-        </>
       </section>
+      <SurveySummary surveySchema={surveySchema} surveyResponses={surveyResponses} />
       <section className="Tag-buttons">
         <button onClick={(ev) => onSubmit(ev)}>OK</button>
         <button onClick={() => onCancel()}>Cancelar</button>
@@ -466,7 +475,7 @@ function TaggingApp() {
 
   const onBulkSubmit = (event) => {
     event?.preventDefault();
-    return submit("/bulk", { quantity, station, surveyResponses });
+    return submit("/bulk", { quantity, station, type: mode.type, surveyResponses });
   };
 
   useEffect(() => {
@@ -552,7 +561,7 @@ function TaggingApp() {
     screen = (
       <DigitSelect
         display={quantity}
-        headerText={"¿Cuantos cordilleros hay?"}
+        headerText={"¿Cuántos animales hay?"}
         canSubmit={quantity.length >= 1}
         disableDigits={false}
         onCancel={onCancel}
@@ -567,6 +576,8 @@ function TaggingApp() {
       <SurveySelect
         key={surveySchema.field}
         surveySchema={surveySchema}
+        step={nextSurveyStepIndex + 1}
+        total={mode.surveySchema.length}
         onCancel={onCancel}
         setSurvey={(value) => respondToSurvey(surveySchema.field, value)}
       />
@@ -601,7 +612,7 @@ function TaggingApp() {
     );
   }
 
-  return <div className="App"><p className="Current-mode" aria-label="Modo de conteo">{({ oveja: 'Ovejas', carnero: 'Carneros', carnillero: 'Corderos' })[mode.type]}</p>
+  return <div className="App"><p className="Current-mode" aria-label="Modo de conteo">{modeName(mode)}</p>
     {entrySchema && (entrySchema.revision !== configurationRevision || mode.type !== liveMode.type) && <p role="status">La configuración cambió. Se usará con el próximo animal.</p>}
     {connectionError && <p role="alert">{connectionError}</p>}{screen}</div>;
 }

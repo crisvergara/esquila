@@ -57,7 +57,7 @@ lid closure, shutdown, and battery exhaustion can still interrupt LAN service.
   it is not a separately mutable sheep row.
 
 Schema definitions are canonical in `countserver.js`, `shared/ranch-sync.js`,
-`shared/survey-migration.js`, and `cloud/schema.sql`. A schema change must include migration behavior for
+`shared/survey-migration.js`, `shared/mode-migration.js`, and `cloud/schema.sql`. A schema change must include migration behavior for
 existing barn databases, fresh-install behavior, synchronization mapping, and
 tests for both old and new data.
 
@@ -132,6 +132,37 @@ shows stale data warnings on LAN loss, and uses a separate web manifest so a
 saved monitor shortcut never targets the tagger. It requires local server
 connectivity to refresh, but no internet.
 
+## Versioned modes
+
+Configuration schema 3 replaces the fixed three modes with up to 24 retained
+mode definitions. Each has a stable `type` ID, editable name, active flag,
+immutable individual/bulk behavior, and its own tag rules and survey. Schema 1
+and 2 remain readable. `shared/modes.js` centralizes identity, legacy aliases,
+snapshot validation and historical editor fallback. Cloud editing retires
+missing modes instead of deleting history and bounds the total manifest to 80 KB.
+
+`settings.mode` is the local operational selection, exposed by `GET/POST /mode`
+and the Mac/local setup screens. It persists without network access or restart.
+Manifest application retains an active selection; a retired/missing selection
+falls back to the first active mode. In-progress tagger entries freeze both mode
+and revision, so an update does not relabel an animal or invalidate its retry.
+
+SQLite v6 stores `counts.mode_json`; PostgreSQL stores `shearing_events.mode`.
+New records snapshot `{id, name, bulk}` and individual tag rules (color IDs,
+prefixes and digit bounds). Writes commit snapshot, survey, receipt and outbox
+together. Edits preserve that snapshot unless the mode is explicitly corrected;
+shared historical records can be validated without that mode in today's local
+manifest. New records may only use active configured modes. Custom-mode totals
+use a separate keyed map, keeping legacy total fields safe from mode ID collisions.
+All bulk modes share the durable L-code sequence.
+
+Backfills mark legacy snapshots inferred from stored type, preserve event
+identity/timestamps/tombstones, and never invent historical custom names. The
+SQLite migration is backed up and atomic. Cloud migration takes the normal
+revision lock and publishes audit/cursor changes. Upload/pull validate snapshots
+before committing; missing or legacy metadata never replaces a richer snapshot.
+These payloads follow the existing LWW, tombstone and conflict-audit rules.
+
 ## Versioned shearing surveys
 
 Configuration schema 2 describes ordered, active/retired choice, number and text
@@ -182,13 +213,30 @@ API trusts the ranch WiFi and grants no additional cloud roles to phones.
 
 ## Cloud ranch management and bidirectional shearing sync
 
-`/admin` serves a password-protected monitor and paginated record editor in
-addition to device enrollment. `GET /api/admin/ranch` reports the last heartbeat
-per server device, version/hostname/platform, uptime, mode, configured shearers,
-local outbox size, and cloud rows awaiting acknowledgement (including deletes).
-`GET /api/admin/shearing` filters by Chile date and code, returns 100 rows per
-page, and optionally includes tombstones. Monitor totals ignore the code filter
-and exclude deleted records. Both local and cloud monitors use `America/Santiago`.
+The authenticated admin uses separate overview (`/admin`), record browser
+(`/admin/records`), configuration, device and account pages with shared
+navigation. Legacy Mac configuration deep links remain supported. See
+[CLOUD_ADMIN.md](CLOUD_ADMIN.md) for operator workflows.
+`GET /api/admin/ranch` reports the last heartbeat per server device,
+version/hostname/platform, uptime, mode, configured shearers, local outbox size,
+and cloud rows awaiting acknowledgement (including deletes).
+`GET /api/admin/shearing` supports server attribution, inclusive Chile date
+ranges, code, station, type, color, deletion and acknowledgement filters, with
+bounded 25/50/100-row pagination and stable tie-break ordering. The browser opens
+across all dates; the original API's default day remains compatible. Monitor
+totals ignore code/detail filters and exclude deleted records. Both monitors use
+`America/Santiago`. Filter/sort/page state is bookmarkable. The browser refreshes
+on search/save rather than shifting records underneath an ongoing review.
+
+Cloud-only `shearing_record_servers` metadata attributes uploads to authenticated
+server UUIDs in the same transaction as each upload batch, independently of
+client-supplied `origin`. First/latest upload instants survive equal/older retries.
+Manual cloud additions retain their selected server context without inventing
+an upload timestamp. Old records with ambiguous origins stay unattributed and
+browsable; revoking a device preserves its historical identity/name. Attribution
+never changes event payloads, SQLite schemas, or the shared-flock replication
+scope. A record's acknowledgement is relative to the selected server or all
+active enrolled servers when no server is selected.
 Station names and record-editor choices come from the selected server's
 published manifest, falling back to its last report for older installations;
 historical name assignments are not stored. Contact older than three minutes is marked stale;

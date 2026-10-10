@@ -160,7 +160,7 @@ test('live manifest updates preserve in-progress animals, retired history, custo
 
 test('invalid remote metadata cannot block count synchronization, and revocation preserves the offline configuration', async ({ page }) => {
   const saved = await readConfig();
-  await pool.query(`UPDATE ${schema}.ranch_configurations SET revision=3, configuration=jsonb_set(configuration,'{schemaVersion}','3') WHERE device_id=$1`, [server.id]);
+  await pool.query(`UPDATE ${schema}.ranch_configurations SET revision=3, configuration=jsonb_set(configuration,'{schemaVersion}','99') WHERE device_id=$1`, [server.id]);
   await waitFor(() => barn.logs.some(s => s.includes('Versión de configuración no compatible')));
   expect((await local()).revision).toBe(2);
   expect((await jsonRequest(`${barnBase}/bulk`, { method: 'POST', body: { station: 7, quantity: 1, submissionId: crypto.randomUUID() } })).response.status).toBe(200);
@@ -171,7 +171,11 @@ test('invalid remote metadata cannot block count synchronization, and revocation
   await page.getByLabel('Contraseña de administración').fill(password);
   await page.getByRole('button', { name: 'Iniciar sesión' }).click();
   await expect(page.getByLabel('Nombre del galpón', { exact: true })).toHaveValue('Galpón principal');
+  await page.getByRole('navigation', { name: 'Administración' }).getByRole('link', { name: 'Dispositivos' }).click();
+  page.on('dialog', dialog => dialog.accept());
   await page.locator('#devices tr').filter({ hasText: 'Galpón principal' }).getByRole('button', { name: 'Eliminar' }).click();
+  await expect(page.locator('#devices')).not.toContainText('Galpón principal');
+  await page.getByRole('navigation', { name: 'Administración' }).getByRole('link', { name: 'Configuración' }).click();
   await expect(page.getByLabel('Nombre del galpón', { exact: true })).toHaveValue('Otro galpón');
   await expect(page).toHaveURL(new RegExp(`server=${other.id}`));
   expect((await jsonRequest(`${cloudBase}/api/server/configuration`, { token: server.token })).response.status).toBe(401);

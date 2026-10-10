@@ -19,11 +19,21 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
 - remote manifest editing (including green/black and custom colors), seven
   stations, durable publication retries after lost responses/reload, stale
   revisions, CSRF and phone/server scoping;
+- named individual/bulk mode creation, ordering and retirement through the cloud
+  UI; local/Mac selection without cloud access or server restart; automatic
+  fallback for a retired selection; snapshots through in-progress retirement,
+  response-loss retries, offline restart, corrections and tombstone sync;
+- SQLite v5-to-v6 atomic/idempotent mode migration, unknown legacy labels,
+  malformed mode batch rollback, preserved metadata on legacy writes, and
+  historical editing without a matching current manifest;
 - dynamic survey configuration (choice/text/number, ordering, optional answers),
   SQLite v4-to-v5 rollback/restart safety, idempotent cloud backfill, original
   question snapshots after manifest changes, offline survey counts and corrections,
   response-loss retries, legacy uploads preserving custom answers, malformed
   survey batch rejection, and ram/lamb/manual-record surveys;
+- survey headings and question progress at 320/390 px, landscape and desktop widths,
+  scroll/focus recovery after the keypad and long answer lists, wrapping labels,
+  optional answers, and question/answer pairs in individual and bulk review;
 - live configuration retirement during an in-progress count and ambiguous retry,
   custom monitor swatches, historical record corrections, offline restart and
   catch-up, malformed metadata isolation, and retained settings after revocation;
@@ -48,6 +58,10 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
 - recent-record editor additions, edits, deletion confirmations, response-loss retries across reload/restart, stale-editor rejection, offline reconciliation, and stale tombstone replay;
 - edits made during a cloud upload whose response is lost, plus durable lamb-number reservation after manual corrections and restart;
 - ranch restart safety for lamb numbering and synchronization;
+- dedicated admin screens and navigation, legacy configuration deep links, mobile
+  layout, bookmarkable filters/pages, Chile date boundaries, authenticated server
+  attribution (including spoofed origins), upload replay timestamps, legacy
+  unattributed history, and server-specific acknowledgement filters;
 - cloud monitor/record management, lost admin receipts across reload, concurrent
   duplicate submissions, stale editors, deleted-row history, and admin/phone/CSRF
   boundaries;

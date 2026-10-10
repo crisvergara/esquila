@@ -1,3 +1,4 @@
+import { MAX_MODES, modeName } from '/modes.js';
 import { MAX_QUESTIONS } from '/surveys.js';
 import { MAX_STATIONS, validateConfiguration } from '/configuration-schema.js';
 
@@ -15,7 +16,7 @@ function field(label, value, change, type = 'text') {
   input.oninput = () => change(type === 'number' ? Number(input.value) : input.value);
   wrap.append(input); return wrap;
 }
-const modeName = { oveja: 'Ovejas', carnero: 'Carneros', carnillero: 'Corderos' };
+const editableConfiguration = c => ({ ...structuredClone(c), schemaVersion: 3, modes: c.modes.map(m => ({ ...structuredClone(m), name: modeName(m), active: m.active !== false, bulk: !!m.bulk })) });
 
 export function mountRanchConfiguration({ api, onPublished }) {
   const select = document.getElementById('configuration-server');
@@ -26,6 +27,7 @@ export function mountRanchConfiguration({ api, onPublished }) {
   const retry = document.getElementById('configuration-retry');
   const save = document.getElementById('configuration-save');
   let id, draft, revision = 0, dirty = false, busy = false, generation = 0;
+  const openModes = new Set(['oveja']);
   const key = () => `esquila-admin-configuration-${id}`;
   function pending() { return JSON.parse(localStorage.getItem(key()) || 'null'); }
   function change(fn) { fn(); dirty = true; }
@@ -75,9 +77,9 @@ export function mountRanchConfiguration({ api, onPublished }) {
     for (const q of mode.surveySchema) { q.type ||= 'choice'; q.required ??= true; q.active ??= true; }
     const questions = mode.surveySchema;
     const group = el('section', '', 'config-surveys');
-    group.setAttribute('aria-label', `Encuesta ${modeName[mode.type]}`);
+    group.setAttribute('aria-label', `Encuesta ${modeName(mode)}`);
     group.append(el('h3', 'Preguntas de la encuesta'), el('p', 'Las preguntas se guardan con cada esquila. Retirarlas o cambiar su nombre no modifica encuestas anteriores. Para cambiar el tipo, retira la pregunta y crea otra.', 'muted'));
-    if (mode.bulk) group.append(el('p', 'Las respuestas del lote se guardan en cada cordero. Puedes corregirlas individualmente en Registros.'));
+    if (mode.bulk) group.append(el('p', 'Las respuestas del lote se guardan en cada animal. Puedes corregirlas individualmente en Registros.'));
     questions.forEach((q, index) => {
       const item = el('section', '', `config-question${q.active === false ? ' retired' : ''}`);
       item.setAttribute('aria-label', `Pregunta ${index + 1}`);
@@ -136,9 +138,29 @@ export function mountRanchConfiguration({ api, onPublished }) {
     const add = action('Agregar estación', () => { change(() => draft.shearers.push({ name: `Estación ${draft.shearers.length + 1}`, active: true })); render(); });
     add.disabled = draft.shearers.length >= MAX_STATIONS;
     stations.append(add); fields.append(stations);
-    for (const mode of draft.modes) {
-      const section = el('details'); section.open = mode.type === 'oveja';
-      section.append(el('summary', modeName[mode.type]));
+    fields.append(el('h3', 'Modos de conteo'), el('p', 'Crea los modos del galpón y elige el modo activo en la configuración del Mac. Retirar un modo conserva sus registros. El tipo de conteo no cambia después de publicarlo.', 'muted'));
+    const sourceLabel = el('label', 'Copiar configuración de'), source = el('select');
+    for (const m of draft.modes) { const option = el('option', `${modeName(m)} · ${m.bulk ? 'Por cantidad' : 'Caravana individual'}`); option.value = m.type; source.append(option); }
+    sourceLabel.append(source); fields.append(sourceLabel);
+    const addMode = action('Agregar modo', () => {
+      change(() => { const copy = structuredClone(draft.modes.find(m => m.type === source.value)); copy.type = `mode_${crypto.randomUUID().replaceAll('-', '')}`; copy.name = 'Nuevo modo'; copy.active = true; draft.modes.push(copy); openModes.add(copy.type); }); render();
+    });
+    addMode.disabled = draft.modes.length >= MAX_MODES; fields.append(addMode);
+    draft.modes.forEach((mode, index) => {
+      const section = el('details', '', mode.active === false ? 'retired' : ''); section.open = openModes.has(mode.type);
+      section.ontoggle = () => { if (!section.isConnected) return; if (section.open) openModes.add(mode.type); else openModes.delete(mode.type); };
+      const heading = el('summary', modeName(mode) + (mode.active === false ? ' (retirado)' : ''));
+      section.append(heading, field('Nombre del modo', mode.name, value => change(() => { mode.name = value; heading.textContent = value + (mode.active === false ? ' (retirado)' : ''); })));
+      const controls = el('div', '', 'row');
+      controls.append(action(mode.active === false ? 'Restaurar modo' : 'Retirar modo', () => {
+        if (mode.active !== false && draft.modes.filter(m => m.active !== false).length === 1) { error.textContent = 'Conserva al menos un modo activo.'; return; }
+        change(() => { mode.active = mode.active === false; }); render();
+      }));
+      for (const [offset, label] of [[-1, 'Subir modo'], [1, 'Bajar modo']]) {
+        const move = action(label, () => { change(() => { [draft.modes[index], draft.modes[index + offset]] = [draft.modes[index + offset], draft.modes[index]]; }); render(); });
+        move.disabled = index + offset < 0 || index + offset >= draft.modes.length; controls.append(move);
+      }
+      section.append(controls, el('p', mode.bulk ? 'Por cantidad' : 'Caravana individual', 'muted'));
       if (mode.bulk) section.append(el('p', 'Conteo por cantidad. Los códigos L se asignan automáticamente y conservan su secuencia.'));
       else {
         choices(section, mode.tagSchema.colors, 'Colores de caravana', 'color');
@@ -150,7 +172,7 @@ export function mountRanchConfiguration({ api, onPublished }) {
       }
       surveys(section, mode);
       fields.append(section);
-    }
+    });
     disable(Boolean(pending()) || busy);
   }
   async function refreshStatus() {
@@ -174,9 +196,9 @@ export function mountRanchConfiguration({ api, onPublished }) {
     try {
       const data = await api('GET', `/api/admin/ranches/${id}/configuration`);
       if (ticket !== generation) return;
-      draft = structuredClone(data.configuration); revision = data.revision; dirty = false;
+      draft = editableConfiguration(data.configuration); revision = data.revision; dirty = false;
       const attempt = pending();
-      if (attempt) { draft = attempt.configuration; revision = attempt.revision; showRetry(attempt); }
+      if (attempt) { draft = editableConfiguration(attempt.configuration); revision = attempt.revision; showRetry(attempt); }
       busy = false; render(); await refreshStatus();
     } catch (e) { error.textContent = e.message; }
     finally { if (ticket === generation) { busy = false; select.disabled = false; } }
@@ -191,7 +213,7 @@ export function mountRanchConfiguration({ api, onPublished }) {
       localStorage.setItem(key(), JSON.stringify(body));
       const result = await api('PUT', `/api/admin/ranches/${id}/configuration`, body);
       localStorage.removeItem(key()); retry.replaceChildren();
-      revision = result.manifest.revision; draft = result.manifest.configuration; dirty = false;
+      revision = result.manifest.revision; draft = editableConfiguration(result.manifest.configuration); dirty = false;
       await onPublished(id); await refreshStatus();
     } catch (e) {
       error.textContent = e.message;
@@ -201,7 +223,7 @@ export function mountRanchConfiguration({ api, onPublished }) {
   }
   form.onsubmit = event => {
     event.preventDefault();
-    try { publish({ revision, configuration: validateConfiguration({ ...draft, schemaVersion: 2 }), submissionId: crypto.randomUUID() }); }
+    try { publish({ revision, configuration: validateConfiguration({ ...draft, schemaVersion: 3 }), submissionId: crypto.randomUUID() }); }
     catch (e) { error.textContent = e.message; }
   };
   select.onchange = () => {

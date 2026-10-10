@@ -176,7 +176,7 @@ function SheepTable({ sheep, filter, highlightedTag, onHighlight, treatmentCount
                     <span className={`Color-dot Color-dot--${s.color}`} />
                   </td>
                   <td>{s.tag}</td>
-                  <td>{s.type}</td>
+                  <td>{s.mode?.name || s.type}</td>
                   <td>{shearer}</td>
                   <td>
                     <span className={hasTreatments ? "Estado-badge" : "Estado-empty"}>
@@ -312,7 +312,7 @@ function SheepDetailView({ sheep, shearingHistory, treatments, presets, actions,
           <span className="Detail-tag">{sheep.tag}</span>
         </div>
         <p className="Detail-meta">
-          {sheep.type} · {shearer}
+          {sheep.mode?.name || sheep.type} · {shearer}
         </p>
         <div className="Detail-fields">
           <div className="Detail-field">

@@ -6,7 +6,8 @@ A sheep shearing tracking app for use in the field. Shearers use their phones to
 
 During a shearing run, each animal has an ear tag with a letter code and number (e.g. `A00123`), plus a colored tag indicating its age/origin. As each animal is sheared, the shearer at their station enters the tag data on their phone. The app records this to a SQLite database and the monitor screen updates live.
 
-Three **modes** control what data is collected per animal:
+**Modes** control what data is collected per animal. These three are defaults;
+add, rename, reorder or retire modes and their settings in the cloud admin:
 
 | Mode | Type | Description |
 |------|------|-------------|
@@ -19,7 +20,10 @@ The ranch caches the manifest for offline use. Both record editors preserve and
 edit the survey that was actually collected with each shearing event. See
 [configuration and migration details](docs/RANCH_CONFIGURATION.md).
 
-The active mode is changed centrally and refreshed on tagger devices through short local requests, normally within one second.
+Choose the active mode in the local Mac **Configuración… → Modo de conteo**
+(or `/setup`), including without internet. Taggers follow within about a second;
+an animal already started keeps its mode. Each record retains its mode ID and
+name when collected, even if the mode is later renamed or retired.
 
 ## Architecture
 
@@ -119,7 +123,7 @@ view, not a live LAN feed. Names reflect the latest station configuration.
 | `GET/POST` | `/api/records` | List recent shearing records; retry-safe additions, edits, and tombstone deletions |
 | `POST` | `/bulk` | Log a batch of lambs by quantity and station |
 | `GET` | `/count` | Get current per-station stats (counted, last tag, breakdown by type) |
-| `POST` | `/mode` | Switch the active tagging mode |
+| `GET/POST` | `/mode` | List configured modes / persist the active local mode |
 | `GET` | `/api/live` | Current counts and mode for short local polling requests |
 | `GET` | `/sse` | Legacy mode stream for older clients |
 | `GET` | `/qr.png` | Locally generated QR pointing to the tagger; no internet required |
@@ -225,3 +229,5 @@ the three animal types retain their database/counting semantics. See
 Cloud personal accounts, invitations, password reset and first-owner setup are
 documented in [docs/ADMIN_ACCOUNTS.md](docs/ADMIN_ACCOUNTS.md). Manage people at
 `https://<app>/admin/accounts`; accounts use email usernames and private passwords.
+
+Cloud admin screens, recent-scan browsing and corrections: [Cloud administration](docs/CLOUD_ADMIN.md).

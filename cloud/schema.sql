@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS devices (
 );
 
 ALTER TABLE shearing_events ADD COLUMN IF NOT EXISTS survey jsonb;
+ALTER TABLE shearing_events ADD COLUMN IF NOT EXISTS mode jsonb;
 
 -- Latest shearing event per tag = current sheep status.
 CREATE OR REPLACE VIEW sheep_latest AS
@@ -92,6 +93,18 @@ CREATE TRIGGER shearing_audit_change AFTER INSERT OR UPDATE ON shearing_events
 SELECT revision FROM shearing_sync_clock WHERE singleton FOR UPDATE;
 UPDATE shearing_events SET revision = revision WHERE revision = 0;
 CREATE INDEX IF NOT EXISTS idx_shearing_events_revision ON shearing_events (revision);
+
+-- Cloud-only provenance: old origin strings are not reliable device identities.
+-- Retain attribution after device revocation; never infer it for legacy rows.
+CREATE TABLE IF NOT EXISTS shearing_record_servers (
+  record_id uuid NOT NULL REFERENCES shearing_events(id),
+  server_id uuid NOT NULL, server_name text NOT NULL,
+  first_uploaded_at timestamptz, last_uploaded_at timestamptz,
+  uploaded_updated_at timestamptz,
+  PRIMARY KEY(record_id, server_id)
+);
+CREATE INDEX IF NOT EXISTS idx_shearing_record_servers_server ON shearing_record_servers(server_id, record_id);
+CREATE INDEX IF NOT EXISTS idx_shearing_record_servers_uploaded ON shearing_record_servers(last_uploaded_at DESC);
 
 CREATE TABLE IF NOT EXISTS ranch_status (
   device_id uuid PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,

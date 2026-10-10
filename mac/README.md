@@ -24,7 +24,7 @@ The first enrollment needs internet. Later launches and counting use the saved
 manifest without internet. Existing installations import their current station
 names on their first configuration sync unless an administrator already
 published settings. Choose **Administrar este galpón en la nube…** in the sheep
-menu to edit colors, stations, tag formats and surveys for this exact server.
+menu to edit modes, colors, stations, tag formats and surveys for this exact server.
 The browser uses the normal admin login; the menu link contains no credential.
 See [remote configuration](../docs/RANCH_CONFIGURATION.md) for delivery status,
 retiring options and historical station names. Standalone, unregistered installs
@@ -34,12 +34,20 @@ Closing the monitor does **not** stop the server. Esquila remains available
 from the sheep icon in the macOS menu bar. That menu can reopen the monitor,
 change settings, open the tagger, edit recent records, disable launch-at-login, or fully quit.
 
+Choose **Configuración… → Modo de conteo → Aplicar modo** to switch all tagger
+phones to an active configured mode. This works without internet, remembers the
+selection across restarts and does not restart the server. Animals already
+started retain their mode until completed. **Actualizar lista** reloads the local
+cached options; mode definitions are published from the cloud. If the cloud
+retires the selected mode, new entries use the first remaining active mode.
+Install this update before publishing schema-3 modes and reload phone tagger tabs.
+
 Choose **Registros recientes…** from the sheep menu to open the record editor.
 It shows the latest 200 live shearing records, with a code search for older rows.
 Use **Agregar registro**, **Editar**, or **Eliminar** (then confirm) to correct
-an animal's code, station, type, color, wool quality, or lactation. Editing keeps
+an animal's code, station, mode, color, or original survey responses. Editing keeps
 the original shearing time; dates are displayed in Chile time. For a manually
-added lamb, use `L` followed by at least four digits.
+added animal in a bulk mode, use `L` followed by at least four digits.
 
 Changes save to the Mac immediately without internet, update monitor totals,
 and show **Pendiente** until the cloud accepts them. Deleted records disappear

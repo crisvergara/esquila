@@ -1,3 +1,5 @@
+import { captureMode, findMode, modeName, modeForRecord, recordedMode, recordTypeForMode } from './shared/modes.js';
+import { migrateBarnModes } from './shared/mode-migration.js';
 import { createSurvey, legacyFields, legacySurvey } from './shared/surveys.js';
 import { migrateBarnSurveys } from './shared/survey-migration.js';
 import express from "express";
@@ -334,9 +336,13 @@ if (db.pragma('user_version', { simple: true }) < 5) {
   if (db.prepare('SELECT 1 FROM counts LIMIT 1').get()) await db.backup(`esquila-pre-v5-${Date.now()}.sqlite`);
   migrateBarnSurveys(db);
 }
+if (db.pragma('user_version', { simple: true }) < 6) {
+  if (db.prepare('SELECT 1 FROM counts LIMIT 1').get()) await db.backup(`esquila-pre-v6-${Date.now()}.sqlite`);
+  migrateBarnModes(db);
+}
 const recordWithSurvey = row => {
-  const { survey_json, ...record } = row;
-  return { ...record, survey: survey_json ? JSON.parse(survey_json) : legacySurvey(row) };
+  const { survey_json, mode_json, ...record } = row;
+  return { ...record, mode: recordedMode(row), survey: survey_json ? JSON.parse(survey_json) : legacySurvey(row) };
 };
 
 const getSettingsFromDb = db.prepare(`
@@ -361,6 +367,17 @@ if (!settings) {
   mode = settings.mode;
   email = settings.email;
 }
+
+const ensureActiveMode = () => {
+  const modes = activeModes(ranchConfiguration.current().configuration.modes);
+  if (!modes.some(m => m.type === mode)) {
+    const nextMode = modes[0].type;
+    updateSettingsFromDb.run(nextMode);
+    mode = nextMode;
+    modeEmitter.emit('modeswitch', mode);
+  }
+};
+ensureActiveMode();
 
 const backupDb = async () => {
   if (!hasAwsCredentials) return;
@@ -504,6 +521,7 @@ const emptyStationStats = () => ({
   oveja: 0,
   borrega: 0,
   carnero: 0,
+  byMode: Object.create(null),
 });
 
 const defaultStatsByStation = () => {
@@ -526,8 +544,8 @@ setInterval(async () => {
 }, 5000);
 
 const writeTagToDb = db.prepare(`
-  INSERT INTO counts (id, tag, station, color, lactation, type, woolQuality, date, updated_at, survey_json)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO counts (id, tag, station, color, lactation, type, woolQuality, date, updated_at, survey_json, mode_json)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `);
 
 const findCountSubmission = db.prepare(`
@@ -550,7 +568,7 @@ const insertCountTxn = db.transaction((row, submissionId) => {
     row.woolQuality,
     row.date,
     row.updated_at,
-    JSON.stringify(row.survey)
+    JSON.stringify(row.survey), JSON.stringify(row.mode)
   );
   queueSyncRow.run("counts", row.id);
   if (submissionId) recordCountSubmission.run(submissionId, "single", row.date);
@@ -565,7 +583,8 @@ const writeTag = async (
   type = "oveja",
   woolQuality = "IDK",
   submissionId = null,
-  survey
+  survey,
+  recordedMode
 ) => {
   const dateString = new Date().toISOString();
 
@@ -579,14 +598,14 @@ const writeTag = async (
     woolQuality,
     date: dateString,
     updated_at: dateString,
-    survey,
+    survey, mode: recordedMode,
   }, submissionId);
 
   await refreshCounts();
   return created;
 };
 
-const insertBulkCountTxn = db.transaction((station, quantity, submissionId, survey) => {
+const insertBulkCountTxn = db.transaction((station, quantity, submissionId, survey, selectedMode) => {
   if (submissionId && findCountSubmission.get(submissionId)) return false;
   const dateString = new Date().toISOString();
   for (let i = 0; i < quantity; ++i) {
@@ -597,7 +616,8 @@ const insertBulkCountTxn = db.transaction((station, quantity, submissionId, surv
       station,
       color: "none",
       lactation: "idk",
-      type: "borrega",
+      type: recordTypeForMode(selectedMode),
+      mode: captureMode(selectedMode),
       woolQuality: "IDK",
       date: dateString,
       updated_at: dateString,
@@ -614,7 +634,7 @@ const insertBulkCountTxn = db.transaction((station, quantity, submissionId, surv
       row.woolQuality,
       row.date,
       row.updated_at,
-      JSON.stringify(row.survey)
+      JSON.stringify(row.survey), JSON.stringify(row.mode)
     );
     queueSyncRow.run("counts", row.id);
   }
@@ -623,8 +643,8 @@ const insertBulkCountTxn = db.transaction((station, quantity, submissionId, surv
   return true;
 });
 
-const writeBulkTags = async (station, quantity, submissionId = null, survey) => {
-  const created = insertBulkCountTxn(station, quantity, submissionId, survey);
+const writeBulkTags = async (station, quantity, submissionId = null, survey, selectedMode) => {
+  const created = insertBulkCountTxn(station, quantity, submissionId, survey, selectedMode);
   await refreshCounts();
   return created;
 };
@@ -679,7 +699,7 @@ const validateTagSubmission = (body) => {
 
   try {
     const survey = createSurvey(configuration.modes, type, body);
-    return { value: { type, station, color, tag, survey, ...legacyFields(survey) } };
+    return { value: { type, station, color, tag, survey, mode: captureMode(taggingMode), ...legacyFields(survey) } };
   } catch (error) { return { error: error.message }; }
 };
 
@@ -694,7 +714,8 @@ const getStatsFromDb = async () => {
     s.lastTagType = tag.type;
     s.lastScanTime = tag.date;
     s.counted += 1;
-    s[tag.type] = (s[tag.type] ?? 0) + 1;
+    if (['oveja', 'carnero', 'borrega'].includes(tag.type)) s[tag.type] += 1;
+    s.byMode[tag.type] = (s.byMode[tag.type] || 0) + 1;
   }
   return stats;
 };
@@ -714,7 +735,7 @@ app.post("/count", bodyParser.json(), (req, res) => {
     validation.value.type,
     validation.value.woolQuality,
     submissionId,
-    validation.value.survey
+    validation.value.survey, validation.value.mode
   )
     .then((created) => res.json({ ok: true, created, counts: countStatsByStation }))
     .catch((err) => {
@@ -735,10 +756,15 @@ app.post("/bulk", bodyParser.json(), (req, res) => {
     return res.status(400).json({ error: "invalid submissionId" });
   }
 
-  let survey;
-  try { survey = createSurvey(ranchConfiguration.forRevision(req.body.configurationRevision).modes, 'borrega', req.body); }
+  let survey, selectedMode;
+  try {
+    const modes = ranchConfiguration.forRevision(req.body.configurationRevision).modes;
+    selectedMode = findMode(modes, req.body.type ?? 'borrega');
+    if (!selectedMode?.bulk || selectedMode.active === false) throw new Error('Modo por cantidad inválido.');
+    survey = createSurvey(modes, recordTypeForMode(selectedMode), req.body);
+  }
   catch (error) { return res.status(400).json({ error: error.message }); }
-  writeBulkTags(station, quantity, submissionId, survey)
+  writeBulkTags(station, quantity, submissionId, survey, selectedMode)
     .then((created) => res.json({ ok: true, created, counts: countStatsByStation }))
     .catch((err) => {
       console.error(err);
@@ -753,7 +779,7 @@ const recentRecords = db.prepare(`
 `);
 app.get("/api/records", (req, res) => {
   const filter = typeof req.query.tag === "string" ? req.query.tag.slice(0, 40) : "";
-  res.json({ rows: recentRecords.all(`%${filter}%`).map(recordWithSurvey),
+  res.json({ mode, rows: recentRecords.all(`%${filter}%`).map(recordWithSurvey),
     configurationRevision: ranchConfiguration.current().revision,
     pending: db.prepare("SELECT COUNT(DISTINCT row_id) AS n FROM sync_outbox WHERE tbl = 'counts'").get().n,
     syncConfigured: Boolean(process.env.CLOUD_SYNC_URL && process.env.CLOUD_SYNC_TOKEN),
@@ -786,13 +812,14 @@ const mutateRecord = db.transaction((body) => {
     if (validationError) fail(400, validationError);
     const survey = createSurvey(ranchConfiguration.current().configuration.modes, body.type, body, old);
     const fields = legacyFields(survey);
+    const savedMode = modeForRecord(ranchConfiguration.current().configuration.modes, body.type, old);
     if (old) {
       db.prepare(`UPDATE counts SET tag = ?, station = ?, color = ?, lactation = ?,
-        type = ?, woolQuality = ?, updated_at = ?, survey_json = ? WHERE id = ?`).run(
-        body.tag, Number(body.station), body.color, fields.lactation, body.type, fields.woolQuality, now, JSON.stringify(survey), id);
+        type = ?, woolQuality = ?, updated_at = ?, survey_json = ?, mode_json = ? WHERE id = ?`).run(
+        body.tag, Number(body.station), body.color, fields.lactation, body.type, fields.woolQuality, now, JSON.stringify(survey), JSON.stringify(savedMode), id);
     } else {
       writeTagToDb.run(id, body.tag, Number(body.station), body.color, fields.lactation,
-        body.type, fields.woolQuality, now, now, JSON.stringify(survey));
+        body.type, fields.woolQuality, now, now, JSON.stringify(survey), JSON.stringify(savedMode));
     }
   }
   if (body.action !== "delete" && /^L[0-9]+$/.test(body.tag)) {
@@ -862,15 +889,17 @@ app.get(["/qr.png", "/mobile-monitor-qr.png"], async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+app.get('/mode', (_req, res) => res.set('Cache-Control', 'no-store').json({ mode, modes: activeModes(ranchConfiguration.current().configuration.modes).map(m => ({ type: m.type, name: modeName(m), bulk: !!m.bulk })) }));
+
 app.post("/mode", bodyParser.json(), (req, res) => {
   const nextMode = req.body?.mode;
-  if (!taggingModes.some(m => m.type === nextMode)) {
+  if (!activeModes(ranchConfiguration.current().configuration.modes).some(m => m.type === nextMode)) {
     return res.status(400).json({ error: "invalid mode" });
   }
   updateSettingsFromDb.run(nextMode);
   mode = nextMode;
   modeEmitter.emit("modeswitch", nextMode);
-  res.sendStatus(200);
+  res.json({ ok: true, mode });
 });
 
 app.get("/sse", (req, res) => {
@@ -1272,6 +1301,7 @@ const toRemoteRow = {
     lactation: r.lactation,
     type: r.type,
     wool_quality: r.woolQuality,
+    mode: recordedMode(r),
     survey: r.survey_json ? JSON.parse(r.survey_json) : legacySurvey(r),
     occurred_at: r.date,
     updated_at: r.updated_at,
@@ -1348,7 +1378,7 @@ const runSync = async () => {
       method: "POST", signal: AbortSignal.timeout(30000),
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${CLOUD_SYNC_TOKEN}` },
       body: JSON.stringify({ cursor: ranchSync.cursor(), information: {
-        shearers: readShearers(), mode, hostname: os.hostname(), platform: os.platform(),
+        shearers: readShearers(), mode, modeName: modeName(findMode(ranchConfiguration.current().configuration.modes, mode)), hostname: os.hostname(), platform: os.platform(),
         version: appVersion, uptime: Math.floor(process.uptime()),
         pending: db.prepare("SELECT count(*) AS n FROM sync_outbox").get().n,
       } }),
@@ -1382,7 +1412,7 @@ if (CLOUD_SYNC_URL && CLOUD_SYNC_TOKEN) {
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const changed = ranchConfiguration.apply(await response.json());
-      if (changed) await refreshCounts();
+      if (changed) { ensureActiveMode(); await refreshCounts(); }
       configurationDelay = changed ? Math.min(SYNC_INTERVAL_MS, 1000) : SYNC_INTERVAL_MS;
     } catch (error) {
       configurationDelay = Math.min(configurationDelay * 2, SYNC_MAX_BACKOFF_MS);

@@ -127,13 +127,18 @@ Support; do not replace those paths with repository-relative assumptions.
 
 `tagger/modeschema.json` supplies bootstrap defaults; cloud manifests configure
 colors, prefixes, digit limits and per-mode survey questions. Configuration
-schema 2 supports choice, text and numeric questions, with stable identities,
+schema 3 supports named, ordered, active/retired individual and bulk modes, plus
+choice, text and numeric questions, with stable identities,
 retirement, ordering and required/optional responses. Validation is shared in
 `shared/ranch-configuration.js` and `shared/surveys.js`. Each shearing event owns
 its survey snapshot; editors must use that snapshot rather than today's manifest.
 Never erase custom answers when receiving a legacy writer that lacks the survey
-field. The three animal types remain fixed. A new type still requires changes
-to server validation, persistence, stats, clients, sync and regression coverage.
+field. Mode IDs remain stable; names and the number of active modes are configured in
+the manifest. Keep the legacy `borrega` record type mapped to `carnillero` and
+capture mode snapshots on all new counts. Record corrections preserve the mode
+snapshot unless the operator explicitly changes the mode. Legacy writers must
+not erase snapshots. Local mode selection is durable and never needs a cloud
+request or server restart.
 Unknown modes, unknown revisions and invalid survey responses fail closed. See
 [RANCH_CONFIGURATION.md](RANCH_CONFIGURATION.md).
 

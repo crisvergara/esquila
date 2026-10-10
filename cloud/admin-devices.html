@@ -1,0 +1,17 @@
+<section class="panel">  <h2>Inscribir un dispositivo</h2>
+  <div class="row">
+    <input aria-label="Nombre del dispositivo" id="name" maxlength="80" placeholder="Nombre (ej. Teléfono de Papá)" style="flex:1" />
+    <select aria-label="Rol del dispositivo" id="role">
+      <option value="phone">teléfono</option>
+      <option value="server">servidor</option>
+    </select>
+    <button id="create">Crear + QR</button>
+  </div>
+  <p id="error" class="error" role="alert"></p>
+  <div id="qr"></div>
+  <div class="scroll"><table aria-label="Dispositivos inscritos">
+    <thead><tr><th>Nombre</th><th>Rol</th><th>Visto</th><th></th></tr></thead>
+    <tbody id="devices"></tbody>
+  </table></div>
+  <p class="muted">Los tokens solo se muestran una vez, al crear el dispositivo. Para revocar acceso, elimina el dispositivo.</p>
+</section>

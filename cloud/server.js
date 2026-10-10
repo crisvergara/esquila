@@ -1,3 +1,6 @@
+import { validateRecordedMode, reconcileRecordedMode } from '../shared/modes.js';
+import { migrateCloudModes } from '../shared/mode-migration.js';
+import { adminPaths, renderAdminPage } from './admin-layout.js';
 import { validateSurvey, legacySurvey, legacyFields } from '../shared/surveys.js';
 import { migrateCloudSurveys } from '../shared/survey-migration.js';
 // esquila-cloud: the remote hub. Receives sync pushes from the ranch server
@@ -47,6 +50,7 @@ pool.on("error", () => {
 const schema = await readFile(path.join(__dirname, "schema.sql"), "utf8");
 await pool.query(schema);
 await migrateCloudSurveys(pool);
+await migrateCloudModes(pool);
 console.log("Schema applied");
 
 const app = express();
@@ -63,7 +67,7 @@ app.use((req, res, next) => {
     req.path.startsWith("/admin") ||
     req.path === "/admin.js" ||
     req.path === "/admin-configuration.js" ||
-    req.path === "/configuration-schema.js" || req.path === '/surveys.js' ||
+    req.path === "/configuration-schema.js" || req.path === '/surveys.js' || req.path === '/modes.js' ||
     req.path === "/login.js" ||
     req.path.startsWith("/api/admin")
   ) {
@@ -74,7 +78,7 @@ app.use((req, res, next) => {
     res.setHeader("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
     res.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; img-src 'self' data:; style-src 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
+      "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"
     );
     if (req.secure)
       res.setHeader("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
@@ -120,19 +124,19 @@ const UPSERTS = {
   shearing_events: {
     columns: [
       "id", "tag", "station", "color", "lactation", "type",
-      "wool_quality", "occurred_at", "updated_at", "deleted_at", "origin", "survey",
+      "wool_quality", "occurred_at", "updated_at", "deleted_at", "origin", "survey", "mode",
     ],
     required: ["id", "tag", "occurred_at", "updated_at"],
     sql: `
       INSERT INTO shearing_events
-        (id, tag, station, color, lactation, type, wool_quality, occurred_at, updated_at, deleted_at, origin, survey)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        (id, tag, station, color, lactation, type, wool_quality, occurred_at, updated_at, deleted_at, origin, survey, mode)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       ON CONFLICT (id) DO UPDATE SET
         tag = excluded.tag, station = excluded.station, color = excluded.color,
         lactation = excluded.lactation, type = excluded.type,
         wool_quality = excluded.wool_quality, occurred_at = excluded.occurred_at,
         updated_at = excluded.updated_at, deleted_at = excluded.deleted_at,
-        origin = excluded.origin, survey = excluded.survey
+        origin = excluded.origin, survey = excluded.survey, mode = excluded.mode
       WHERE excluded.updated_at > shearing_events.updated_at
     `,
   },
@@ -193,6 +197,10 @@ app.post("/api/sync/push", deviceAuth, express.json({ limit: "20mb" }), async (r
         try { row.survey = validateSurvey(row.survey); }
         catch { return res.status(400).json({ error: 'invalid survey' }); }
       }
+      if (batch.table === 'shearing_events' && row?.mode !== undefined) {
+        try { row.mode = validateRecordedMode(row.mode); }
+        catch { return res.status(400).json({ error: 'invalid mode' }); }
+      }
       for (const field of UPSERTS[batch.table].required) {
         if (row[field] === undefined || row[field] === null || row[field] === "") {
           return res
@@ -215,8 +223,10 @@ app.post("/api/sync/push", deviceAuth, express.json({ limit: "20mb" }), async (r
       const spec = UPSERTS[batch.table];
       for (const row of batch.rows) {
         if (batch.table === 'shearing_events') {
+          const old = (row.survey === undefined || row.survey.legacy || !row.mode || row.mode.legacy)
+            ? (await client.query('SELECT type,survey,mode FROM shearing_events WHERE id=$1', [row.id])).rows[0] : null;
+          row.mode = reconcileRecordedMode(row.mode, old, row);
           if (row.survey === undefined || row.survey.legacy) {
-            const old = (await client.query('SELECT survey FROM shearing_events WHERE id=$1', [row.id])).rows[0];
             // An upgraded old Mac may send an explicit migrated survey. Treat
             // it like an old writer, never replacing a richer event snapshot.
             if (row.survey === undefined || (old?.survey && !old.survey.legacy)) row.survey = legacySurvey(row, old?.survey);
@@ -233,12 +243,28 @@ app.post("/api/sync/push", deviceAuth, express.json({ limit: "20mb" }), async (r
           const different = spec.columns.some((key, i) => {
             const current = existing[key] instanceof Date ? existing[key].toISOString() : existing[key];
             const incoming = ['occurred_at','updated_at','deleted_at'].includes(key) && values[i] ? new Date(values[i]).toISOString() : values[i];
+            if (key === 'mode') return JSON.stringify(validateRecordedMode(current)) !== JSON.stringify(validateRecordedMode(incoming));
             return key === 'survey' ? JSON.stringify(validateSurvey(current)) !== JSON.stringify(validateSurvey(incoming)) : current !== incoming;
           });
           if (different) await client.query(`INSERT INTO shearing_audit(row_id,source,before_row,after_row,dedupe)
             VALUES($1,'stale-push',$2,$3,$4) ON CONFLICT(dedupe) DO NOTHING`,
             [row.id, existing, row, sha256(JSON.stringify([row.id, values, existing.revision]))]);
         }
+      }
+      if (batch.table === 'shearing_events' && batch.rows.length) {
+        // One bounded query per batch. Identity comes from authentication, not origin.
+        // Equal/older retries retain the actual previous upload time.
+        await client.query(`INSERT INTO shearing_record_servers
+          (record_id,server_id,server_name,first_uploaded_at,last_uploaded_at,uploaded_updated_at)
+          SELECT id,$1,$2,now(),now(),max(updated_at)
+          FROM jsonb_to_recordset($3::jsonb) AS uploaded(id uuid,updated_at timestamptz) GROUP BY id
+          ON CONFLICT(record_id,server_id) DO UPDATE SET
+            server_name=excluded.server_name,
+            first_uploaded_at=COALESCE(shearing_record_servers.first_uploaded_at,excluded.first_uploaded_at),
+            last_uploaded_at=excluded.last_uploaded_at,uploaded_updated_at=excluded.uploaded_updated_at
+          WHERE shearing_record_servers.uploaded_updated_at IS NULL
+            OR excluded.uploaded_updated_at > shearing_record_servers.uploaded_updated_at`,
+        [req.device.id,req.device.name,JSON.stringify(batch.rows.map(row => ({id:row.id,updated_at:row.updated_at})))]);
       }
       applied[batch.table] = (applied[batch.table] ?? 0) + batch.rows.length;
     }
@@ -260,7 +286,7 @@ app.get("/api/snapshot", deviceAuth, async (req, res, next) => {
   try {
     const [events, treatments, presets] = await Promise.all([
       pool.query(`
-        SELECT id, tag, station, color, lactation, type, wool_quality,
+        SELECT id, tag, station, color, lactation, type, wool_quality, mode,
                occurred_at, updated_at, origin
         FROM shearing_events WHERE deleted_at IS NULL
         ORDER BY occurred_at DESC
@@ -336,15 +362,15 @@ app.delete("/api/admin/devices/:id", adminAuth, async (req, res, next) => {
   }
 });
 
-app.get(["/admin", "/admin/accounts"], async (req, res) => {
-  const page = await adminSession(req) ? (req.path === "/admin/accounts" ? "admin-accounts.html" : "admin.html") : "login.html";
-  res.sendFile(path.join(__dirname, page));
+app.get(Object.keys(adminPaths), async (req, res) => {
+  if (await adminSession(req)) res.type('html').send(renderAdminPage(adminPaths[req.path]));
+  else res.sendFile(path.join(__dirname, 'login.html'));
 });
-
-app.get("/admin.js", (_req, res) => {
-  res.type("application/javascript").sendFile(path.join(__dirname, "admin.js"));
-});
-app.get('/admin-configuration.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, 'admin-configuration.js')));
+for (const name of ['admin.js','admin-shell.js','admin-ui.js','admin-records.js','admin-devices.js','admin-configuration.js']) {
+  app.get(`/${name}`, (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname,name)));
+}
+app.get('/admin.css', (_req, res) => res.type('text/css').sendFile(path.join(__dirname,'admin.css')));
+app.get('/modes.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, '../shared/modes.js')));
 app.get('/surveys.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, '../shared/surveys.js')));
 app.get('/configuration-schema.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, '../shared/ranch-configuration.js')));
 

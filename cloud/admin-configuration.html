@@ -1,0 +1,13 @@
+  <section class="panel" id="configuration" aria-labelledby="configuration-title">
+    <h2 id="configuration-title">Configuración de galpones</h2>
+    <p>Configura las estaciones, los colores, los códigos y las preguntas de cada servidor. El galpón guarda una copia y sigue contando sin internet.</p>
+    <label>Servidor del galpón<select aria-label="Servidor del galpón" id="configuration-server"></select></label>
+    <p id="configuration-status" role="status"></p>
+    <p id="configuration-error" class="error" role="alert"></p>
+    <div id="configuration-retry"></div>
+    <form id="configuration-form" hidden>
+      <fieldset id="configuration-fields"></fieldset>
+      <p class="muted">Quitar colores o respuestas los oculta para nuevos conteos; los registros anteriores se conservan. Un animal en curso termina con la configuración con que se inició. Actualiza la aplicación del galpón antes de publicar preguntas nuevas.</p>
+      <div class="row"><button id="configuration-save">Publicar configuración</button><button type="button" id="configuration-reload">Recargar configuración</button></div>
+    </form>
+  </section>

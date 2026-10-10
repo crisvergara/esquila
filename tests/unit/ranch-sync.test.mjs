@@ -6,7 +6,7 @@ import { createRanchSync } from '../../shared/ranch-sync.js';
 import { validateShearingFields } from '../../shared/shearing-validation.js';
 function fixture() {
   const db = new Database(':memory:');
-  db.exec(`CREATE TABLE counts(id TEXT PRIMARY KEY,tag TEXT,station INTEGER,color TEXT,lactation TEXT,type TEXT,woolQuality TEXT,date TEXT,updated_at TEXT,deleted_at TEXT,origin TEXT,survey_json TEXT);
+  db.exec(`CREATE TABLE counts(id TEXT PRIMARY KEY,tag TEXT,station INTEGER,color TEXT,lactation TEXT,type TEXT,woolQuality TEXT,date TEXT,updated_at TEXT,deleted_at TEXT,origin TEXT,survey_json TEXT,mode_json TEXT);
     CREATE TABLE sync_outbox(seq INTEGER PRIMARY KEY,tbl TEXT,row_id TEXT);
     CREATE TABLE lamb_sequence(singleton INTEGER PRIMARY KEY,value INTEGER); INSERT INTO lamb_sequence VALUES(1,0);`);
   return { db, sync: createRanchSync(db) };
