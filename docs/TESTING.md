@@ -86,16 +86,21 @@ worker/retry (removed afterward), and configurable non-production ports. It refu
 
 This job runs on macOS and builds only the ARM64 DMG/ZIP. It verifies the executable architecture, code signature (ad-hoc on PRs; Developer ID plus notarization on main), DMG checksum, Bonjour service declaration, and local-network permission description.
 
-The installer job also runs `npm run test:mac-settings`: a hidden real Electron
+The installer job also runs `npm run test:mac-windows`: a hidden real Electron
 window loads the packaged settings file, CSP and sandboxed preload with isolated
 test data. It checks Spanish/English rendering without a remote manifest and
 during local-server recovery. It never launches the barn, reads operator data,
-or opens an external browser.
+or opens an external browser. The teardown scenario exercises the packaged local
+page helper through normal close, forced destruction, and application quit with
+pending recovery. It must exit cleanly and cancel retries without accessing a
+destroyed BrowserWindow. Neither scenario installs an update or touches ranch data.
 
 The remaining Mac window lifecycle is indirectly covered by the same ranch server and browser onboarding contracts. A full macOS GUI test is intentionally omitted because login-item, tray, fullscreen, and local-network permission dialogs are controlled by macOS and are substantially less reliable on headless GitHub runners. Those remain release-candidate smoke tests on a real Mac.
 
 QR-window unit coverage checks failed startup navigation, repeated retries,
-main-frame filtering, successful reload recovery and cancelling retries on close.
+main-frame filtering, successful reload recovery, Electron's throwing getter
+after destruction, cancelling retries on close, and navigation failures delivered
+after the window has closed.
 
 Power-lifecycle regression coverage checks that background hosting keeps its
 idle-sleep assertion through window closure and cancelled quitting, releases it

@@ -98,8 +98,8 @@ jobs:
       - name: Stamp Mac release identity
         run: node scripts/mac-release.mjs identity
       - run: npm run build:mac:arm64
-      - name: Verify native settings window without a downloaded manifest
-        run: ESQUILA_SETTINGS_ROOT="$PWD/dist-mac/mac-arm64/Esquila.app/Contents/Resources/app.asar" npm run test:mac-settings
+      - name: Verify native settings and window teardown
+        run: ESQUILA_SETTINGS_ROOT="$PWD/dist-mac/mac-arm64/Esquila.app/Contents/Resources/app.asar" npm run test:mac-windows
       - name: Verify installer and local-network entitlement metadata
         run: |
           file dist-mac/mac-arm64/Esquila.app/Contents/MacOS/Esquila | grep -q arm64
