@@ -12,8 +12,13 @@
    then **Guardar y abrir monitor**. The first enrollment needs internet and a
    published configuration. Subsequent starts work entirely offline.
 4. Use **Administrar este galpón en la nube…** in the sheep menu to open its
-   specific admin page. The normal admin password is still required. The link
-   carries only the server ID, never a device token or admin password.
+   specific configuration page. The normal admin login is still required. If the
+   Mac has no downloaded manifest yet, or its local server is restarting, the
+   shortcut resolves the ranch from its saved server token over HTTPS. It opens
+   that exact ranch without another selection, even before configuration has
+   been published. The link carries only the server ID, never a device token or
+   password. Invalid/revoked tokens and cloud failures show a visible error;
+   they never substitute another ranch.
 
 Green (**Verde**) and black (**Negro**) are included for both sheep and rams.
 Black is distinct from **No Hay** (no tag color). Add a color with a name,
@@ -212,6 +217,8 @@ records as shared. Local connectivity still requires working ranch Wi-Fi.
   configuration is in SQLite; editing bundled files is not a management workflow.
 - `GET/PUT /api/admin/ranches/:id/configuration`: authenticated admin read and
   optimistic publication with `revision`, `configuration`, and `submissionId`.
+- `GET /api/server/identity`: returns only the authenticated server ID, independent
+  of manifest publication/download; server tokens only, never cached.
 - `GET /api/server/configuration`: server-token-scoped onboarding preview.
 - `POST /api/sync/configuration`: server-token-scoped pull/acknowledgement; only
   revision-zero clients may bootstrap an as-yet unconfigured server.

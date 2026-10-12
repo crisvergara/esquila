@@ -11,7 +11,7 @@ import { createUpdater, verifyInstaller } from "./updater.js";
 import { stageNativeUpdate } from "./native-update.js";
 import { loadLocalPage } from "./local-page.js";
 import { keepServerAwake } from "./server-power.js";
-import { cloudOrigin, fetchRanchManifest, ranchAdminUrl } from './ranch-connection.js';
+import { cloudOrigin, fetchRanchManifest, ranchAdminUrl, resolveRanchAdminUrl } from './ranch-connection.js';
 
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SERVER_PORT = 3001;
@@ -420,8 +420,12 @@ function buildTray() {
 
 async function openRanchAdmin() {
   try {
-    const local = await fetch(`${SERVER_ORIGIN}/api/configuration`, { signal: AbortSignal.timeout(5000) }).then(r => r.json());
-    await shell.openExternal(ranchAdminUrl(activeConfig.cloudSyncUrl, local.deviceId));
+    const url = await resolveRanchAdminUrl(activeConfig.cloudSyncUrl, activeConfig.cloudSyncToken, async () => {
+      const response = await fetch(`${SERVER_ORIGIN}/api/configuration`, { signal: AbortSignal.timeout(3000) });
+      if (!response.ok) throw new Error('Local configuration unavailable');
+      return response.json();
+    });
+    await shell.openExternal(url);
   } catch (error) { dialog.showErrorBox(t('Administración del galpón'), translateError(activeConfig?.language, error.message)); }
 }
 function requireSettingsWindow(event) {

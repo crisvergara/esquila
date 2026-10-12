@@ -32,6 +32,14 @@ Internet                         Cloud service ─> PostgreSQL
 The Raspberry Pi files remain a supported fallback, but the Apple Silicon Mac
 application is the preferred barn deployment.
 
+The Mac cloud-admin shortcut uses the cached server ID when available. Before
+the first manifest or during local-process recovery, it resolves that ID through
+`GET /api/server/identity` using the saved server token. This authenticated,
+non-cacheable lookup returns only that token's server ID, independent of manifest
+publication. The browser receives a credential-free link to the exact ranch and
+still requires normal admin login. Discovery never changes configuration or
+records, and authentication/network failures never select a different ranch.
+
 The Mac shell holds a `prevent-app-suspension` power assertion while hosting,
 including with all windows closed and during child-process recovery. Normal
 idle sleep must not take the barn server offline. The assertion ends on app

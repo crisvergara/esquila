@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { jsonRequest, startNodeService, stopService, waitFor, waitForHealth } from './helpers.mjs';
+import { ranchAdminUrl, resolveRanchAdminUrl } from '../../mac/ranch-connection.js';
 const { Pool } = createRequire(new URL('../../cloud/package.json', import.meta.url))('pg');
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const cloudBase = 'http://127.0.0.1:4191', barnBase = 'http://127.0.0.1:3191';
@@ -41,6 +42,34 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await Promise.all([stopService(barn), stopService(cloud)]);
   if (pool) { if (schema) await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await pool.end(); }
+});
+
+test('admin shortcut resolves the exact token-bound ranch before publication and preserves login without manual selection', async ({ page }) => {
+  expect((await jsonRequest(`${cloudBase}/api/server/configuration`, { token: other.token })).response.status).toBe(409);
+  expect((await jsonRequest(`${cloudBase}/api/server/identity`)).response.status).toBe(401);
+  expect((await jsonRequest(`${cloudBase}/api/server/identity`, { token: phone.token })).response.status).toBe(403);
+  const identity = await jsonRequest(`${cloudBase}/api/server/identity?server=${server.id}`, { token: other.token });
+  expect(identity.data).toEqual({ deviceId: other.id });
+  expect(identity.response.headers.get('cache-control')).toBe('no-store');
+  const url = await resolveRanchAdminUrl(cloudBase, other.token, async () => ({ revision: 0 }));
+  expect(url).toBe(ranchAdminUrl(cloudBase, other.id));
+  expect(url).not.toContain(other.token);
+  await page.goto(url);
+  await page.getByLabel('Contraseña de administración').fill(password);
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
+  await expect(page.getByLabel('Nombre del galpón', { exact: true })).toHaveValue('Otro galpón');
+  await expect(page.locator('#configuration-server')).toHaveValue(other.id);
+  await expect(page).toHaveURL(new RegExp(`server=${other.id}`));
+  await page.reload();
+  await expect(page.getByLabel('Nombre del galpón', { exact: true })).toHaveValue('Otro galpón');
+  const recovering = await resolveRanchAdminUrl(cloudBase, server.token, async () => { throw new Error('barn restarting'); });
+  await page.goto(recovering);
+  await expect(page.getByLabel('Nombre del galpón', { exact: true })).toHaveValue('Galpón principal');
+  expect((await admin('GET', `/api/admin/ranches/${other.id}/configuration`)).data.revision).toBe(0);
+  const revoked = (await admin('POST', '/api/admin/devices', { name:'Identity-only fixture', role:'server' })).data;
+  expect((await jsonRequest(`${cloudBase}/api/server/identity`, { token: revoked.token })).response.status).toBe(200);
+  expect((await admin('DELETE', `/api/admin/devices/${revoked.id}`)).response.status).toBe(200);
+  expect((await jsonRequest(`${cloudBase}/api/server/identity`, { token: revoked.token })).response.status).toBe(401);
 });
 
 test('remote editor publishes colors and seven stations, survives a lost response, and enforces server/CSRF boundaries', async ({ page, request }) => {
