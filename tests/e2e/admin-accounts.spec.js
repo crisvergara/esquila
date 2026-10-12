@@ -7,6 +7,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { startNodeService, stopService, waitFor, waitForHealth } from './helpers.mjs';
+import { translateError } from '../../shared/i18n.js';
 const { Pool } = createRequire(new URL('../../cloud/package.json', import.meta.url))('pg');
 const root=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'../..');
 const base='http://127.0.0.1:4195';
@@ -161,7 +162,7 @@ test('password reset UI is generic, single-use, logs out all sessions, and requi
   await page.getByLabel('Correo de tu cuenta').fill('father@example.test');
   const old=lastToken('father@example.test');
   await page.getByRole('button',{name:'Enviar enlace de recuperación'}).click();
-  await expect(page.locator('#reset-status')).toHaveText((await unknown.json()).message);
+  await expect(page.locator('#reset-status')).toHaveText(translateError('es', (await unknown.json()).message));
   const token=await waitToken('father@example.test',old);
   expect((await api('password/complete',{origin:'https://evil.test',body:{token,password:nextPassword}})).status).toBe(403);
   await page.goto(base+'/admin/access#'+token);

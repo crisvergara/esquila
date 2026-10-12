@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 test('update window displays progress, pause/retry and explicit install without installing on close', async ({ page }) => {
   await page.route('http://updates.test/**', async route => {
     const name = new URL(route.request().url()).pathname.slice(1) || 'update.html';
+    if (['shared/i18n.js', 'shared/browser-language.js', 'shared/page-language.js', 'shared/locales/en.js', 'shared/locales/es.js'].includes(name)) return route.fulfill({ body: await readFile(name), contentType: 'text/javascript' });
     if (!['update.html', 'update.css', 'update-window.js'].includes(name)) return route.abort();
     await route.fulfill({ body: await readFile(`mac/${name}`), contentType: name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : 'text/html' });
   });

@@ -1,3 +1,5 @@
+import { translate, normalizeLanguage, translateError } from '../shared/i18n.js';
+const t = (source, ...values) => translate(activeConfig?.language, source, ...values);
 import { app, autoUpdater, dialog, Notification, BrowserWindow, ipcMain, Menu, nativeImage, powerSaveBlocker, safeStorage, shell, Tray } from "electron";
 import Bonjour from "bonjour-service";
 import { spawn } from "node:child_process";
@@ -60,10 +62,11 @@ async function readConfig() {
         : parsed.cloudSyncToken || "",
       cloudAppUrl: parsed.cloudAppUrl || "",
       configured: parsed.configured === true,
+      language: normalizeLanguage(parsed.language),
       initialManifest: parsed.initialManifest || null,
     };
   } catch {
-    return { cloudSyncUrl: "", cloudSyncToken: "", cloudAppUrl: "", configured: false };
+    return { cloudSyncUrl: "", cloudSyncToken: "", cloudAppUrl: "", configured: false, language: 'es' };
   }
 }
 
@@ -136,7 +139,7 @@ async function waitForServer() {
     } catch {}
     await new Promise((resolve) => setTimeout(resolve, 250));
   }
-  throw new Error("El servidor local no pudo iniciar.");
+  throw new Error(t("El servidor local no pudo iniciar."));
 }
 
 function advertiseRanchServer() {
@@ -168,20 +171,20 @@ function createMonitorWindow() {
   app.dock?.show();
   if (monitorWindow && !monitorWindow.isDestroyed()) {
     if (monitorWindow.webContents.getURL().startsWith("chrome-error://")) {
-      monitorWindow.loadURL(`${SERVER_ORIGIN}/monitor`);
+      monitorWindow.loadURL(`${SERVER_ORIGIN}/monitor?lang=${normalizeLanguage(activeConfig?.language)}`);
     }
     monitorWindow.show();
     monitorWindow.focus();
     return;
   }
   monitorWindow = new BrowserWindow({
-    title: "Esquila — Monitor",
+    title: t("Esquila — Monitor"),
     backgroundColor: "#282c34",
     fullscreen: true,
     autoHideMenuBar: true,
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
-  monitorWindow.loadURL(`${SERVER_ORIGIN}/monitor`);
+  monitorWindow.loadURL(`${SERVER_ORIGIN}/monitor?lang=${normalizeLanguage(activeConfig?.language)}`);
   monitorWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   monitorWindow.on("closed", () => {
     monitorWindow = undefined;
@@ -197,7 +200,7 @@ function createSettingsWindow() {
     return;
   }
   settingsWindow = new BrowserWindow({
-    title: "Configurar Esquila",
+    title: t("Configurar Esquila"),
     width: 720,
     height: 760,
     minWidth: 620,
@@ -210,7 +213,7 @@ function createSettingsWindow() {
       sandbox: true,
     },
   });
-  settingsWindow.loadFile(path.join(sourceRoot, "mac", "settings.html"));
+  settingsWindow.loadFile(path.join(sourceRoot, "mac", "settings.html"), { query: { lang: normalizeLanguage(activeConfig?.language) } });
   settingsWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   settingsWindow.on("closed", () => {
     settingsWindow = undefined;
@@ -226,7 +229,7 @@ function createTaggerSetupWindow() {
     return;
   }
   taggerSetupWindow = new BrowserWindow({
-    title: "Configurar teléfonos — Esquila",
+    title: t("Configurar teléfonos — Esquila"),
     width: 980,
     height: 850,
     minWidth: 520,
@@ -234,7 +237,7 @@ function createTaggerSetupWindow() {
     backgroundColor: "#1d2129",
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
-  loadLocalPage(taggerSetupWindow, `${SERVER_ORIGIN}/tagger-setup`);
+  loadLocalPage(taggerSetupWindow, `${SERVER_ORIGIN}/tagger-setup?lang=${normalizeLanguage(activeConfig?.language)}`);
   taggerSetupWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith(`${SERVER_ORIGIN}/tagger`)) shell.openExternal(url);
     return { action: "deny" };
@@ -253,11 +256,11 @@ function createRecordsWindow() {
     return;
   }
   recordsWindow = new BrowserWindow({
-    title: "Registros recientes — Esquila", width: 1180, height: 780,
+    title: t("Registros recientes — Esquila"), width: 1180, height: 780,
     minWidth: 640, minHeight: 520,
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
-  recordsWindow.loadURL(`${SERVER_ORIGIN}/records/`);
+  recordsWindow.loadURL(`${SERVER_ORIGIN}/records/?lang=${normalizeLanguage(activeConfig?.language)}`);
   recordsWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   recordsWindow.on("closed", () => {
     recordsWindow = undefined;
@@ -276,8 +279,8 @@ async function checkForUpdates(manual = false) {
       const marker = path.join(dataDir(), "updates", "notified-build");
       const previous = await readFile(marker, "utf8").catch(() => "");
       if (previous !== String(state.release.build) && Notification.isSupported()) {
-        const notice = new Notification({ title: "Actualización de Esquila disponible",
-          body: `Versión ${label}. Abre el menú de la oveja para descargarla cuando te acomode.` });
+        const notice = new Notification({ title: t("Actualización de Esquila disponible"),
+          body: t`Versión ${label}. Abre el menú de la oveja para descargarla cuando te acomode.` });
         notice.on("click", () => checkForUpdates(true));
         notice.show();
         await mkdir(path.dirname(marker), { recursive: true });
@@ -290,9 +293,9 @@ async function checkForUpdates(manual = false) {
 function showUpdates() {
   if (updateWindow) { updateWindow.show(); updateWindow.focus(); return; }
   app.dock?.show();
-  updateWindow = new BrowserWindow({ width: 600, height: 480, title: "Actualizaciones de Esquila",
+  updateWindow = new BrowserWindow({ width: 600, height: 480, title: t("Actualizaciones de Esquila"),
     webPreferences: { preload: path.join(sourceRoot, "mac", "update-preload.cjs"), contextIsolation: true, nodeIntegration: false, sandbox: true } });
-  updateWindow.loadFile(path.join(sourceRoot, "mac", "update.html"));
+  updateWindow.loadFile(path.join(sourceRoot, "mac", "update.html"), { query: { lang: normalizeLanguage(activeConfig?.language) } });
   updateWindow.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   updateWindow.webContents.on("will-navigate", event => event.preventDefault());
   updateWindow.on("closed", () => { updateWindow = undefined; });
@@ -311,11 +314,11 @@ async function installUpdate() {
   if (!state || state.phase !== "ready" || installingUpdate || updateDialogOpen) return;
   updateDialogOpen = true;
   try {
-    const result = await dialog.showMessageBox(updateWindow, { type: "question", title: "Instalar actualización",
-      message: state.automatic ? "¿Instalar y reiniciar Esquila ahora?" : "¿Abrir el instalador y cerrar Esquila?",
-      detail: "Los teléfonos no podrán contar durante el reinicio. Los registros y la configuración se conservan." +
-        (state.automatic ? " La aplicación se reemplazará y abrirá automáticamente." : " Arrastra Esquila a Aplicaciones, acepta Reemplazar y vuelve a abrirla."),
-      buttons: [state.automatic ? "Instalar y reiniciar" : "Abrir instalador", "Seguir contando"], defaultId: 1, cancelId: 1 });
+    const result = await dialog.showMessageBox(updateWindow, { type: "question", title: t("Instalar actualización"),
+      message: state.automatic ? t("¿Instalar y reiniciar Esquila ahora?") : t("¿Abrir el instalador y cerrar Esquila?"),
+      detail: t("Los teléfonos no podrán contar durante el reinicio. Los registros y la configuración se conservan.") +
+        (state.automatic ? t(" La aplicación se reemplazará y abrirá automáticamente.") : t(" Arrastra Esquila a Aplicaciones, acepta Reemplazar y vuelve a abrirla.")),
+      buttons: [state.automatic ? t("Instalar y reiniciar") : t("Abrir instalador"), t("Seguir contando")], defaultId: 1, cancelId: 1 });
     if (result.response !== 0) return;
     installingUpdate = true;
     refreshTray();
@@ -331,14 +334,14 @@ async function installUpdate() {
     } else {
       await verifyInstaller(state.filename, state.release);
       const error = await shell.openPath(state.filename);
-      if (error) throw new Error("macOS no pudo abrir el instalador. Reintenta desde el menú.");
+      if (error) throw new Error(t("macOS no pudo abrir el instalador. Reintenta desde el menú."));
       quitting = true;
       app.quit();
     }
   } catch (error) {
     nativeInstallRequested = false;
     if (quitting) { quitting = false; startServer(activeConfig); }
-    await dialog.showMessageBox({ type: "warning", message: "No se pudo instalar la actualización.", detail: error.message, buttons: ["Aceptar"] });
+    await dialog.showMessageBox({ type: "warning", message: t("No se pudo instalar la actualización."), detail: translateError(activeConfig?.language, error.message), buttons: [t("Aceptar")] });
   } finally {
     installingUpdate = false;
     updateDialogOpen = false;
@@ -348,11 +351,11 @@ async function installUpdate() {
 }
 
 ipcMain.handle("updates:state", event => {
-  if (event.sender !== updateWindow?.webContents) throw new Error("Ventana no autorizada.");
+  if (event.sender !== updateWindow?.webContents) throw new Error(t("Ventana no autorizada."));
   return updater?.state || { phase: "idle" };
 });
 ipcMain.handle("updates:action", async (event, action) => {
-  if (event.sender !== updateWindow?.webContents) throw new Error("Ventana no autorizada.");
+  if (event.sender !== updateWindow?.webContents) throw new Error(t("Ventana no autorizada."));
   if (installingUpdate || !updater) return;
   if (action === "check") await checkForUpdates(true);
   else if (action === "download") await downloadUpdate();
@@ -367,8 +370,8 @@ autoUpdater.on("error", error => {
     quitting = false;
     startServer(activeConfig);
     showUpdates();
-    dialog.showMessageBox({ type: "warning", message: "No se pudo reiniciar para actualizar. El conteo sigue funcionando.",
-      detail: error.message, buttons: ["Aceptar"] }).catch(error => log(error.message));
+    dialog.showMessageBox({ type: "warning", message: t("No se pudo reiniciar para actualizar. El conteo sigue funcionando."),
+      detail: translateError(activeConfig?.language, error.message), buttons: [t("Aceptar")] }).catch(error => log(error.message));
   }
 });
 
@@ -377,20 +380,21 @@ function buildTray() {
   const icon = nativeImage.createFromPath(iconPath).resize({ width: 18, height: 18 });
   icon.setTemplateImage(true);
   tray = new Tray(icon);
-  tray.setToolTip("Esquila — servidor del galpón");
+  tray.setToolTip(t("Esquila — servidor del galpón"));
   const rebuildMenu = () => {
+    tray.setToolTip(t("Esquila — servidor del galpón"));
     const updateState = updater?.state;
     const updateBusy = installingUpdate || ["checking", "downloading"].includes(updateState?.phase);
     tray.setContextMenu(Menu.buildFromTemplate([
-      { label: "Abrir monitor", click: createMonitorWindow },
-      { label: "Registros recientes…", click: createRecordsWindow },
-      { label: "Configuración…", click: createSettingsWindow },
-      { label: 'Administrar este galpón en la nube…', enabled: Boolean(activeConfig?.cloudSyncUrl), click: () => openRanchAdmin() },
-      { label: "Configurar teléfonos…", click: createTaggerSetupWindow },
-      { label: "Abrir tagger en este Mac", click: () => shell.openExternal(`${SERVER_ORIGIN}/tagger`) },
+      { label: t("Abrir monitor"), click: createMonitorWindow },
+      { label: t("Registros recientes…"), click: createRecordsWindow },
+      { label: t("Configuración…"), click: createSettingsWindow },
+      { label: t('Administrar este galpón en la nube…'), enabled: Boolean(activeConfig?.cloudSyncUrl), click: () => openRanchAdmin() },
+      { label: t("Configurar teléfonos…"), click: createTaggerSetupWindow },
+      { label: t("Abrir tagger en este Mac"), click: () => shell.openExternal(`${SERVER_ORIGIN}/tagger`) },
       { type: "separator" },
       {
-        label: "Iniciar automáticamente",
+        label: t("Iniciar automáticamente"),
         type: "checkbox",
         checked: app.getLoginItemSettings().openAtLogin,
         click: (item) => {
@@ -399,14 +403,14 @@ function buildTray() {
         },
       },
       { type: "separator" },
-      { label: updateState?.phase === "checking" ? "Buscando actualizaciones…" : "Buscar actualizaciones…",
+      { label: updateState?.phase === "checking" ? t("Buscando actualizaciones…") : t("Buscar actualizaciones…"),
         enabled: Boolean(updater) && !updateBusy, click: () => checkForUpdates(true).catch(error => log(error.message)) },
       ...(updateState?.release ? [{
-        label: updateState.phase === "downloading" ? `Descargando actualización: ${Math.floor(100 * updateState.received / (updateState.total || 1))}%…` : updateState.phase === "ready" ? "Actualización lista para instalar…" : `Actualizar a ${updateState.release.version} (${updateState.release.build})…`,
+        label: updateState.phase === "downloading" ? t`Descargando actualización: ${Math.floor(100 * updateState.received / (updateState.total || 1))}%…` : updateState.phase === "ready" ? t("Actualización lista para instalar…") : t`Actualizar a ${updateState.release.version} (${updateState.release.build})…`,
         enabled: !installingUpdate, click: () => showUpdates(),
       }] : []),
       { type: "separator" },
-      { label: "Salir de Esquila", enabled: !installingUpdate, click: () => { quitting = true; app.quit(); } },
+      { label: t("Salir de Esquila"), enabled: !installingUpdate, click: () => { quitting = true; app.quit(); } },
     ]));
   };
   refreshTray = rebuildMenu;
@@ -418,22 +422,30 @@ async function openRanchAdmin() {
   try {
     const local = await fetch(`${SERVER_ORIGIN}/api/configuration`, { signal: AbortSignal.timeout(5000) }).then(r => r.json());
     await shell.openExternal(ranchAdminUrl(activeConfig.cloudSyncUrl, local.deviceId));
-  } catch (error) { dialog.showErrorBox('Administración del galpón', error.message); }
+  } catch (error) { dialog.showErrorBox(t('Administración del galpón'), translateError(activeConfig?.language, error.message)); }
 }
 function requireSettingsWindow(event) {
-  if (!settingsWindow || event.sender !== settingsWindow.webContents || event.senderFrame !== settingsWindow.webContents.mainFrame) throw new Error('Ventana no autorizada.');
+  if (!settingsWindow || event.sender !== settingsWindow.webContents || event.senderFrame !== settingsWindow.webContents.mainFrame) throw new Error(t('Ventana no autorizada.'));
 }
 async function localModeRequest(method, body) {
   const response = await fetch(`${SERVER_ORIGIN}/mode`, { method, redirect: 'error', signal: AbortSignal.timeout(5000),
     ...(body ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {}) });
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'No se pudo cambiar el modo.');
+  if (!response.ok) throw new Error(data.error || t('No se pudo cambiar el modo.'));
   return data;
 }
+ipcMain.handle('settings:language', async (event, language) => {
+  requireSettingsWindow(event);
+  if (!['es', 'en'].includes(language)) throw new Error('Unsupported language');
+  const config = await readConfig(); config.language = language;
+  await writeConfig(config);
+  activeConfig = config; refreshTray();
+  return { ok: true };
+});
 ipcMain.handle('settings:modes', event => { requireSettingsWindow(event); return localModeRequest('GET'); });
 ipcMain.handle('settings:mode', (event, mode) => {
   requireSettingsWindow(event);
-  if (typeof mode !== 'string' || mode.length > 40) throw new Error('Modo inválido.');
+  if (typeof mode !== 'string' || mode.length > 40) throw new Error(t('Modo inválido.'));
   return localModeRequest('POST', { mode });
 });
 ipcMain.handle('settings:preview', async (event, values) => {
@@ -456,6 +468,7 @@ ipcMain.handle("settings:load", async event => {
     if (local.revision) manifest = local;
   } catch {}
   return {
+    language: normalizeLanguage(config.language),
     cloudSyncUrl: config.cloudSyncUrl,
     cloudAppUrl: config.cloudAppUrl,
     hasCloudSyncToken: Boolean(config.cloudSyncToken),
@@ -474,24 +487,25 @@ ipcMain.handle("settings:save", async (event, values) => {
   const newToken = String(values.cloudSyncToken || "").trim();
   const token = newToken || (cloudSyncUrl === previous.cloudSyncUrl ? previous.cloudSyncToken : '');
   if ((cloudSyncUrl && !token) || (!cloudSyncUrl && newToken)) {
-    throw new Error("La dirección de sincronización y el token deben configurarse juntos.");
+    throw new Error(t("La dirección de sincronización y el token deben configurarse juntos."));
   }
   const changedConnection = cloudSyncUrl !== previous.cloudSyncUrl || token !== previous.cloudSyncToken;
   let initialManifest = cloudSyncUrl ? previous.initialManifest : null;
   if (cloudSyncUrl && (changedConnection || !previous.configured)) {
     initialManifest = await fetchRanchManifest(cloudSyncUrl, token);
-    if (values.confirmedDeviceId !== initialManifest.deviceId) throw new Error('Carga y revisa la configuración del galpón antes de guardar.');
+    if (values.confirmedDeviceId !== initialManifest.deviceId) throw new Error(t('Carga y revisa la configuración del galpón antes de guardar.'));
   }
   if (!cloudSyncUrl) {
     const names = Array.isArray(values.names) ? values.names.map(name => typeof name === 'string' ? name.trim() : '') : [];
-    if (names.length < 1 || names.length > 6 || names.some(name => !name || name.length > 80)) throw new Error('Ingresa entre 1 y 6 nombres para trabajar sin inscripción.');
-    if (previous.cloudSyncUrl) throw new Error('Conserva la conexión del galpón. No necesitas desconectarlo para trabajar sin internet.');
+    if (names.length < 1 || names.length > 6 || names.some(name => !name || name.length > 80)) throw new Error(t('Ingresa entre 1 y 6 nombres para trabajar sin inscripción.'));
+    if (previous.cloudSyncUrl) throw new Error(t('Conserva la conexión del galpón. No necesitas desconectarlo para trabajar sin internet.'));
     const response = await fetch(`${SERVER_ORIGIN}/setup/shearers`, {
       method: 'POST', signal: AbortSignal.timeout(5000), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ names }),
     });
-    if (!response.ok) throw new Error('No se pudieron guardar los esquiladores.');
+    if (!response.ok) throw new Error(t('No se pudieron guardar los esquiladores.'));
   }
   const config = {
+    language: normalizeLanguage(previous.language),
     cloudSyncUrl,
     cloudSyncToken: cloudSyncUrl ? token : "",
     cloudAppUrl,
@@ -546,7 +560,7 @@ app.whenReady().then(async () => {
     updater = createUpdater({ installed, teamId: installed.teamId, directory: path.join(dataDir(), "updates"), onChange: state => {
       refreshTray();
       if (state.phase === "ready" && previousUpdatePhase !== "ready" && Notification.isSupported()) {
-        const notice = new Notification({ title: "Actualización descargada", body: "Abre el menú de la oveja para instalarla cuando puedas pausar el conteo." });
+        const notice = new Notification({ title: t("Actualización descargada"), body: t("Abre el menú de la oveja para instalarla cuando puedas pausar el conteo.") });
         notice.on("click", showUpdates);
         notice.show();
       }

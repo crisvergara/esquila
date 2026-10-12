@@ -1,3 +1,5 @@
+import LanguagePicker from '../shared/LanguagePicker.jsx';
+import { t, errorText } from '../shared/browser-language.js';
 import { modeName } from '../shared/modes.js';
 import { answerText } from '../shared/surveys';
 import { useState, useEffect, useReducer, useRef } from "react";
@@ -24,10 +26,8 @@ function TagColorSelect({ tagSchema, onCancel, setColor }) {
   return (
     <>
       <header className="App-header">
-        <button onClick={onCancel} className="Cancel-button">
-          Cambiar esquilador
-        </button>
-        <p>Elija un color</p>
+        <button onClick={onCancel} className="Cancel-button">{t("Cambiar esquilador")}</button>
+        <p>{t("Elija un color")}</p>
       </header>
       <section className="Tag-color-buttons">
         {colors.map((color) => (
@@ -48,10 +48,8 @@ function CodeSelect({ codeSchema, onCancel, setCode }) {
   return (
     <>
       <header className="App-header">
-        <button onClick={onCancel} className="Cancel-button">
-          Cancela
-        </button>
-        <p>Elija la primera letra</p>
+        <button onClick={onCancel} className="Cancel-button">{t("Cancela")}</button>
+        <p>{t("Elija la primera letra")}</p>
       </header>
       <section className="Tag-buttons">
         {codeSchema.options.map((option) => {
@@ -79,30 +77,30 @@ function SurveySelect({ surveySchema: q, step, total, onCancel, setSurvey }) {
   return <section className={`Survey-screen${isChoice ? ' Survey-screen-choice' : ''}`}>
     <header className="Survey-header">
       <div className="Survey-toolbar">
-        <button onClick={onCancel} className="Cancel-button">Cancelar</button>
-        <p>Pregunta {step} de {total}</p>
+        <button onClick={onCancel} className="Cancel-button">{t("Cancelar")}</button>
+        <p>{t`Pregunta ${step} de ${total}`}</p>
       </div>
       <h1 id="survey-question" ref={heading} tabIndex={-1}>{q.display}</h1>
-      <p className="Survey-hint">{q.required === false ? 'Respuesta opcional' : 'Respuesta obligatoria'}</p>
+      <p className="Survey-hint">{q.required === false ? t('Respuesta opcional') : t('Respuesta obligatoria')}</p>
     </header>
     {isChoice ? <div className="Survey-answers" role="group" aria-labelledby="survey-question">
       {q.options.map(o => <button key={o.value} onClick={() => setSurvey(o.value)}>{o.name}</button>)}
-      {q.required === false && <button className="Survey-skip" onClick={() => setSurvey(null)}>Omitir pregunta</button>}
+      {q.required === false && <button className="Survey-skip" onClick={() => setSurvey(null)}>{t("Omitir pregunta")}</button>}
     </div> : <form className="Survey-input" onSubmit={event => { event.preventDefault(); setSurvey(value === '' ? null : q.type === 'number' ? Number(value) : value); }}>
       <input aria-labelledby="survey-question" type={q.type === 'number' ? 'number' : 'text'} inputMode={q.type === 'number' ? 'decimal' : undefined}
         required={q.required !== false} min={q.min} max={q.max} step="any" maxLength={q.maxLength || 500} value={value} onChange={event => setValue(event.target.value)} />
-      <button type="submit">Continuar</button>
-      {q.required === false && <button className="Survey-skip" type="button" onClick={() => setSurvey(null)}>Omitir pregunta</button>}
+      <button type="submit">{t("Continuar")}</button>
+      {q.required === false && <button className="Survey-skip" type="button" onClick={() => setSurvey(null)}>{t("Omitir pregunta")}</button>}
     </form>}
   </section>;
 }
 
 function SurveySummary({ surveySchema = [], surveyResponses }) {
   if (!surveySchema.length) return null;
-  return <dl className="Survey-summary" aria-label="Respuestas de la encuesta">
+  return <dl className="Survey-summary" aria-label={t("Respuestas de la encuesta")}>
     {surveySchema.map(q => <div key={q.field}>
       <dt>{q.display}</dt>
-      <dd>{answerText(q, surveyResponses[q.field])}</dd>
+      <dd>{answerText(q, surveyResponses[q.field], t)}</dd>
     </div>)}
   </dl>;
 }
@@ -130,9 +128,7 @@ function DigitSelect({
   return (
     <>
       <header className="App-header">
-        <button onClick={onCancel} className="Cancel-button">
-          Cancela
-        </button>
+        <button onClick={onCancel} className="Cancel-button">{t("Cancela")}</button>
         <p>{headerText}</p>
       </header>
       <section className="Tag-display">
@@ -187,24 +183,22 @@ function DigitSelect({
 }
 
 function QuantityConfirmScreen({ quantity, station, shearers, surveySchema, surveyResponses, onCancel, onSubmit }) {
-  const name = shearers[station - 1]?.name ?? `Estación ${station}`;
+  const name = shearers[station - 1]?.name ?? t`Estación ${station}`;
 
   return (
     <>
       <header className="App-header">
-        <button onClick={onCancel} className="Cancel-button">
-          Cancelar
-        </button>
-        <p>Confirmar</p>
+        <button onClick={onCancel} className="Cancel-button">{t("Cancelar")}</button>
+        <p>{t("Confirmar")}</p>
       </header>
       <section className="Tag-display">
-        <p>Esqilador: {name}</p>
-        <p>Cantidad: {quantity}</p>
+        <p>{t("Esqilador: ")}{name}</p>
+        <p>{t("Cantidad: ")}{quantity}</p>
       </section>
       <SurveySummary surveySchema={surveySchema} surveyResponses={surveyResponses} />
       <section className="Tag-buttons">
         <button onClick={(ev) => onSubmit(ev)}>OK</button>
-        <button onClick={() => onCancel()}>Cancelar</button>
+        <button onClick={() => onCancel()}>{t("Cancelar")}</button>
       </section>
     </>
   );
@@ -220,18 +214,16 @@ function ConfirmScreen({
   onCancel,
   onSubmit,
 }) {
-  const name = shearers[station - 1]?.name ?? `Estación ${station}`;
+  const name = shearers[station - 1]?.name ?? t`Estación ${station}`;
 
   return (
     <>
       <header className="App-header">
-        <button onClick={onCancel} className="Cancel-button">
-          Cancelar
-        </button>
-        <p>Confirmar</p>
+        <button onClick={onCancel} className="Cancel-button">{t("Cancelar")}</button>
+        <p>{t("Confirmar")}</p>
       </header>
       <section className="Tag-display">
-        <p>Esqilador: {name}</p>
+        <p>{t("Esqilador: ")}{name}</p>
         <p
           style={{
             backgroundColor: color.color,
@@ -244,7 +236,7 @@ function ConfirmScreen({
       <SurveySummary surveySchema={surveySchema} surveyResponses={surveyResponses} />
       <section className="Tag-buttons">
         <button onClick={(ev) => onSubmit(ev)}>OK</button>
-        <button onClick={() => onCancel()}>Cancelar</button>
+        <button onClick={() => onCancel()}>{t("Cancelar")}</button>
       </section>
     </>
   );
@@ -255,8 +247,8 @@ function SuccessScreen() {
     <section className="Submission-screen" role="status" aria-live="polite">
       <div className="Submission-card Submission-card-success">
         <span className="Submission-icon" aria-hidden="true">✓</span>
-        <h1>Conteo registrado</h1>
-        <p>El conteo fue guardado y el monitor se actualizará automáticamente.</p>
+        <h1>{t("Conteo registrado")}</h1>
+        <p>{t("El conteo fue guardado y el monitor se actualizará automáticamente.")}</p>
       </div>
     </section>
   );
@@ -267,13 +259,11 @@ function FailedScreen({ message, onRetry, onDiscard }) {
     <section className="Submission-screen" role="alert">
       <div className="Submission-card Submission-card-failed">
         <span className="Submission-icon" aria-hidden="true">!</span>
-        <h1>No se pudo guardar</h1>
+        <h1>{t("No se pudo guardar")}</h1>
         <p>{message}</p>
         <div className="Submission-actions">
-          <button type="button" onClick={onRetry}>Reintentar</button>
-          <button type="button" className="Secondary-button" onClick={onDiscard}>
-            Descartar
-          </button>
+          <button type="button" onClick={onRetry}>{t("Reintentar")}</button>
+          <button type="button" className="Secondary-button" onClick={onDiscard}>{t("Descartar")}</button>
         </div>
       </div>
     </section>
@@ -285,8 +275,8 @@ function SendingScreen() {
     <section className="Submission-screen" role="status" aria-live="polite">
       <div className="Submission-card Submission-card-sending">
         <span className="Submission-spinner" aria-hidden="true" />
-        <h1>Guardando…</h1>
-        <p>No cierres esta pantalla.</p>
+        <h1>{t("Guardando…")}</h1>
+        <p>{t("No cierres esta pantalla.")}</p>
       </div>
     </section>
   );
@@ -429,19 +419,19 @@ function TaggingApp() {
       });
       if (!response.ok) {
         if (response.status >= 500) {
-          throw new Error("El servidor del galpón tuvo un problema. Intenta nuevamente.");
+          throw new Error(t("El servidor del galpón tuvo un problema. Intenta nuevamente."));
         }
-        throw new Error("Los datos no fueron aceptados. Revisa la información e intenta nuevamente.");
+        throw new Error(t("Los datos no fueron aceptados. Revisa la información e intenta nuevamente."));
       }
       const result = await response.json();
-      if (result?.ok !== true) throw new Error("El servidor no confirmó el conteo.");
+      if (result?.ok !== true) throw new Error(t("El servidor no confirmó el conteo."));
       return result;
     } catch (error) {
       if (error.name === "AbortError") {
-        throw new Error("El servidor tardó demasiado en responder. Puedes reintentar sin duplicar el conteo.");
+        throw new Error(t("El servidor tardó demasiado en responder. Puedes reintentar sin duplicar el conteo."));
       }
       if (error instanceof TypeError) {
-        throw new Error("No se pudo comunicar con el servidor del galpón. Revisa el WiFi y vuelve a intentar.");
+        throw new Error(t("No se pudo comunicar con el servidor del galpón. Revisa el WiFi y vuelve a intentar."));
       }
       throw error;
     } finally {
@@ -457,7 +447,7 @@ function TaggingApp() {
       setShowMessage("success");
       refreshCounts().catch((error) => console.error(error));
     } catch (error) {
-      setSubmissionError(error.message || "Ocurrió un error inesperado.");
+      setSubmissionError(error.message || t("Ocurrió un error inesperado."));
       setShowMessage("failed");
     }
   };
@@ -495,7 +485,7 @@ function TaggingApp() {
   let screen = null;
 
   if (!shearersLoaded) {
-    screen = <p role="status">Cargando configuración del galpón…</p>;
+    screen = <p role="status">{t("Cargando configuración del galpón…")}</p>;
   } else if (station === 0) {
     screen = (
       <StationSelect
@@ -544,7 +534,7 @@ function TaggingApp() {
         screen = (
           <DigitSelect
             display={tag}
-            headerText={"Elija los números"}
+            headerText={t("Elija los números")}
             canSubmit={currentTagComponentValue.length >= textSchema.min}
             disableDigits={currentTagComponentValue.length >= textSchema.max}
             onCancel={onCancel}
@@ -561,7 +551,7 @@ function TaggingApp() {
     screen = (
       <DigitSelect
         display={quantity}
-        headerText={"¿Cuántos animales hay?"}
+        headerText={t("¿Cuántos animales hay?")}
         canSubmit={quantity.length >= 1}
         disableDigits={false}
         onCancel={onCancel}
@@ -612,9 +602,9 @@ function TaggingApp() {
     );
   }
 
-  return <div className="App"><p className="Current-mode" aria-label="Modo de conteo">{modeName(mode)}</p>
-    {entrySchema && (entrySchema.revision !== configurationRevision || mode.type !== liveMode.type) && <p role="status">La configuración cambió. Se usará con el próximo animal.</p>}
-    {connectionError && <p role="alert">{connectionError}</p>}{screen}</div>;
+  return <div className="App"><p className="Current-mode" aria-label={t("Modo de conteo")}>{modeName(mode)}</p>
+    {entrySchema && (entrySchema.revision !== configurationRevision || mode.type !== liveMode.type) && <p role="status">{t("La configuración cambió. Se usará con el próximo animal.")}</p>}
+    {connectionError && <p role="alert">{errorText(connectionError)}</p>}{!entrySchema && !showMessage && <LanguagePicker />}{screen}</div>;
 }
 
 export default TaggingApp;

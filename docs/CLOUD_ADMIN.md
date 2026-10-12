@@ -81,3 +81,10 @@ consistent totals/pages. Existing `day`, `tag`, `offset`, and `deleted=1` API
 calls remain supported; new controls add `from`, `to`, `server`, `station`,
 `type`, `color`, `sync`, `sort`, and `limit`. All pages and APIs retain session,
 CSRF, no-store and content-security protections. UI tests use disposable data.
+
+## Language preference
+
+English and Spanish controls have independent preferences for the Mac, cloud
+admin browser, and tagger. Choose English in Mac settings and cloud administration
+while leaving the tagger in Spanish. Ranch-authored names and questions stay as
+entered. See [language settings and the Spanish audit](LOCALIZATION.md).

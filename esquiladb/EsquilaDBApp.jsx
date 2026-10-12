@@ -61,7 +61,7 @@ function SyncStatusBar({ online, pendingCount, fetchedAt, syncing, onSync }) {
   let dotClass, label;
   if (!online) {
     dotClass = "offline";
-    label = fetchedAt ? `Sin conexión · datos ${timeAgo(fetchedAt)}` : "Sin conexión";
+    label = fetchedAt ? `Sin conexión · última actualización: ${timeAgo(fetchedAt)}` : "Sin conexión";
   } else if (pendingCount > 0) {
     dotClass = "pending";
     label = `${pendingCount} por sincronizar`;
@@ -126,7 +126,7 @@ function SheepTable({ sheep, filter, highlightedTag, onHighlight, treatmentCount
   return (
     <section className="Sheep-list">
       {filtered.length === 0 ? (
-        <p style={{ color: "#fff" }}>No se encontró</p>
+        <p style={{ color: "#fff" }}>No se encontraron animales</p>
       ) : (
         <table className="Sheep-table">
           <colgroup>
@@ -139,7 +139,7 @@ function SheepTable({ sheep, filter, highlightedTag, onHighlight, treatmentCount
           <thead>
             <tr>
               <th></th>
-              <th>Tag</th>
+              <th>Caravana</th>
               <th>Tipo</th>
               <th>Estación</th>
               <th>Tratam.</th>
@@ -212,7 +212,7 @@ function TreatmentForm({ onSave, onCancel }) {
 
   return (
     <form className="Treatment-form" onSubmit={onSubmit}>
-      <h3>Agregar Tratamiento</h3>
+      <h3>Agregar tratamiento</h3>
 
       <div className="Treatment-type-toggle">
         <button
@@ -246,7 +246,7 @@ function TreatmentForm({ onSave, onCancel }) {
       <input
         className="Treatment-input"
         type="text"
-        placeholder="Dosis (ej. 2ml, 1 pastilla)..."
+        placeholder="Dosis (ej. 2 ml, 1 pastilla)..."
         value={dose}
         onChange={(e) => setDose(e.target.value)}
         autoComplete="off"
@@ -339,7 +339,7 @@ function SheepDetailView({ sheep, shearingHistory, treatments, presets, actions,
                     Estación: {s.station}
                   </span>
                   <span className="Detail-list-secondary">
-                    Lana: {s.wool_quality ?? "—"} · Lact: {s.lactation ?? "—"}
+                    Lana: {s.wool_quality ?? "—"} · Lactancia: {s.lactation ?? "—"}
                   </span>
                 </div>
                 <span className="Detail-list-secondary">
@@ -468,7 +468,7 @@ function VaccinationReport({ treatments, presets, actions, onBack }) {
   };
 
   const onDeletePreset = (p) => {
-    if (!window.confirm("¿Eliminar este preset?")) return;
+    if (!window.confirm("¿Eliminar este tratamiento predefinido?")) return;
     actions.deletePreset(p);
   };
 
@@ -491,7 +491,7 @@ function VaccinationReport({ treatments, presets, actions, onBack }) {
           <button
             className="Header-add-btn"
             onClick={() => setShowPresetForm(!showPresetForm)}
-            title="Administrar presets"
+            title="Administrar tratamientos predefinidos"
           >
             {showPresetForm ? "✕" : "+"}
           </button>
@@ -502,7 +502,7 @@ function VaccinationReport({ treatments, presets, actions, onBack }) {
         <>
           <section className="Detail-section">
             <form className="Treatment-form" onSubmit={onSubmitPreset}>
-              <h3>Nuevo Preset</h3>
+              <h3>Nuevo tratamiento predefinido</h3>
 
               <div className="Treatment-type-toggle">
                 <button
@@ -536,7 +536,7 @@ function VaccinationReport({ treatments, presets, actions, onBack }) {
               <input
                 className="Treatment-input"
                 type="text"
-                placeholder="Dosis (ej. 2ml, 1 pastilla)..."
+                placeholder="Dosis (ej. 2 ml, 1 pastilla)..."
                 value={dose}
                 onChange={(e) => setDose(e.target.value)}
                 autoComplete="off"
@@ -549,7 +549,7 @@ function VaccinationReport({ treatments, presets, actions, onBack }) {
                 className="Treatment-save-btn"
                 disabled={!medication.trim()}
               >
-                Guardar Preset
+                Guardar tratamiento predefinido
               </button>
             </form>
           </section>
@@ -557,7 +557,7 @@ function VaccinationReport({ treatments, presets, actions, onBack }) {
           <section className="Detail-section">
             <h3 className="Detail-section-title">Vacunas</h3>
             {vaccinations.length === 0 ? (
-              <p className="Detail-empty">Sin presets de vacuna</p>
+              <p className="Detail-empty">No hay vacunas predefinidas</p>
             ) : (
               <div className="Detail-list">
                 {vaccinations.map((p) => (
@@ -585,7 +585,7 @@ function VaccinationReport({ treatments, presets, actions, onBack }) {
           <section className="Detail-section">
             <h3 className="Detail-section-title">Desparasitantes</h3>
             {dewormings.length === 0 ? (
-              <p className="Detail-empty">Sin presets de desparasitante</p>
+              <p className="Detail-empty">No hay desparasitantes predefinidos</p>
             ) : (
               <div className="Detail-list">
                 {dewormings.map((p) => (
@@ -627,7 +627,7 @@ function VaccinationReport({ treatments, presets, actions, onBack }) {
 
           <section className="Vaccination-summary">
             <span className="Vaccination-summary-count">{summary.total}</span>
-            <span className="Vaccination-summary-label">vacunaciones</span>
+            <span className="Vaccination-summary-label">{summary.total === 1 ? "vacunación" : "vacunaciones"}</span>
           </section>
 
           <section className="Detail-section" style={{ flex: 1, overflowY: "auto" }}>
@@ -903,7 +903,7 @@ function EsquilaDBApp() {
               <path d="M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z" />
               <path d="m15 5 4 4" />
             </svg>
-            Ver Detalle
+            Ver detalle
           </button>
         </div>
         <SheepTable

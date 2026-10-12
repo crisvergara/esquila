@@ -139,7 +139,7 @@ test('recent scans need no search; filters and pagination survive reload, histor
   await expect(page.locator('#record-station')).toHaveValue('2');
   await page.getByRole('button',{name:'Cerrar',exact:true}).click();
   await page.route('**/api/admin/shearing?**',route=>route.abort('failed'));
-  await page.getByRole('button',{name:'Buscar / Actualizar'}).click();await expect(page.locator('#ranch-error')).toContainText('datos visibles pueden estar atrasados');
+  await page.getByRole('button',{name:'Buscar / Actualizar'}).click();await expect(page.locator('#ranch-error')).toContainText('datos visibles pueden estar desactualizados');
   await expect(page.locator('#ranch-rows')).toContainText('A29000');await page.unroute('**/api/admin/shearing?**');
   await page.getByLabel('Buscar código').fill('NO-MATCH');await page.getByRole('button',{name:'Buscar / Actualizar'}).click();await expect(page.locator('#ranch-empty')).toBeVisible();
 });

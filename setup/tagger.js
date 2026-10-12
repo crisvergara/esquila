@@ -1,3 +1,5 @@
+import '../shared/page-language.js';
+import { t } from '../shared/browser-language.js';
 const urlElement = document.getElementById('tagger-url');
 const alternativeElement = document.getElementById('alternative');
 const statusElement = document.getElementById('status');
@@ -13,7 +15,7 @@ let lastUrl;
 
 function clearConnection(message) {
   for (const image of [qrElement, monitorQrElement]) { image.hidden = true; image.removeAttribute('src'); }
-  for (const link of [urlElement, monitorUrlElement]) { link.removeAttribute('href'); link.textContent = 'Dirección no disponible'; }
+  for (const link of [urlElement, monitorUrlElement]) { link.removeAttribute('href'); link.textContent = t('Dirección no disponible'); }
   alternativeElement.textContent = '';
   monitorAlternativeElement.textContent = '';
   statusElement.textContent = message;
@@ -26,15 +28,15 @@ async function refreshConnection() {
     const response = await fetch(`/tagger-info?${new URLSearchParams({ address: selectedAddress })}`, {
       cache: 'no-store', signal: AbortSignal.timeout(5000),
     });
-    if (!response.ok) throw new Error('No se pudo obtener la dirección del tagger.');
+    if (!response.ok) throw new Error(t('No se pudo obtener la dirección del tagger.'));
     const { url, friendlyUrl, qrDataUrl, addresses, mobileMonitorUrl, mobileMonitorQrDataUrl, friendlyMobileMonitorUrl } = await response.json();
-    networkElement.replaceChildren(new Option('Automática', ''));
+    networkElement.replaceChildren(new Option(t('Automática'), ''));
     for (const entry of addresses || []) networkElement.add(new Option(`${entry.address} (${entry.interface})`, entry.address));
     if (!(addresses || []).some(entry => entry.address === selectedAddress)) selectedAddress = '';
     networkElement.value = selectedAddress;
     networkElement.disabled = !addresses?.length;
     if (!url || !qrDataUrl || !mobileMonitorUrl || !mobileMonitorQrDataUrl) {
-      clearConnection('No hay una dirección de red local. Conecta este Mac al WiFi del galpón, aunque esa red no tenga internet. Una VPN no reemplaza esa conexión.');
+      clearConnection(t('No hay una dirección de red local. Conecta este Mac al WiFi del galpón, aunque esa red no tenga internet. Una VPN no reemplaza esa conexión.'));
       return;
     }
     if (qrElement.src !== qrDataUrl) qrElement.src = qrDataUrl;
@@ -45,14 +47,14 @@ async function refreshConnection() {
     monitorQrElement.hidden = false;
     monitorUrlElement.textContent = mobileMonitorUrl;
     monitorUrlElement.href = mobileMonitorUrl;
-    monitorAlternativeElement.textContent = friendlyMobileMonitorUrl ? `Dirección alternativa: ${friendlyMobileMonitorUrl}` : '';
-    alternativeElement.textContent = friendlyUrl && friendlyUrl !== url ? `Dirección alternativa: ${friendlyUrl}` : '';
+    monitorAlternativeElement.textContent = friendlyMobileMonitorUrl ? t`Dirección alternativa: ${friendlyMobileMonitorUrl}` : '';
+    alternativeElement.textContent = friendlyUrl && friendlyUrl !== url ? t`Dirección alternativa: ${friendlyUrl}` : '';
     statusElement.textContent = lastUrl && lastUrl !== url
-      ? 'La dirección cambió. Escanea el código que necesitas nuevamente; un acceso guardado con la dirección anterior puede dejar de funcionar.'
-      : 'Códigos listos para la red local. Escanea uno y comprueba que aparezcan los esquiladores.';
+      ? t('La dirección cambió. Escanea el código que necesitas nuevamente; un acceso guardado con la dirección anterior puede dejar de funcionar.')
+      : t('Códigos listos para la red local. Escanea uno y comprueba que aparezcan los esquiladores.');
     lastUrl = url;
   } catch (error) {
-    clearConnection(`No se pudo contactar al servidor local de Esquila. ${error.message} No necesitas internet. Se reintentará automáticamente; también puedes pulsar Actualizar conexión.`);
+    clearConnection(t`No se pudo contactar al servidor local de Esquila. ${error.message} No necesitas internet. Se reintentará automáticamente; también puedes pulsar Actualizar conexión.`);
   } finally {
     refreshing = false;
     if (refreshAgain) { refreshAgain = false; refreshConnection(); }
@@ -60,7 +62,7 @@ async function refreshConnection() {
 }
 networkElement.addEventListener('change', () => {
   selectedAddress = networkElement.value;
-  clearConnection('Actualizando conexión…');
+  clearConnection(t('Actualizando conexión…'));
   refreshConnection();
 });
 document.getElementById('refresh').addEventListener('click', refreshConnection);

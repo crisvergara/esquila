@@ -224,3 +224,11 @@ records as shared. Local connectivity still requires working ranch Wi-Fi.
 The manifest contains schema version, ranch name, station slots and a variable
 list of mode schemas, wrapped in a device ID, monotonic revision and UTC publication
 timestamp. It contains no credential, remote command, download URL or code.
+
+## Language and question wording
+
+The administration interface language does not change manifest content. Enter
+Spanish questions/answers for Spanish taggers, even when administering in English.
+New default surveys use reviewed Spanish; existing manifests and history remain
+verbatim. Edit labels and publish to improve future surveys without changing their
+stable IDs. See [LOCALIZATION.md](LOCALIZATION.md).

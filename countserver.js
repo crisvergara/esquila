@@ -1141,6 +1141,8 @@ app.get("/tagger-setup", (req, res) => {
   res.sendFile(path.join(__dirname, "setup", "tagger.html"));
 });
 
+app.get('/setup.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, 'setup/setup.js')));
+
 app.get("/tagger-setup.js", (req, res) => {
   res.sendFile(path.join(__dirname, "setup", "tagger.js"));
 });
@@ -1260,6 +1262,10 @@ app.get(["/esquiladb", "/esquiladb/*splat"], (req, res) => {
       .send("EsquilaDB se movió a la nube. Configura CLOUD_APP_URL en el servidor para redirigir.");
   }
 });
+
+for (const asset of ['i18n.js', 'browser-language.js', 'page-language.js', 'locales/en.js', 'locales/es.js']) {
+  app.get(`/shared/${asset}`, (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, 'shared', asset)));
+}
 
 app.use(express.static(path.join(__dirname, "build")));
 

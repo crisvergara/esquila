@@ -101,8 +101,10 @@ Support; do not replace those paths with repository-relative assumptions.
 
 ### React and field UI
 
-- Keep field-facing copy in clear Chilean Spanish; developer/admin diagnostics
-  may use English where already established.
+- Keep field-facing Spanish clear and consistent. English/Spanish controls use
+  the bundled catalogs; tagger language is independent of administration language.
+  Never translate ranch-authored names or historical snapshots. Follow
+  [LOCALIZATION.md](LOCALIZATION.md) when adding interface text.
 - Design first for gloved/touch use, unreliable WiFi, phone portrait layouts,
   and a fullscreen barn TV.
 - Disable accidental repeat submissions while a request is active, but retain a

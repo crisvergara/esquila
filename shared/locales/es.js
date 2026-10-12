@@ -1,0 +1,22 @@
+// Reviewed Chilean Spanish. IDs and saved ranch content are never rewritten.
+export default {
+  '1 · Conectar a Internet': '1 · Conectar a la red',
+  'Si la cuenta puede recibir un enlace, lo enviaremos a su correo. Revisa también spam.': 'Si la cuenta puede recibir un enlace, lo enviaremos a su correo. Revisa también la carpeta de correo no deseado.',
+  'Esqilador:': 'Esquilador:',
+  'Cancela': 'Cancelar',
+  'Elija un esquilador': 'Elige un esquilador',
+  'Elija un color': 'Elige un color',
+  'Elija la primera letra': 'Elige el prefijo',
+  'Elija los números': 'Ingresa los números',
+  'No Hay': 'Sin caravana',
+  'No hay': 'Sin caravana',
+  '{0} registro(s) pendiente(s) de sincronizar{1}': 'Registros pendientes de sincronizar: {0}{1}',
+  'Aún no se ha registrado una oveja hoy.': 'Aún no se han registrado animales hoy.',
+  'Sin conexión con el galpón. Revisa el WiFi; los datos pueden estar atrasados. Reintentando…': 'Sin conexión con el galpón. Revisa el WiFi; los datos pueden estar desactualizados. Reintentando…',
+  'No se pudo actualizar. Los datos visibles pueden estar atrasados. {0}': 'No se pudo actualizar. Los datos visibles pueden estar desactualizados. {0}',
+  'Aceptado por el proveedor de correo (revisa spam)': 'Aceptado por el proveedor de correo (revisa la carpeta de correo no deseado)',
+  'Falló; revisa el correo del servidor y reenvía': 'El envío falló; revisa la configuración de correo del servidor y vuelve a enviarlo',
+  'Invitación en cola. El destinatario recibirá un enlace para crear su contraseña. Revisa también spam.': 'Invitación en cola. La persona recibirá un enlace para crear su contraseña. Revisa también la carpeta de correo no deseado.',
+  'Versión {0}. Abre el menú de la oveja para descargarla cuando te acomode.': 'Versión {0}. Abre el menú de la oveja para descargarla cuando te convenga.',
+  'Sincronización en Internet': 'Sincronización con la nube',
+};

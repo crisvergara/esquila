@@ -77,7 +77,11 @@
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true,
           "NSAllowsArbitraryLoads": false
-        }
+        },
+        "CFBundleLocalizations": [
+          "en",
+          "es"
+        ]
       },
       "target": [
         "dmg",
@@ -86,7 +90,16 @@
       "artifactName": "Esquila-${version}-${arch}.${ext}"
     },
     "dmg": {
-      "title": "Instalar Esquila"
-    }
+      "title": "Esquila"
+    },
+    "extraResources": [
+      {
+        "from": "mac/locales",
+        "to": ".",
+        "filter": [
+          "**/InfoPlist.strings"
+        ]
+      }
+    ]
   }
 }

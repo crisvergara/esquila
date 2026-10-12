@@ -114,8 +114,8 @@ test('live manifest updates preserve in-progress animals, retired history, custo
   await page.getByRole('button', { name: 'A', exact: true }).click();
   for (const digit of '12345') await page.getByRole('button', { name: digit, exact: true }).click();
   await page.getByRole('button', { name: '✔', exact: true }).click();
-  await page.getByRole('button', { name: 'Bueno', exact: true }).click();
-  await page.getByRole('button', { name: 'OK', exact: true }).click();
+  await page.getByRole('button', { name: 'Buena', exact: true }).click();
+  await page.getByRole('button', { name: 'Sí', exact: true }).click();
   let lost = false;
   await page.route('**/count', async route => {
     if (!lost && route.request().method() === 'POST') { lost = true; await route.fetch(); await route.abort('failed'); }
@@ -187,6 +187,7 @@ test('Mac onboarding previews the selected ranch, gates saving, and surfaces a f
   const configuration = (await admin('GET', `/api/admin/ranches/${other.id}/configuration`)).data.configuration;
   await page.route('http://settings.test/**', async route => {
     const name = new URL(route.request().url()).pathname.slice(1) || 'settings.html';
+    if (['shared/i18n.js', 'shared/browser-language.js', 'shared/page-language.js', 'shared/locales/en.js', 'shared/locales/es.js'].includes(name)) return route.fulfill({ body: await readFile(name), contentType: 'text/javascript' });
     if (!['settings.html', 'settings.js'].includes(name)) return route.abort();
     await route.fulfill({ body: await readFile(path.join(root, 'mac', name)), contentType: name.endsWith('.js') ? 'text/javascript' : 'text/html' });
   });

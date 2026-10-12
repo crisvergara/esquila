@@ -1,3 +1,4 @@
+import { t } from '../shared/browser-language.js';
 import React from "react";
 import useTagColors from '../hooks/useTagColors';
 
@@ -6,7 +7,7 @@ function StationSelect({ setStation, counts, shearers }) {
   return (
     <>
       <header className="App-header">
-        <p>Elija un esquilador</p>
+        <p>{t("Elija un esquilador")}</p>
       </header>
       <section className="Station-buttons">
         {shearers.map((shearer, index) => {

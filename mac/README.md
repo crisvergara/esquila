@@ -257,3 +257,10 @@ phone tabs after upgrading. **Registros recientes…** edits the answers origina
 recorded with each animal, including retired questions. New survey manifests need
 this updated app; older versions keep their cached settings. See
 [configuration and migration details](../docs/RANCH_CONFIGURATION.md).
+
+## English Mac controls and Spanish phones
+
+English and Spanish controls have independent preferences for the Mac, cloud
+admin browser, and tagger. Choose English in Mac settings and cloud administration
+while leaving the tagger in Spanish. Ranch-authored names and questions stay as
+entered. See [language settings and the Spanish audit](../docs/LOCALIZATION.md).

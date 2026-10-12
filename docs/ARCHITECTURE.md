@@ -38,6 +38,17 @@ idle sleep must not take the barn server offline. The assertion ends on app
 exit; display sleep and screen locking remain available. Explicit system sleep,
 lid closure, shutdown, and battery exhaustion can still interrupt LAN service.
 
+## Interface language ownership
+
+Language preferences are presentation settings, separate from ranch manifests.
+The Mac stores its menu/window language in the existing private configuration.
+Cloud-admin browsers and local-control browsers remember their own English/Spanish
+choice; the tagger has an independent preference and defaults to Spanish. All
+catalogs ship with the application. Choosing a language never restarts the barn,
+changes a record/configuration, or needs internet. Ranch-authored labels and saved
+mode/survey snapshots remain verbatim. Taggers hide language changes during an
+animal or retry. See [LOCALIZATION.md](LOCALIZATION.md).
+
 ## Data ownership and identity
 
 - `counts` in barn SQLite and authenticated cloud administrators may originate

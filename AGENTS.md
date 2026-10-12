@@ -18,6 +18,7 @@ can be maintained without turning this file into a second README.
 | Barn Mac application | [mac/README.md](mac/README.md) | Installation, onboarding, settings, local-network access, data locations, and ARM64 builds |
 | Cloud admin navigation and records | [docs/CLOUD_ADMIN.md](docs/CLOUD_ADMIN.md) | Separate screens, filters, server attribution, corrections and acknowledgement |
 | Cloud admin accounts | [docs/ADMIN_ACCOUNTS.md](docs/ADMIN_ACCOUNTS.md) | Personal accounts, invitation/reset email, first-owner setup, and secret handling |
+| Interface languages | [docs/LOCALIZATION.md](docs/LOCALIZATION.md) | Independent Mac/admin/tagger preferences, Spanish audit, and immutable content |
 | Ranch configuration | [docs/RANCH_CONFIGURATION.md](docs/RANCH_CONFIGURATION.md) | Remote editor, manifests, stable station/color identity, offline cache, and onboarding |
 | Raspberry Pi fallback | [pi/README.md](pi/README.md) | Legacy appliance install, kiosk onboarding, service operations, and recovery |
 
@@ -42,8 +43,8 @@ can be maintained without turning this file into a second README.
 5. **Ranch calendar dates use `America/Santiago`.** Instants are ISO-8601 UTC
    timestamps; treatment/report days are Chilean calendar dates. Do not derive
    ranch days with the developer machine's timezone.
-6. **Field UX must be resilient.** Primary ranch workflows are in Spanish,
-   touch-friendly, usable on small phones and a fullscreen TV, and give visible
+6. **Field UX must be resilient.** Field workflows default to Spanish;
+   administration and tagger languages remain independent. Interfaces are touch-friendly, usable on small phones and a fullscreen TV, and give visible
    success, pending, duplicate, offline, and failure feedback. Never swallow a
    failed network request.
 7. **The public repository contains no secrets or runtime data.** Follow

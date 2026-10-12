@@ -10,6 +10,7 @@ test('phone setup refreshes stale addresses, chooses a network, and hides unveri
     const url = new URL(route.request().url());
     if (url.pathname === '/tagger-setup') return route.fulfill({ contentType: 'text/html', body: await readFile(new URL('../../setup/tagger.html', import.meta.url), 'utf8') });
     if (url.pathname === '/tagger-setup.js') return route.fulfill({ contentType: 'text/javascript', body: await readFile(new URL('../../setup/tagger.js', import.meta.url), 'utf8') });
+    if (['/shared/i18n.js', '/shared/browser-language.js', '/shared/page-language.js', '/shared/locales/en.js', '/shared/locales/es.js'].includes(url.pathname)) return route.fulfill({ contentType: 'text/javascript', body: await readFile('.' + url.pathname) });
     if (url.pathname === '/tagger-info') {
       if (fail) return route.abort();
       const addresses = address ? [address, '192.168.2.20'].map((ip, i) => ({ address: ip, interface: `en${i}`, url: `http://${ip}:3001/tagger/`, mobileMonitorUrl: `http://${ip}:3001/mobilemonitor/` })) : [];

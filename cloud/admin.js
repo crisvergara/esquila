@@ -1,3 +1,4 @@
+import { t, errorText } from '/shared/browser-language.js';
 import { recordTypeForMode, modeName } from '/modes.js';
 import { $, api, cell, node, dateText, options } from '/admin-ui.js';
 import { updateNavigation } from '/admin-shell.js';
@@ -14,7 +15,7 @@ else if (screen === 'configuration') {
     ui.setServers(info.servers); updateNavigation(id || info.selectedId);
   };
   const ui = mountRanchConfiguration({ api, onPublished: refresh });
-  try { await refresh(); } catch (e) { $('configuration-error').textContent = e.message; }
+  try { await refresh(); } catch (e) { $('configuration-error').textContent = errorText(e.message); }
 } else if (screen === 'overview') {
   let busy = false, initialized = false;
   async function refresh() {
@@ -33,28 +34,28 @@ else if (screen === 'configuration') {
       for (const total of data.totals) { if (!stations.has(total.station)) stations.set(total.station, Object.create(null)); stations.get(total.station)[total.type] = total.count; }
       const types = new Map(info.modes.filter(m => m.active !== false || data.totals.some(t => t.type === recordTypeForMode(m))).map(m => [recordTypeForMode(m), modeName(m)]));
       for (const t of data.types) if (!types.has(t.value) && data.totals.some(total => total.type === t.value)) types.set(t.value, t.name || t.value);
-      $('ranch-total-head').replaceChildren(...['Estación', ...types.values(), 'Total'].map(t => node('th', t)));
+      $('ranch-total-head').replaceChildren(...[t('Estación'), ...types.values(), t('Total')].map(t => node('th', t)));
       $('ranch-totals').replaceChildren(); let sum = 0;
       for (const [station, counts] of [...stations].sort((a,b) => a[0] - b[0])) {
         const total = Object.values(counts).reduce((a,b) => a + b, 0); sum += total;
-        const row = node('tr'); row.append(...[`${station}: ${names[station - 1]?.name || 'Sin nombre'}`, ...[...types.keys()].map(type => counts[type] || 0), total].map(cell)); $('ranch-totals').append(row);
+        const row = node('tr'); row.append(...[`${station}: ${names[station - 1]?.name || t('Sin nombre')}`, ...[...types.keys()].map(type => counts[type] || 0), total].map(cell)); $('ranch-totals').append(row);
       }
-      $('ranch-summary').textContent = `${sum} animales registrados. Actualizado: ${dateText(info.serverTime)}.`;
+      $('ranch-summary').textContent = t`${sum} animales registrados. Actualizado: ${dateText(info.serverTime)}.`;
       const fresh = info.servers.filter(s => s.received_at && Date.parse(info.serverTime) - Date.parse(s.received_at) <= 180000);
-      $('overview-metrics').replaceChildren(...[[sum, 'Animales en la fecha elegida'], [`${fresh.length} / ${info.servers.length}`, 'Servidores con contacto reciente'], [info.servers.find(s => s.id === info.selectedId)?.pending_to_ranch ?? '—', 'Cambios pendientes en el galpón de referencia']].map(([value, label]) => { const card = node('div', null, 'metric'); card.append(node('strong', value), node('span', label)); return card; }));
+      $('overview-metrics').replaceChildren(...[[sum, t('Animales en la fecha elegida')], [`${fresh.length} / ${info.servers.length}`, t('Servidores con contacto reciente')], [info.servers.find(s => s.id === info.selectedId)?.pending_to_ranch ?? '—', t('Cambios pendientes en el galpón de referencia')]].map(([value, label]) => { const card = node('div', null, 'metric'); card.append(node('strong', value), node('span', label)); return card; }));
       $('ranch-servers').replaceChildren();
       for (const server of info.servers) {
         const card = node('article', null, 'server-card');
-        card.append(node('h3', server.name), node('span', fresh.includes(server) ? 'Contacto reciente' : 'Sin contacto reciente', `badge ${fresh.includes(server) ? 'received' : 'pending'}`), node('p', `Último contacto: ${dateText(server.received_at || server.last_seen_at)}`, 'muted'), node('p', `${server.pending_to_ranch} cambios de nube pendientes en este galpón (incluye eliminaciones).`));
-        if (server.information) card.append(node('p', `${server.information.hostname} · Modo: ${server.information.modeName || server.information.mode} · v${server.information.version} · ${server.information.pending} cambios locales pendientes`, 'muted'));
-        else card.append(node('p', 'Este servidor aún no ha informado su estado.', 'muted'));
+        card.append(node('h3', server.name), node('span', fresh.includes(server) ? t('Contacto reciente') : t('Sin contacto reciente'), `badge ${fresh.includes(server) ? 'received' : 'pending'}`), node('p', t`Último contacto: ${dateText(server.received_at || server.last_seen_at)}`, 'muted'), node('p', t`${server.pending_to_ranch} cambios de nube pendientes en este galpón (incluye eliminaciones).`));
+        if (server.information) card.append(node('p', t`${server.information.hostname} · Modo: ${server.information.modeName || server.information.mode} · v${server.information.version} · ${server.information.pending} cambios locales pendientes`, 'muted'));
+        else card.append(node('p', t('Este servidor aún no ha informado su estado.'), 'muted'));
         const links = node('div', null, 'row');
-        for (const [path, label] of [['records','Ver registros'],['configuration','Configurar']]) { const a = node('a', label); a.href = `/admin/${path}?server=${server.id}`; links.append(a); }
+        for (const [path, label] of [['records',t('Ver registros')],['configuration',t('Configurar')]]) { const a = node('a', label); a.href = `/admin/${path}?server=${server.id}`; links.append(a); }
         card.append(links); $('ranch-servers').append(card);
       }
-      if (!info.servers.length) { const empty = node('p', 'No hay servidores inscritos.'); const link = node('a','Inscribir un servidor'); link.href='/admin/devices'; empty.append(' ',link); $('ranch-servers').append(empty); }
+      if (!info.servers.length) { const empty = node('p', t('No hay servidores inscritos.')); const link = node('a',t('Inscribir un servidor')); link.href='/admin/devices'; empty.append(' ',link); $('ranch-servers').append(empty); }
       $('ranch-error').textContent = '';
-    } catch (error) { $('ranch-error').textContent = `No se pudo actualizar. Los datos visibles pueden estar atrasados. ${error.message}`; }
+    } catch (error) { $('ranch-error').textContent = t`No se pudo actualizar. Los datos visibles pueden estar atrasados. ${errorText(error.message)}`; }
     finally { busy = false; }
   }
   $('overview-server').onchange = () => { const url = new URL(location.href); url.searchParams.set('server', $('overview-server').value); history.replaceState(null, '', url); refresh(); };

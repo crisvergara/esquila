@@ -231,3 +231,10 @@ documented in [docs/ADMIN_ACCOUNTS.md](docs/ADMIN_ACCOUNTS.md). Manage people at
 `https://<app>/admin/accounts`; accounts use email usernames and private passwords.
 
 Cloud admin screens, recent-scan browsing and corrections: [Cloud administration](docs/CLOUD_ADMIN.md).
+
+## Interface languages
+
+English and Spanish controls have independent preferences for the Mac, cloud
+admin browser, and tagger. Choose English in Mac settings and cloud administration
+while leaving the tagger in Spanish. Ranch-authored names and questions stay as
+entered. See [language settings and the Spanish audit](docs/LOCALIZATION.md).

@@ -7,9 +7,9 @@ export const recordTypeForMode = mode => mode.type === 'carnillero' ? 'borrega' 
 const legacyName = id => Object.hasOwn(LEGACY_MODE_NAMES, id) ? LEGACY_MODE_NAMES[id] : null;
 export const modeName = mode => mode?.name || legacyName(mode?.type) || mode?.type || 'Sin modo registrado';
 export const findMode = (modes, type) => modes.find(m => m.type === modeIdForType(type));
-export const modeChoices = (modes, old) => {
+export const modeChoices = (modes, old, translate = text => text) => {
   const choices = modes.filter(m => m.active !== false || recordTypeForMode(m) === old?.type)
-    .map(m => ({ value: recordTypeForMode(m), name: modeName(m) + (m.active === false ? ' (retirado)' : '') }));
+    .map(m => ({ value: recordTypeForMode(m), name: modeName(m) + (m.active === false ? translate(' (retirado)') : '') }));
   if (old?.type && !choices.some(c => c.value === old.type)) choices.push({ value: old.type, name: old.mode?.name || old.type });
   return choices;
 };
