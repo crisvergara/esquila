@@ -767,6 +767,34 @@ test("cloud admin manages shearing offline, retries lost receipts, and reconcile
   db.close();
 });
 
+test('a saved vaccination PWA never replaces health checks or API navigation with its token screen', async ({ browser }) => {
+  if (!cloudService) { cloudService = startCloud(); await waitForHealth(cloudBase, cloudService); }
+  const context = await browser.newContext({ serviceWorkers: 'allow' });
+  try {
+    const page = await context.newPage();
+    await page.goto(`${cloudBase}/`);
+    await page.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+      if (!navigator.serviceWorker.controller) await new Promise(resolve => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true }));
+    });
+    for (const suffix of ['/healthz', '/healthz?diagnostic=1', '/healthz/', '/HEALTHZ']) {
+      const response = await page.goto(cloudBase + suffix);
+      expect(response.fromServiceWorker()).toBe(false);
+      expect(response.headers()['content-type']).toContain('application/json');
+      expect(await response.json()).toEqual({ ok: true });
+    }
+    const identity = await page.goto(`${cloudBase}/api/server/identity`);
+    expect(identity.fromServiceWorker()).toBe(false);
+    expect(identity.status()).toBe(401);
+    await context.setOffline(true);
+    await expect(page.goto(`${cloudBase}/healthz`)).rejects.toThrow(/net::ERR_/);
+    // The actual app shell still works offline after excluding diagnostics.
+    const offline = await page.goto(`${cloudBase}/`);
+    expect(offline.fromServiceWorker()).toBe(true);
+    await expect(page.getByPlaceholder('Token de invitación...')).toBeVisible();
+  } finally { await context.close(); }
+});
+
 test("vaccination PWA survives offline reload and syncs directly to cloud", async ({ browser }) => {
   const context = await browser.newContext({ serviceWorkers: "allow" });
   const page = await context.newPage();

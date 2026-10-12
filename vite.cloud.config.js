@@ -35,7 +35,9 @@ export default defineConfig({
         // and a second caching layer would only cause confusion.
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
         navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//, /^\/admin/],
+        // Health navigation must reach the network too. Otherwise a previously
+        // visited PWA displays its enrollment screen at /healthz, even offline.
+        navigateFallbackDenylist: [/^\/api\//, /^\/admin/, /^\/healthz(?:[/?]|$)/i],
       },
     }),
   ],

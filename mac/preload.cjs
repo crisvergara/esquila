@@ -8,5 +8,6 @@ contextBridge.exposeInMainWorld("esquila", {
   saveSettings: (values) => ipcRenderer.invoke("settings:save", values),
   clearToken: () => ipcRenderer.invoke("settings:clearToken"),
   previewConfiguration: values => ipcRenderer.invoke('settings:preview', values),
+  diagnoseConnection: values => ipcRenderer.invoke('settings:diagnose', values),
   openAdmin: () => ipcRenderer.invoke('settings:admin'),
 });

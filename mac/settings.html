@@ -25,7 +25,10 @@
     .check { display: flex; gap: 10px; align-items: center; font-weight: normal; }
     .check input { width: auto; }
     .hint { color: #999; font-size: 14px; margin: 6px 0; }
-    #status { min-height: 24px; color: #ffcc66; margin: 12px 0; }
+    #status, #connection-status { min-height: 24px; color: #ffcc66; margin: 12px 0; overflow-wrap: anywhere; }
+    .connection-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    #connection-results { padding-left: 22px; }
+    #connection-results li { margin: 10px 0; overflow-wrap: anywhere; }
   </style>
 </head>
 <body>
@@ -54,7 +57,12 @@
       <input id="sync-token" type="password" autocomplete="off" placeholder="Sin cambios" />
       <p class="hint" id="token-hint"></p>
       <p class="hint">Crea un servidor y publica sus colores y esquiladores en la administración remota. Aquí solo necesitas la dirección y su token.</p>
-      <button type="button" id="load-configuration" class="secondary">Cargar configuración del galpón</button>
+      <div class="connection-actions">
+        <button type="button" id="load-configuration" class="secondary">Cargar configuración del galpón</button>
+        <button type="button" id="test-connection" class="secondary">Probar conexión</button>
+      </div>
+      <div id="connection-status" role="status" aria-live="polite" tabindex="-1"></div>
+      <ol id="connection-results" aria-label="Resultados de conexión" hidden></ol>
       <div id="configuration-preview" role="status"></div>
       <button type="button" id="open-admin" class="secondary" hidden>Administrar este galpón en la nube</button>
       <label for="app-url">Dirección de la app de vacunación</label>
@@ -64,7 +72,7 @@
       <label class="check"><input id="login" type="checkbox" /> Iniciar Esquila automáticamente al encender el Mac</label>
       <p class="hint">Al cerrar el monitor, el servidor continúa funcionando en la barra de menús.</p>
     </section>
-    <div id="status"></div>
+    <div id="status" role="status" tabindex="-1"></div>
     <div class="actions"><button id="save" type="submit">Guardar y abrir monitor</button></div>
   </form>
 </main>

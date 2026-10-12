@@ -233,7 +233,9 @@ test('Mac onboarding previews the selected ranch, gates saving, and surfaces a f
   await page.getByLabel('Dirección del servicio').fill('https://example.test');
   await expect(page.getByRole('button', { name: 'Guardar y abrir monitor' })).toBeDisabled();
   await page.getByRole('button', { name: 'Cargar configuración del galpón' }).click();
-  await expect(page.locator('#status')).toHaveText('Token inválido.');
+  await expect(page.locator('#connection-status')).toHaveText('Token inválido.');
+  await expect(page.locator('#connection-status')).toBeInViewport();
+  await expect(page.locator('#connection-status')).toBeFocused();
   await page.getByLabel('Token del servidor').fill('fixture-token');
   await page.getByRole('button', { name: 'Cargar configuración del galpón' }).click();
   await expect(page.locator('#configuration-preview')).toContainText('Otro galpón');

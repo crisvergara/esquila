@@ -40,6 +40,14 @@ publication. The browser receives a credential-free link to the exact ranch and
 still requires normal admin login. Discovery never changes configuration or
 records, and authentication/network failures never select a different ranch.
 
+The Mac settings connection test reads public health, token-bound identity and
+the validated manifest using the same Node fetch stack as enrollment. It does
+not save or acknowledge configuration and never enters the LAN counting path.
+Each request remains deadline-bound, credential headers stay on the validated
+origin, and redirects remain rejected. Only fixed error categories, HTTP statuses
+and timings cross the diagnostic IPC boundary; raw network errors and response
+bodies are not exposed. See the Mac guide for troubleshooting steps.
+
 The Mac shell holds a `prevent-app-suspension` power assertion while hosting,
 including with all windows closed and during child-process recovery. Normal
 idle sleep must not take the barn server offline. The assertion ends on app

@@ -11,7 +11,7 @@ import { createUpdater, verifyInstaller } from "./updater.js";
 import { stageNativeUpdate } from "./native-update.js";
 import { loadLocalPage } from "./local-page.js";
 import { keepServerAwake } from "./server-power.js";
-import { cloudOrigin, fetchRanchManifest, ranchAdminUrl, resolveRanchAdminUrl } from './ranch-connection.js';
+import { cloudOrigin, diagnoseRanchConnection, fetchRanchManifest, ranchAdminUrl, resolveRanchAdminUrl } from './ranch-connection.js';
 
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SERVER_PORT = 3001;
@@ -452,11 +452,20 @@ ipcMain.handle('settings:mode', (event, mode) => {
   if (typeof mode !== 'string' || mode.length > 40) throw new Error(t('Modo inválido.'));
   return localModeRequest('POST', { mode });
 });
-ipcMain.handle('settings:preview', async (event, values) => {
-  requireSettingsWindow(event);
+async function settingsConnection(values) {
   const previous = await readConfig();
   const origin = cloudOrigin(values.cloudSyncUrl);
   const token = String(values.cloudSyncToken || '').trim() || (origin === previous.cloudSyncUrl ? previous.cloudSyncToken : '');
+  return { origin, token };
+}
+ipcMain.handle('settings:diagnose', async (event, values) => {
+  requireSettingsWindow(event);
+  const { origin, token } = await settingsConnection(values);
+  return diagnoseRanchConnection(origin, token);
+});
+ipcMain.handle('settings:preview', async (event, values) => {
+  requireSettingsWindow(event);
+  const { origin, token } = await settingsConnection(values);
   const manifest = await fetchRanchManifest(origin, token);
   return { manifest, adminUrl: ranchAdminUrl(origin, manifest.deviceId) };
 });

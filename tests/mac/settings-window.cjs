@@ -17,6 +17,14 @@ ipcMain.handle('settings:modes', () => {
   return { mode: 'oveja', modes: [{ type: 'oveja', name: 'Ovejas' }] };
 });
 ipcMain.handle('settings:admin', () => { adminOpens++; });
+ipcMain.handle('settings:diagnose', (_event, values) => {
+  assert.deepEqual(values, { cloudSyncUrl: 'https://cloud.example.test', cloudSyncToken: '' });
+  return [
+    { step: 'health', ok: true, milliseconds: 50 },
+    { step: 'identity', ok: false, milliseconds: 15000, message: 'Se agotó el tiempo de espera de la conexión con la nube. Reintenta. [CLOUD_TIMEOUT]' },
+    { step: 'configuration', skipped: true },
+  ];
+});
 function finish(code) {
   clearTimeout(deadline);
   fs.rmSync(dataDir, { recursive: true, force: true });
@@ -62,6 +70,22 @@ app.whenReady().then(async () => {
       // IPC is asynchronous; use an ordered request on the same renderer channel.
       await window.webContents.executeJavaScript('window.esquila.loadSettings()');
       assert.equal(adminOpens, 1);
+      const diagnostic = await window.webContents.executeJavaScript(`new Promise((resolve, reject) => {
+        document.getElementById('test-connection').click();
+        const deadline = Date.now() + 5000;
+        const poll = () => {
+          const results = document.getElementById('connection-results');
+          if (!results.hidden) resolve({ text: results.textContent, count: results.children.length,
+            status: document.getElementById('connection-status').textContent,
+            token: document.getElementById('sync-token').value, preview: document.getElementById('configuration-preview').textContent });
+          else if (Date.now() > deadline) reject(new Error('Diagnostics did not render through the native bridge'));
+          else setTimeout(poll, 25);
+        }; poll();
+      })`);
+      assert.equal(diagnostic.count, 3);
+      assert.match(diagnostic.text, /CLOUD_TIMEOUT/);
+      assert.match(diagnostic.text, language === 'es' ? /Se agotó el tiempo/ : /connection timed out/);
+      assert.equal(diagnostic.token, ''); assert.equal(diagnostic.preview, '');
       adminOpens = 0; modeAvailable = false;
     } finally { window.destroy(); }
   }
