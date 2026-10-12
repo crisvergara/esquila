@@ -89,6 +89,9 @@ teléfono**. No QR is shown with only VPN/loopback/link-local connectivity or wh
 the current server address cannot be obtained. Opening the Mac QR window during
 local server startup/recovery retries automatically instead of leaving a failed
 navigation stuck. Local API failures hide stale QR images and retry visibly.
+Closing this window cancels its recovery timer and detaches its listener safely,
+including when an explicitly approved update quits the app. A late navigation
+failure cannot restart recovery after the window closes.
 
 Shearers open the tagger from another device on the same WiFi at:
 
