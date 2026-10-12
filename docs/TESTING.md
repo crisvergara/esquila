@@ -42,7 +42,8 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
   custom monitor swatches, historical record corrections, offline restart and
   catch-up, malformed metadata isolation, and retained settings after revocation;
 - Mac enrollment preview, required review before saving, invalid token feedback,
-  HTTPS/redirect/size validation, and credential-free per-server admin links;
+  HTTPS/redirect/size validation, credential-free per-server admin links, and
+  explicit ranch selection after login when no local manifest is available;
 - the barn health endpoint accepts a non-loopback IPv4 connection, not just localhost;
 - eight tagger tabs plus a monitor in one browser can navigate, submit counts,
   receive mode changes, and recover from offline status without exhausting HTTP
@@ -83,7 +84,13 @@ worker/retry (removed afterward), and configurable non-production ports. It refu
 
 This job runs on macOS and builds only the ARM64 DMG/ZIP. It verifies the executable architecture, code signature (ad-hoc on PRs; Developer ID plus notarization on main), DMG checksum, Bonjour service declaration, and local-network permission description.
 
-The Mac window lifecycle is indirectly covered by the same ranch server and browser onboarding contracts. A fully automated macOS GUI test is intentionally omitted because login-item, tray, fullscreen, and local-network permission dialogs are controlled by macOS and are substantially less reliable on headless GitHub runners. Those remain release-candidate smoke tests on a real Mac.
+The installer job also runs `npm run test:mac-settings`: a hidden real Electron
+window loads the packaged settings file, CSP and sandboxed preload with isolated
+test data. It checks Spanish/English rendering without a remote manifest and
+during local-server recovery. It never launches the barn, reads operator data,
+or opens an external browser.
+
+The remaining Mac window lifecycle is indirectly covered by the same ranch server and browser onboarding contracts. A full macOS GUI test is intentionally omitted because login-item, tray, fullscreen, and local-network permission dialogs are controlled by macOS and are substantially less reliable on headless GitHub runners. Those remain release-candidate smoke tests on a real Mac.
 
 QR-window unit coverage checks failed startup navigation, repeated retries,
 main-frame filtering, successful reload recovery and cancelling retries on close.

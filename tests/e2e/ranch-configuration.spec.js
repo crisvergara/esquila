@@ -6,6 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { jsonRequest, startNodeService, stopService, waitFor, waitForHealth } from './helpers.mjs';
+import { ranchAdminUrl, resolveRanchAdminUrl } from '../../mac/ranch-connection.js';
 const { Pool } = createRequire(new URL('../../cloud/package.json', import.meta.url))('pg');
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const cloudBase = 'http://127.0.0.1:4191', barnBase = 'http://127.0.0.1:3191';
@@ -41,6 +42,34 @@ test.beforeAll(async () => {
 test.afterAll(async () => {
   await Promise.all([stopService(barn), stopService(cloud)]);
   if (pool) { if (schema) await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`); await pool.end(); }
+});
+
+test('admin shortcut without a cached manifest reaches login and requires an explicit ranch selection', async ({ page }) => {
+  const fallback = await resolveRanchAdminUrl(cloudBase, async () => ({ revision: 0 }));
+  const configurationRequests = [];
+  page.on('request', request => { if (/\/api\/admin\/ranches\//.test(request.url())) configurationRequests.push(request.url()); });
+  await page.goto(fallback);
+  await page.getByLabel('Contraseña de administración').fill(password);
+  await page.getByRole('button', { name: 'Iniciar sesión' }).click();
+  await expect(page.locator('#configuration-status')).toContainText('Selecciona el galpón que quieres configurar.');
+  await expect(page.locator('#configuration-server')).toHaveValue('');
+  await expect(page.locator('#configuration-form')).toBeHidden();
+  expect(configurationRequests).toEqual([]);
+  expect(await page.getByRole('navigation').getByRole('link', { name: 'Registros', exact: true }).getAttribute('href')).toBe('/admin/records');
+  await page.reload();
+  await expect(page.locator('#configuration-server')).toHaveValue('');
+  await page.locator('#configuration-server').selectOption(other.id);
+  await expect(page.getByLabel('Nombre del galpón', { exact: true })).toHaveValue('Otro galpón');
+  await expect(page).toHaveURL(new RegExp(`server=${other.id}`));
+  expect(new URL(page.url()).searchParams.has('chooseServer')).toBe(false);
+  await page.reload();
+  await expect(page.getByLabel('Nombre del galpón', { exact: true })).toHaveValue('Otro galpón');
+  await page.goto(ranchAdminUrl(cloudBase, server.id));
+  await expect(page.getByLabel('Nombre del galpón', { exact: true })).toHaveValue('Galpón principal');
+  await page.goto(fallback + '&lang=en');
+  await expect(page.locator('#configuration-status')).toContainText('Select the barn you want to configure.');
+  await expect(page.locator('#configuration-server')).toHaveValue('');
+  await expect(page.getByRole('option', { name: 'Select a barn…' })).toHaveCount(1);
 });
 
 test('remote editor publishes colors and seven stations, survives a lost response, and enforces server/CSRF boundaries', async ({ page, request }) => {

@@ -12,8 +12,11 @@
    then **Guardar y abrir monitor**. The first enrollment needs internet and a
    published configuration. Subsequent starts work entirely offline.
 4. Use **Administrar este galpón en la nube…** in the sheep menu to open its
-   specific admin page. The normal admin password is still required. The link
-   carries only the server ID, never a device token or admin password.
+   specific configuration page. The normal admin login is still required. If the
+   Mac has no downloaded manifest yet, or its local server is restarting, the
+   shortcut still opens the cloud and asks you to select the ranch explicitly.
+   No ranch is selected automatically in that recovery path. The link carries
+   only the server ID or a selection prompt, never a device token or password.
 
 Green (**Verde**) and black (**Negro**) are included for both sheep and rams.
 Black is distinct from **No Hay** (no tag color). Add a color with a name,

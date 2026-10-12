@@ -26,6 +26,7 @@
     "check:syntax": "node --check countserver.js && node --check cloud/server.js && node --check mac/main.js",
     "test:unit": "node --test tests/unit/*.test.mjs",
     "test:e2e": "playwright test",
+    "test:mac-settings": "electron tests/mac/settings-window.cjs",
     "test": "npm run test:unit && npm run test:e2e",
     "check": "npm run check:syntax && npm run build && npm run build:cloud && npm run test",
     "build:mac": "npm run build && electron-builder --config scripts/mac-builder.cjs --mac --publish never",

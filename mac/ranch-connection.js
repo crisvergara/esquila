@@ -8,8 +8,17 @@ export function cloudOrigin(value) {
   return url.origin;
 }
 export function ranchAdminUrl(origin, deviceId) {
-  if (!UUID.test(deviceId || '')) throw new Error('El galpón aún no ha recibido su configuración. Revisa la conexión y vuelve a intentar.');
-  return `${cloudOrigin(origin)}/admin?server=${encodeURIComponent(deviceId)}#configuration`;
+  const base = `${cloudOrigin(origin)}/admin/configuration`;
+  return typeof deviceId === 'string' && UUID.test(deviceId)
+    ? `${base}?server=${encodeURIComponent(deviceId)}`
+    : `${base}?chooseServer=1`;
+}
+export async function resolveRanchAdminUrl(origin, readLocalConfiguration) {
+  // Opening administration must not depend on a completed manifest download or
+  // a running barn process. Missing identity requires an explicit browser choice.
+  const fallback = ranchAdminUrl(origin);
+  try { return ranchAdminUrl(origin, (await readLocalConfiguration())?.deviceId); }
+  catch { return fallback; }
 }
 export async function fetchRanchManifest(origin, token, fetchImpl = fetch) {
   const base = cloudOrigin(origin);
