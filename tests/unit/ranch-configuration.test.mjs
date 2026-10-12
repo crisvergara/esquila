@@ -109,7 +109,7 @@ test('identity discovery rejects invalid or revoked credentials, malformed respo
     await assert.rejects(fetchRanchIdentity(origin, token, () => { assert.fail('invalid token was sent'); }), /Ingresa el token/);
   }
   for (const status of [401, 403]) await assert.rejects(fetchRanchIdentity(origin, 'fixture-token', async () => new Response('', { status })), /no corresponde/);
-  for (const status of [302, 404, 500]) await assert.rejects(fetchRanchIdentity(origin, 'fixture-token', async () => new Response('', { status })), /no pudo identificar/);
+  for (const status of [302, 404, 500]) await assert.rejects(fetchRanchIdentity(origin, 'fixture-token', async () => new Response('', { status })), new RegExp(`HTTP ${status}`));
   for (const response of [Response.json({}), Response.json({deviceId:['01999999-9999-7999-8999-999999999999']}),
     new Response('test-private-response-not-to-display'), new Response('x'.repeat(1025)), new Response(null)]) {
     await assert.rejects(fetchRanchIdentity(origin, 'fixture-token', async () => response), error => {

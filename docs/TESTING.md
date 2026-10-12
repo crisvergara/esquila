@@ -45,7 +45,10 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
   HTTPS/redirect/size validation, credential-free per-server admin links, and
   token-bound ranch discovery without a local/published manifest, login preserving
   that exact ranch, rejected phone/revoked tokens, and malformed/oversized identity
-  responses that never expose response content;
+  responses that never expose response content; credential-free health probes,
+  diagnostic authorization/configuration stages, timeout/DNS/TLS/redirect errors,
+  invalid pasted token characters, interrupted response bodies, visible bilingual
+  load feedback, and discarding stale diagnostic results after connection edits;
 - the barn health endpoint accepts a non-loopback IPv4 connection, not just localhost;
 - eight tagger tabs plus a monitor in one browser can navigate, submit counts,
   receive mode changes, and recover from offline status without exhausting HTTP
@@ -77,7 +80,10 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
 - transactional pull-page validation, 500-row paging, no upload echoes, and local
   edits made while a pull is in flight;
 - cloud device authentication, phone/server role boundaries, malformed requests, transaction rollback, last-write-wins semantics, admin login, CSRF protection, and device revocation;
-- vaccination PWA enrollment, offline writes, offline service-worker reload, direct phone-to-cloud synchronization, and proof that the treatment never passes through the ranch database.
+- vaccination PWA enrollment, offline writes, offline service-worker reload, direct phone-to-cloud synchronization, and proof that the treatment never passes through the ranch database;
+- a controlling vaccination service worker must never replace health/API
+  navigation with its saved token screen, including health query strings and
+  offline failures; the app shell itself must remain usable offline.
 
 The E2E suite uses temporary directories, a fresh isolated PostgreSQL schema per
 worker/retry (removed afterward), and configurable non-production ports. It refuses to run without `TEST_DATABASE_URL`; that URL must point to a disposable database.
@@ -89,7 +95,8 @@ This job runs on macOS and builds only the ARM64 DMG/ZIP. It verifies the execut
 The installer job also runs `npm run test:mac-windows`: a hidden real Electron
 window loads the packaged settings file, CSP and sandboxed preload with isolated
 test data. It checks Spanish/English rendering without a remote manifest and
-during local-server recovery. It never launches the barn, reads operator data,
+during local-server recovery, plus bilingual diagnostics through the actual
+sandboxed preload. It never launches the barn, reads operator data,
 or opens an external browser. The teardown scenario exercises the packaged local
 page helper through normal close, forced destruction, and application quit with
 pending recovery. It must exit cleanly and cancel retries without accessing a

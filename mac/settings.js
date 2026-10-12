@@ -5,6 +5,8 @@ const status = document.getElementById("status");
 const urlInput = document.getElementById('sync-url');
 const tokenInput = document.getElementById('sync-token');
 const preview = document.getElementById('configuration-preview');
+const connectionStatus = document.getElementById('connection-status');
+const connectionResults = document.getElementById('connection-results');
 let settingsLoaded = false;
 let savedConnection = '';
 let confirmedConnection = '';
@@ -18,6 +20,9 @@ function updateForm() {
   document.getElementById('local-stations').hidden = remote;
   for (const input of namesContainer.querySelectorAll('input')) input.disabled = remote;
   document.getElementById('load-configuration').disabled = !settingsLoaded || !remote || loading;
+  document.getElementById('test-connection').disabled = !settingsLoaded || !remote || loading;
+  document.getElementById('open-admin').disabled = loading;
+  document.getElementById('load-configuration').textContent = loading ? t('Conectando…') : t('Cargar configuración del galpón');
   document.getElementById('save').disabled = !settingsLoaded || loading || (remote && !(configured && connection() === savedConnection) && connection() !== confirmedConnection);
   document.getElementById('open-admin').hidden = !configured || connection() !== savedConnection;
 }
@@ -31,20 +36,47 @@ function showManifest(manifest) {
   preview.append(title, summary, list);
 }
 for (const input of [urlInput, tokenInput]) input.addEventListener('input', () => {
+  connectionStatus.textContent = ''; connectionResults.replaceChildren(); connectionResults.hidden = true;
   confirmedConnection = ''; confirmedDeviceId = null; preview.replaceChildren(); updateForm();
 });
+function showConnectionStatus(message, focus = false) {
+  connectionStatus.textContent = message;
+  if (focus) { connectionStatus.focus({ preventScroll: true }); connectionStatus.scrollIntoView({ block: 'start' }); }
+}
 document.getElementById('load-configuration').onclick = async () => {
   const requestedConnection = connection();
-  loading = true; updateForm(); status.textContent = t('Cargando desde la nube…');
+  connectionResults.replaceChildren(); connectionResults.hidden = true;
+  loading = true; updateForm(); showConnectionStatus(t('Cargando desde la nube…'));
   try {
     const result = await window.esquila.previewConfiguration({ cloudSyncUrl: urlInput.value, cloudSyncToken: tokenInput.value });
     if (requestedConnection !== connection()) return;
     confirmedConnection = requestedConnection; confirmedDeviceId = result.manifest.deviceId;
-    showManifest(result.manifest); status.textContent = t('Revisa el galpón y sus estaciones antes de guardar.');
-  } catch (error) { status.textContent = errorText(error.message); }
+    showManifest(result.manifest); showConnectionStatus(t('Revisa el galpón y sus estaciones antes de guardar.'), true);
+  } catch (error) { if (requestedConnection === connection()) showConnectionStatus(errorText(error.message), true); }
   finally { loading = false; updateForm(); }
 };
-document.getElementById('open-admin').onclick = () => window.esquila.openAdmin().catch(error => { status.textContent = errorText(error.message); });
+document.getElementById('test-connection').onclick = async () => {
+  const requestedConnection = connection();
+  connectionResults.replaceChildren(); connectionResults.hidden = true;
+  loading = true; updateForm(); showConnectionStatus(t('Probando conexión, token y configuración… Cada paso puede tardar hasta 15 segundos.'));
+  try {
+    const results = await window.esquila.diagnoseConnection({ cloudSyncUrl: urlInput.value, cloudSyncToken: tokenInput.value });
+    if (requestedConnection !== connection()) return;
+    const labels = { health: t('Acceso a la nube'), identity: t('Autorización del servidor'), configuration: t('Descarga de configuración') };
+    for (const result of results) {
+      const item = document.createElement('li');
+      item.textContent = labels[result.step] + ': ' + (result.skipped ? t('Pendiente de autorización.')
+        : (result.ok ? t('Correcto') : errorText(result.message)) + ` (${result.milliseconds} ms)`);
+      connectionResults.append(item);
+    }
+    connectionResults.hidden = false;
+    showConnectionStatus(results.every(result => result.ok)
+      ? t('Conexión verificada. La prueba no guarda ni aplica la configuración.')
+      : t('La prueba detectó un problema. Comparte estos resultados para revisar la conexión.'), true);
+  } catch (error) { if (requestedConnection === connection()) showConnectionStatus(errorText(error.message), true); }
+  finally { loading = false; updateForm(); }
+};
+document.getElementById('open-admin').onclick = () => window.esquila.openAdmin().catch(error => { showConnectionStatus(errorText(error.message), true); });
 
 function addName(value = "") {
   if (namesContainer.children.length >= 6) return;
@@ -100,6 +132,7 @@ document.getElementById("form").onsubmit = async (event) => {
     });
   } catch (error) {
     status.textContent = errorText(error.message);
+    status.focus();
     document.getElementById("save").disabled = false;
     document.querySelector(".language-picker select").disabled = false;
   }

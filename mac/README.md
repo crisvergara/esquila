@@ -103,6 +103,40 @@ The Mac name is visible under **System Settings → General → Sharing → Loca
 hostname**. Setting it to `esquila` makes the address
 `http://esquila.local:3001/tagger`.
 
+## When cloud configuration will not load
+
+In **Configuración… / Settings…**, choose **Probar conexión / Test connection**.
+Results appear beside the load button, with elapsed times for public cloud health,
+server-token authorization and the configuration download. This reads the entered
+connection (or the saved token when its field is blank and the origin is unchanged).
+It does not save settings, apply/acknowledge a manifest, restart the server or stop
+counting. A successful test does not replace the onboarding review before saving.
+Loading configuration also shows progress and brings failures into view.
+
+- If cloud access fails, compare the configured origin's `/healthz` in Safari on
+  the same Mac. A different device/network succeeding does not prove this route
+  works. `CLOUD_DNS`, `CLOUD_TLS`, `CLOUD_TIMEOUT`, `CLOUD_REFUSED`,
+  `CLOUD_UNREACHABLE` and `CLOUD_INTERRUPTED` distinguish common connection failures.
+  Do not disable certificate verification to work around a TLS failure.
+  If `/healthz` shows the vaccination token screen, repeat the check in a new
+  Safari Private Window. Older EsquilaDB service workers mistakenly substituted
+  their saved app for health navigation; updated workers exclude `/healthz`.
+  Do not clear browser storage on an enrolled vaccination device: it may have
+  unsynchronized treatments. This browser cache does not handle native Mac fetches.
+- If public health succeeds but authorization fails, check the server credential
+  privately in remote administration. `TOKEN_FORMAT` means pasted characters
+  cannot form a bearer token; a server rejection has its own authorization message.
+  The existing token already identifies the ranch; no ranch selection is required.
+- If authorization succeeds but configuration fails, the report distinguishes an
+  unpublished configuration, HTTP service errors, malformed data and interrupted
+  downloads. Requests retain a 15-second deadline and reject redirects.
+
+Share the displayed results for troubleshooting; never share `config.json`, tokens
+or database files. Diagnostics display fixed error messages, status codes and
+timings, not response bodies or underlying network exception text. App update
+metadata uses Fly, but installer files use GitHub; downloading an installer alone
+does not establish that authenticated Fly configuration requests are working.
+
 ## Data and secrets
 
 The app stores its data outside the application bundle:
