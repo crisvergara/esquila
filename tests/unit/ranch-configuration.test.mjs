@@ -4,7 +4,7 @@ import Database from 'better-sqlite3';
 import { shearingModes, validateShearingFields } from '../../shared/shearing-validation.js';
 import { validateConfiguration, retainRetiredConfiguration, activeModes, monitorStations } from '../../shared/ranch-configuration.js';
 import { createLocalConfiguration } from '../../shared/local-configuration.js';
-import { cloudOrigin, ranchAdminUrl, resolveRanchAdminUrl, fetchRanchManifest } from '../../mac/ranch-connection.js';
+import { cloudOrigin, ranchAdminUrl, resolveRanchAdminUrl, fetchRanchIdentity, fetchRanchManifest } from '../../mac/ranch-connection.js';
 
 const seed = () => validateConfiguration({ schemaVersion: 1, name: 'Galpón de prueba', shearers: [{ name: 'Ana' }, { name: 'Luis' }], modes: structuredClone(shearingModes) });
 const envelope = (revision, configuration = seed()) => ({ deviceId: '01999999-9999-7999-8999-999999999999', revision, updatedAt: '2026-09-22T12:00:00.000Z', configuration });
@@ -77,22 +77,45 @@ test('onboarding validates the cloud origin and role, bounds downloads, and buil
   await assert.rejects(fetchRanchManifest('https://cloud.example', 'fixture-token', async () => { throw new Error('offline'); }), /Revisa internet/);
 });
 
-test('admin remains accessible before a manifest arrives and during local server recovery without guessing a ranch', async () => {
-  const origin = 'https://cloud.example';
-  const fallback = `${origin}/admin/configuration?chooseServer=1`;
-  for (const deviceId of [undefined, null, '', 'fixture-token', '<invalid>', [envelope(1).deviceId]]) {
-    assert.equal(ranchAdminUrl(origin, deviceId), fallback);
-  }
+test('admin resolves the saved token identity without a manifest, including local server recovery', async () => {
+  const origin = 'https://cloud.example', deviceId = envelope(1).deviceId;
+  const expected = `${origin}/admin/configuration?server=${deviceId}`;
+  let calls = 0;
+  const identity = async (url, options) => {
+    calls++; assert.equal(url, `${origin}/api/server/identity`);
+    assert.equal(options.headers.Authorization, 'Bearer fixture-token');
+    assert.equal(options.redirect, 'error'); assert.ok(options.signal instanceof AbortSignal);
+    return Response.json({ deviceId });
+  };
   for (const local of [null, { revision: 0 }, { deviceId: 'invalid' }, { error: 'unavailable' }]) {
-    assert.equal(await resolveRanchAdminUrl(origin, async () => local), fallback);
+    assert.equal(await resolveRanchAdminUrl(origin, 'fixture-token', async () => local, identity), expected);
   }
   for (const failure of [new Error('offline'), new DOMException('deadline', 'TimeoutError'), new SyntaxError('invalid JSON')]) {
-    assert.equal(await resolveRanchAdminUrl(origin, async () => { throw failure; }), fallback);
+    assert.equal(await resolveRanchAdminUrl(origin, 'fixture-token', async () => { throw failure; }, identity), expected);
   }
-  assert.equal(await resolveRanchAdminUrl(origin, async () => envelope(1)), ranchAdminUrl(origin, envelope(1).deviceId));
+  assert.equal(calls, 7);
+  assert.equal(await resolveRanchAdminUrl(origin, 'fixture-token', async () => envelope(1), identity), expected);
+  assert.equal(calls, 7, 'cached identity should open the exact ranch without a cloud call');
   let reads = 0;
   for (const bad of ['http://cloud.example', 'https://token@cloud.example', 'https://cloud.example/?token=fixture-token']) {
-    await assert.rejects(resolveRanchAdminUrl(bad, async () => { reads++; }));
+    await assert.rejects(resolveRanchAdminUrl(bad, 'fixture-token', async () => { reads++; }, identity));
   }
   assert.equal(reads, 0, 'invalid origins must be rejected before discovery');
+});
+
+test('identity discovery rejects invalid or revoked credentials, malformed responses and redirects without leaking response content', async () => {
+  const origin = 'https://cloud.example';
+  for (const token of [undefined, '', '  ', 'a'.repeat(513), 'fixture\r\ntoken']) {
+    await assert.rejects(fetchRanchIdentity(origin, token, () => { assert.fail('invalid token was sent'); }), /Ingresa el token/);
+  }
+  for (const status of [401, 403]) await assert.rejects(fetchRanchIdentity(origin, 'fixture-token', async () => new Response('', { status })), /no corresponde/);
+  for (const status of [302, 404, 500]) await assert.rejects(fetchRanchIdentity(origin, 'fixture-token', async () => new Response('', { status })), /no pudo identificar/);
+  for (const response of [Response.json({}), Response.json({deviceId:['01999999-9999-7999-8999-999999999999']}),
+    new Response('test-private-response-not-to-display'), new Response('x'.repeat(1025)), new Response(null)]) {
+    await assert.rejects(fetchRanchIdentity(origin, 'fixture-token', async () => response), error => {
+      assert.equal(error.message, 'La nube devolvió una identificación inválida para este servidor.'); return true;
+    });
+  }
+  await assert.rejects(fetchRanchIdentity(origin, 'fixture-token', async () => { throw new Error('redirect or network failure'); }), /Revisa internet/);
+  await assert.rejects(resolveRanchAdminUrl(origin, 'revoked-fixture', async () => ({revision:0}), async () => new Response('', {status:401})), /no corresponde/);
 });

@@ -229,7 +229,7 @@ export function mountRanchConfiguration({ api, onPublished }) {
   };
   select.onchange = () => {
     if (dirty && !confirm(t('¿Descartar los cambios sin publicar?'))) { select.value = id; return; }
-    const url = new URL(location.href); url.searchParams.set('server', select.value); url.searchParams.delete('chooseServer'); url.hash = 'configuration';
+    const url = new URL(location.href); url.searchParams.set('server', select.value); url.hash = 'configuration';
     history.replaceState(null, '', url); load(select.value); onPublished(select.value);
   };
   document.getElementById('configuration-reload').onclick = () => {
@@ -239,18 +239,8 @@ export function mountRanchConfiguration({ api, onPublished }) {
   window.addEventListener('beforeunload', event => { if (dirty) { event.preventDefault(); event.returnValue = ''; } });
   setInterval(() => { if (!document.hidden && !busy) refreshStatus(); }, 10000);
   return { setServers(servers) {
-    const params = new URL(location.href).searchParams;
-    const chooseServer = params.get('chooseServer') === '1' && !params.get('server') && !id;
-    const selected = id || params.get('server') || (!chooseServer && servers[0]?.id) || '';
+    const selected = id || new URL(location.href).searchParams.get('server') || servers[0]?.id || '';
     select.replaceChildren(...servers.map(s => { const o = el('option', s.name); o.value = s.id; return o; }));
-    if (chooseServer) {
-      const placeholder = el('option', t('Selecciona un galpón…')); placeholder.value = ''; placeholder.disabled = true;
-      select.prepend(placeholder); select.value = ''; form.hidden = true;
-      status.textContent = servers.length
-        ? t('Este Mac aún no tiene una configuración remota disponible. Selecciona el galpón que quieres configurar.')
-        : t('Selecciona o crea un servidor del galpón.');
-      return;
-    }
     if (!servers.some(s => s.id === selected)) { form.hidden = true; status.textContent = t('Selecciona o crea un servidor del galpón.'); return; }
     select.value = selected;
     if (!id) load(selected);

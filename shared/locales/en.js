@@ -1,7 +1,8 @@
 // Built-in interface copy only. Never translate ranch-authored labels or record snapshots.
 export default {
-  "Selecciona un galpón…": "Select a barn…",
-  "Este Mac aún no tiene una configuración remota disponible. Selecciona el galpón que quieres configurar.": "This Mac does not have a remote configuration available yet. Select the barn you want to configure.",
+  "La nube devolvió una identificación inválida para este servidor.": "The cloud returned an invalid identity for this server.",
+  "La nube no pudo identificar este servidor. Reintenta más tarde.": "The cloud could not identify this server. Try again later.",
+  "No se pudo conectar con la nube. Revisa internet e inténtalo de nuevo.": "Could not connect to the cloud. Check your internet connection and try again.",
   "Falta el enlace de invitación o recuperación. Abre el enlace completo del correo o solicita uno nuevo.": "The invitation or recovery link is missing. Open the complete link from your email or request a new one.",
   "Las contraseñas no coinciden.": "The passwords do not match.",
   "Contraseña guardada. Las sesiones anteriores se cerraron. Ahora inicia sesión con tu correo y esta contraseña.": "Password saved. Previous sessions have been closed. Sign in with your email and this password.",

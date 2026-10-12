@@ -89,6 +89,12 @@ response size before parsing. Tokens never enter admin links or LAN responses.
 Cached versions survive revocation for offline counting. See
 [RANCH_CONFIGURATION.md](RANCH_CONFIGURATION.md) for retention and ownership.
 
+`GET /api/server/identity` uses the same device authentication and server-role
+boundary to return only the authenticated server's ID, even without a published
+manifest. It ignores supplied server selectors and sends `Cache-Control: no-store`.
+The Mac sends its token only in the HTTPS authorization header, rejects redirects,
+and bounds/validates the response before constructing a credential-free admin URL.
+
 Ranch telemetry, browsing, mutation, and history endpoints require the existing
 personal admin session (legacy bearer only before first-owner activation). Phone device tokens
 cannot use them or pull the barn revision feed. Remote writes inherit the exact

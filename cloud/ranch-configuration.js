@@ -37,6 +37,11 @@ function validate(input) {
 }
 
 export function registerRanchConfiguration(app, { pool, adminAuth, deviceAuth }) {
+  app.get('/api/server/identity', deviceAuth, handler(async (req, res) => {
+    if (req.device.role !== 'server') fail(403, 'Se requiere un token de servidor.');
+    // Identity belongs to the authenticated token, even before a manifest exists.
+    res.set('Cache-Control', 'no-store').json({ deviceId: req.device.id });
+  }));
   app.get('/api/admin/ranches/:id/configuration', adminAuth, handler(async (req, res) => {
     const device = await server(pool, req.params.id);
     const row = await current(pool, device.id);

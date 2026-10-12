@@ -12,8 +12,7 @@ else if (screen === 'configuration') {
   const refresh = async () => {
     const id = new URL(location.href).searchParams.get('server');
     const info = await api('GET', `/api/admin/ranch${id ? `?server=${encodeURIComponent(id)}` : ''}`);
-    ui.setServers(info.servers);
-    updateNavigation(id || (new URL(location.href).searchParams.get('chooseServer') === '1' ? null : info.selectedId));
+    ui.setServers(info.servers); updateNavigation(id || info.selectedId);
   };
   const ui = mountRanchConfiguration({ api, onPublished: refresh });
   try { await refresh(); } catch (e) { $('configuration-error').textContent = errorText(e.message); }

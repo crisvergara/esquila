@@ -420,7 +420,7 @@ function buildTray() {
 
 async function openRanchAdmin() {
   try {
-    const url = await resolveRanchAdminUrl(activeConfig.cloudSyncUrl, async () => {
+    const url = await resolveRanchAdminUrl(activeConfig.cloudSyncUrl, activeConfig.cloudSyncToken, async () => {
       const response = await fetch(`${SERVER_ORIGIN}/api/configuration`, { signal: AbortSignal.timeout(3000) });
       if (!response.ok) throw new Error('Local configuration unavailable');
       return response.json();

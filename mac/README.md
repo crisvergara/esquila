@@ -26,9 +26,10 @@ names on their first configuration sync unless an administrator already
 published settings. Choose **Administrar este galpón en la nube…** in the sheep
 menu to edit modes, colors, stations, tag formats and surveys for this exact server.
 The browser uses the normal admin login; the menu link contains no credential.
-If the Mac has not downloaded its configuration yet, this shortcut opens a ranch
-selector instead of blocking access with an error. Choose the correct ranch after
-signing in. It also works while the local barn process is restarting. The separate
+If the Mac has not downloaded its configuration yet, this shortcut uses its saved
+server token to identify and open the correct ranch automatically. It also works
+while the local barn process is restarting; identity lookup needs internet, but
+never downloads or changes ranch settings. The separate
 **Configuración…** menu opens local settings even without a remote manifest.
 See [remote configuration](../docs/RANCH_CONFIGURATION.md) for delivery status,
 retiring options and historical station names. Standalone, unregistered installs

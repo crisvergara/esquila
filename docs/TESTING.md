@@ -43,7 +43,9 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
   catch-up, malformed metadata isolation, and retained settings after revocation;
 - Mac enrollment preview, required review before saving, invalid token feedback,
   HTTPS/redirect/size validation, credential-free per-server admin links, and
-  explicit ranch selection after login when no local manifest is available;
+  token-bound ranch discovery without a local/published manifest, login preserving
+  that exact ranch, rejected phone/revoked tokens, and malformed/oversized identity
+  responses that never expose response content;
 - the barn health endpoint accepts a non-loopback IPv4 connection, not just localhost;
 - eight tagger tabs plus a monitor in one browser can navigate, submit counts,
   receive mode changes, and recover from offline status without exhausting HTTP
