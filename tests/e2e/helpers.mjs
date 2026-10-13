@@ -20,12 +20,12 @@ export async function waitFor(predicate, {
   throw new Error(`Timed out waiting for ${description}${lastError ? `: ${lastError.message}` : ""}`);
 }
 
-export function startNodeService(name, script, { cwd, env }) {
+export function startNodeService(name, script, { cwd, env, ipc = false }) {
   const logs = [];
   const child = spawn(process.execPath, [script], {
     cwd,
     env: { ...process.env, ...env },
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", "pipe", "pipe", ...(ipc ? ["ipc"] : [])],
   });
   const capture = (stream, prefix) => stream.on("data", (chunk) => {
     const line = `${prefix}${chunk}`;
@@ -48,14 +48,12 @@ export async function waitForHealth(baseUrl, service) {
 }
 
 export async function stopService(service) {
-  if (!service || service.child.exitCode !== null) return;
-  service.child.kill("SIGTERM");
+  if (!service || service.child.exitCode !== null || service.child.signalCode !== null) return;
   const exited = new Promise((resolve) => service.child.once("exit", resolve));
-  const timeout = delay(5_000).then(() => "timeout");
-  if ((await Promise.race([exited, timeout])) === "timeout") {
-    service.child.kill("SIGKILL");
-    await exited;
-  }
+  // Leave room for the barn's five-second final sync deadline.
+  const timeout = setTimeout(() => service.child.kill("SIGKILL"), 7_000);
+  service.child.kill("SIGTERM");
+  try { await exited; } finally { clearTimeout(timeout); }
 }
 
 export async function jsonRequest(url, { token, method = "GET", body, raw } = {}) {
