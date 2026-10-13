@@ -1,6 +1,6 @@
 import { translate, normalizeLanguage, translateError } from '../shared/i18n.js';
 const t = (source, ...values) => translate(activeConfig?.language, source, ...values);
-import { app, autoUpdater, dialog, Notification, BrowserWindow, ipcMain, Menu, nativeImage, powerSaveBlocker, safeStorage, shell, Tray } from "electron";
+import { app, autoUpdater, dialog, Notification, BrowserWindow, ipcMain, Menu, nativeImage, powerMonitor, powerSaveBlocker, safeStorage, shell, Tray } from "electron";
 import Bonjour from "bonjour-service";
 import { spawn } from "node:child_process";
 import { appendFile, chmod, mkdir, readFile, writeFile } from "node:fs/promises";
@@ -11,6 +11,7 @@ import { createUpdater, verifyInstaller } from "./updater.js";
 import { stageNativeUpdate } from "./native-update.js";
 import { loadLocalPage } from "./local-page.js";
 import { keepServerAwake } from "./server-power.js";
+import { watchSyncLifecycle } from "./sync-lifecycle.js";
 import { cloudOrigin, diagnoseRanchConnection, fetchRanchManifest, ranchAdminUrl, resolveRanchAdminUrl } from './ranch-connection.js';
 
 const sourceRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -40,6 +41,8 @@ let updateWindow;
 let installingUpdate = false;
 let nativeInstallRequested = false;
 let downloadInProgress = false;
+let stoppingServer;
+let quitPending = false;
 
 const dataDir = () => app.getPath("userData");
 const configPath = () => path.join(dataDir(), "config.json");
@@ -82,7 +85,7 @@ async function writeConfig(config) {
 }
 
 function startServer(config) {
-  if (serverProcess) return;
+  if (serverProcess || stoppingServer || quitting) return;
   activeConfig = config;
   serverProcess = spawn(process.execPath, [serverPath()], {
     cwd: dataDir(),
@@ -95,7 +98,7 @@ function startServer(config) {
       CLOUD_APP_URL: config.cloudAppUrl,
       ESQUILA_INITIAL_MANIFEST: config.initialManifest ? JSON.stringify(config.initialManifest) : '',
     },
-    stdio: ["ignore", "pipe", "pipe"],
+    stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
   serverProcess.stdout.on("data", (data) => log(`[server] ${data}`.trim()));
   serverProcess.stderr.on("data", (data) => log(`[server:error] ${data}`.trim()));
@@ -107,13 +110,20 @@ function startServer(config) {
   });
 }
 
+function requestCloudSync() {
+  if (quitting || !serverProcess?.connected) return;
+  serverProcess.send({ type: 'sync-now' }, error => {
+    if (error) log('Cloud sync trigger could not reach the barn process; periodic retry remains enabled.');
+  });
+}
+
 async function stopServer() {
+  if (stoppingServer) return stoppingServer;
   if (!serverProcess) return;
   const child = serverProcess;
   serverProcess = undefined;
   suppressServerRestart = true;
-  child.kill("SIGTERM");
-  await new Promise((resolve) => {
+  stoppingServer = new Promise((resolve) => {
     const timeout = setTimeout(() => {
       child.kill("SIGKILL");
       resolve();
@@ -122,7 +132,9 @@ async function stopServer() {
       clearTimeout(timeout);
       resolve();
     });
+    child.kill("SIGTERM");
   });
+  try { await stoppingServer; } finally { stoppingServer = undefined; }
 }
 
 async function restartServer(config) {
@@ -558,6 +570,10 @@ app.whenReady().then(async () => {
   const config = await readConfig();
   keepServerAwake(app, powerSaveBlocker);
   startServer(config);
+  watchSyncLifecycle({ app, BrowserWindow, ipcMain, powerMonitor, sourceRoot,
+    requestSync: requestCloudSync,
+    onError: () => log('Connectivity observer could not load; periodic sync remains enabled.'),
+  });
   try {
     await waitForServer();
   } catch (error) {
@@ -599,8 +615,10 @@ app.on("activate", async () => {
 app.on("window-all-closed", () => {});
 app.on("before-quit", (event) => {
   stopAdvertisingRanchServer();
-  if (serverProcess) {
+  if (serverProcess || stoppingServer) {
     event.preventDefault();
+    if (quitPending) return;
+    quitPending = true;
     quitting = true;
     stopServer().finally(() => app.exit(0));
   }

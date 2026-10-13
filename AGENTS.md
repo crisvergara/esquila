@@ -79,6 +79,11 @@ can be maintained without turning this file into a second README.
     separately from the database. Account/mail failures must not block local counting
     or change device credentials. Never log or commit passwords, links or email payloads.
 
+13. **Lifecycle sync is best effort and bounded.** Startup and Mac connectivity,
+    wake, reopen and window-close hints request serial sync attempts. Quitting
+    allows a short final attempt; neither offline status nor shutdown failure
+    may discard durable pending writes or make counting depend on the cloud.
+
 ## Working agreement for future sessions
 
 Before editing:

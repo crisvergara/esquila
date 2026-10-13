@@ -1,5 +1,6 @@
 // Built-in interface copy only. Never translate ranch-authored labels or record snapshots.
 export default {
+  "El servidor se está cerrando. Vuelve a intentarlo.": "The server is shutting down. Please try again.",
   "Se agotó el tiempo de espera de la conexión con la nube. Reintenta. [CLOUD_TIMEOUT]": "The cloud connection timed out. Try again. [CLOUD_TIMEOUT]",
   "No se pudo resolver la dirección de la nube. Revisa el DNS o prueba otra red. [CLOUD_DNS]": "Could not resolve the cloud address. Check DNS or try another network. [CLOUD_DNS]",
   "No se pudo verificar la conexión segura. Revisa la fecha del Mac y los certificados de la red. [CLOUD_TLS]": "Could not verify the secure connection. Check the Mac’s date and the network’s certificates. [CLOUD_TLS]",
