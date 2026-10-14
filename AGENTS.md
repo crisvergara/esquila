@@ -79,6 +79,11 @@ can be maintained without turning this file into a second README.
     separately from the database. Account/mail failures must not block local counting
     or change device credentials. Never log or commit passwords, links or email payloads.
 
+13. **Reports preserve historical meaning.** Record reports cover every matching
+    live shearing event across pages and exclude tombstones. Survey aggregates use
+    saved question/answer snapshots, keep renamed wording separate, and distinguish
+    skipped answers from questions never asked. Local reports remain usable offline.
+
 ## Working agreement for future sessions
 
 Before editing:

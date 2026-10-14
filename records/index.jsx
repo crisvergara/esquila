@@ -1,3 +1,6 @@
+import { ranchDay } from '../shared/ranchdate.js';
+import { renderRecordReport } from '../shared/record-report-view.js';
+import '../shared/record-report.css';
 import LanguagePicker from '../shared/LanguagePicker.jsx';
 import { t, errorText, locale } from '../shared/browser-language.js';
 import { findMode, modeChoices, recordedMode, editableMode, recordTypeForMode } from '../shared/modes.js';
@@ -11,12 +14,22 @@ const blank = { tag: '', station: 1, type: 'oveja', color: 'none' };
 const stamp = value => new Intl.DateTimeFormat(locale, { timeZone: 'America/Santiago', dateStyle: 'short', timeStyle: 'medium' }).format(new Date(value));
 const savedAttempt = () => { try { return JSON.parse(localStorage.getItem('record-attempt')); } catch { return null; } };
 
+const initialFilters = () => {
+  const query = new URLSearchParams(location.search);
+  return { tag: query.get('tag') || '', day: query.get('day') || '', limit: query.get('limit') || '50', offset: query.get('offset') || '0', report: query.get('report') === '1' ? '1' : '' };
+};
+function Report({ report, names }) {
+  const ref = useRef();
+  useEffect(() => { renderRecordReport(ref.current, report, { t, locale, stationName: station => `${station} · ${names[station - 1]?.name || t('Sin nombre')}` }); }, [report, names]);
+  return <div ref={ref} />;
+}
 function Records() {
   const [data, setData] = useState(null);
   const refreshSequence = useRef(0);
   const originalRecord = useRef(null);
   const [names, setNames] = useState([]);
-  const [filter, setFilter] = useState('');
+  const [filters, setFilters] = useState(initialFilters);
+  const [loading, setLoading] = useState(false);
   const [draft, setDraft] = useState(null);
   const [attempt, setAttempt] = useState(savedAttempt);
   const [busy, setBusy] = useState(false);
@@ -35,17 +48,28 @@ function Records() {
     return { type, color: schema?.tagSchema?.colors.find(c => c.active !== false)?.value || 'none',
       survey: { schemaVersion: 1, questions, responses: defaultResponses(questions) }, surveyResponses: defaultResponses(questions) };
   };
+  function setFilter(key, value) {
+    setFilters(current => ({ ...current, ...(!['offset', 'report'].includes(key) ? { offset: '0' } : {}), [key]: value }));
+  }
   async function refresh() {
     const sequence = ++refreshSequence.current;
+    setLoading(true);
     try {
-      const [records, shearers] = await Promise.all([fetch(`/api/records?tag=${encodeURIComponent(filter)}`), fetch('/shearers')]);
-      if (!records.ok || !shearers.ok) throw new Error();
+      const [records, shearers] = await Promise.all([fetch(`/api/records?${new URLSearchParams(filters)}`), fetch('/shearers')]);
+      if (!records.ok) { const failure = await records.json().catch(() => ({})); throw new Error(failure.error || ''); }
+      if (!shearers.ok) throw new Error();
       const [nextData, nextNames] = await Promise.all([records.json(), shearers.json()]);
       if (sequence !== refreshSequence.current) return;
       setData(nextData); setNames(nextNames); setLoadError('');
-    } catch { if (sequence !== refreshSequence.current) return; setLoadError(t('Sin conexión con el servidor del galpón. Los datos pueden estar desactualizados.')); }
+      const query = new URLSearchParams(location.search);
+      for (const [key, value] of Object.entries({ ...filters, offset: String(nextData.offset) })) { if (value && !(key === 'offset' && value === '0')) query.set(key, value); else query.delete(key); }
+      history.replaceState(null, '', `${location.pathname}?${query}`);
+      if (Number(filters.offset) !== nextData.offset) setFilters(current => ({ ...current, offset: String(nextData.offset) }));
+    } catch (failure) { if (sequence !== refreshSequence.current) return; setLoadError(failure.message === 'Filtros inválidos.' ? errorText(failure.message) : t('Sin conexión con el servidor del galpón. Los datos pueden estar desactualizados.')); }
+    finally { if (sequence === refreshSequence.current) setLoading(false); }
   }
-  useEffect(() => { refresh(); const timer = setInterval(refresh, 5000); return () => clearInterval(timer); }, [filter]);
+  useEffect(() => { refresh(); return () => { refreshSequence.current++; }; }, [filters]);
+  useEffect(() => { const restore = () => setFilters(initialFilters()); window.addEventListener('popstate', restore); return () => window.removeEventListener('popstate', restore); }, []);
   async function submit(payload) {
     setBusy(true); setError(''); setNotice('');
     try {
@@ -70,7 +94,7 @@ function Records() {
   const change = (key, value) => setDraft({ ...draft, [key]: value });
   return <main>
     {!editing && <LanguagePicker />}
-    <header><div><h1>{t("Registros recientes")}</h1><p>{t("Corrige los registros de esquila. Fechas y horas de Chile.")}</p></div><button disabled={!!editing || !data} onClick={() => { setDraft({ ...blank, ...defaults(recordTypeForMode(findMode(modes, data.mode) || modes.find(m => m.active !== false))), station: names.findIndex(n => n.active !== false) + 1, action: 'add', configurationRevision: data.configurationRevision }); setError(''); }}>{t("Agregar registro")}</button></header>
+    <header><div><h1>{t("Registros recientes")}</h1><p>{t("Corrige los registros de esquila. Fechas y horas de Chile.")}</p></div><button disabled={!!editing || loading || !!loadError || !data} onClick={() => { setDraft({ ...blank, ...defaults(recordTypeForMode(findMode(modes, data.mode) || modes.find(m => m.active !== false))), station: names.findIndex(n => n.active !== false) + 1, action: 'add', configurationRevision: data.configurationRevision }); setError(''); }}>{t("Agregar registro")}</button></header>
     <p role="status">{data ? t`${data.pending} registro(s) pendiente(s) de sincronizar${data.syncConfigured ? '' : t(' · Sincronización remota sin configurar')}` : t('Cargando registros…')}</p>
     {loadError && <p role="alert">{loadError} <button onClick={refresh}>{t("Actualizar")}</button></p>}
     {notice && <p className="success" role="status">{notice}</p>}
@@ -95,11 +119,28 @@ function Records() {
           <button type="submit" disabled={busy}>{draft.action === 'delete' ? t('Confirmar eliminación') : t('Guardar')}</button> <button type="button" disabled={busy} onClick={() => { setDraft(null); setError(''); }}>{t("Cancelar")}</button>
         </form>}
     </section>}
-    <label className="filter">{t("Buscar código")}<input value={filter} onChange={e => setFilter(e.target.value)} placeholder={t("Ej. A12345")} /></label>
-    <p>{t("Hasta 200 registros, del más reciente al más antiguo. Busca un código para encontrar registros anteriores.")}</p>
-    <div className="table"><table><thead><tr>{[t('Fecha (Chile)'), t('Código'), t('Estación'), t('Modo'), t('Color'), t('Encuesta'), t('Estado'), t('Acciones')].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{data?.rows.map(row => {
+    <div className="record-filters">
+      <label>{t("Buscar código")}<input disabled={!!editing} value={filters.tag} maxLength={40} onChange={e => setFilter('tag', e.target.value)} placeholder={t("Ej. A12345")} /></label>
+      <label>{t("Día (Chile)")}<input disabled={!!editing} type="date" value={filters.day} onChange={e => setFilter('day', e.target.value)} /></label>
+      <label>{t("Por página")}<select disabled={!!editing || loading} value={filters.limit} onChange={e => setFilter('limit', e.target.value)}>{[25,50,100].map(n => <option key={n}>{n}</option>)}</select></label>
+      <button disabled={!!editing} onClick={() => setFilter('day', ranchDay())}>{t("Hoy en Chile")}</button>
+      <button disabled={!!editing} onClick={() => setFilters({ tag: '', day: '', limit: '50', offset: '0', report: filters.report })}>{t("Limpiar filtros")}</button>
+      <button disabled={loading || !!editing} onClick={refresh}>{t("Actualizar")}</button>
+    </div>
+    <p>{filters.day || t('Todas las fechas')} · {t("Orden: del más reciente al más antiguo.")}</p>
+    <details className="record-report" open={filters.report === '1'} onToggle={e => { const value = e.currentTarget.open ? '1' : ''; if (value !== filters.report) setFilter('report', value); }}>
+      <summary>{t('Resumen e informes')}</summary><div aria-busy={loading}>{loadError && !loading ? <p>{loadError}</p> : <Report report={loading ? null : data?.report} names={names} />}</div>
+    </details>
+    <div className="record-pagination" aria-label={t('Paginación de registros')}>
+      <p role="status">{data && t`${data.total} registros · Mostrando ${data.rows.length ? data.offset + 1 : 0}–${data.offset + data.rows.length}.`}</p>
+      <button disabled={loading || !!editing || !!loadError || !data?.offset} onClick={() => setFilter('offset', String(Math.max(0, data.offset - data.limit)))}>{t('Anterior')}</button>
+      <span>{data && t`Página ${Math.floor(data.offset / data.limit) + 1} de ${Math.max(1, Math.ceil(data.total / data.limit))}`}</span>
+      <button disabled={loading || !!editing || !!loadError || !data || data.offset + data.rows.length >= data.total} onClick={() => setFilter('offset', String(data.offset + data.limit))}>{t('Siguiente')}</button>
+    </div>
+    <p className="records-note">{t('Los números de fila corresponden a esta lista, no al código del animal. Actualiza para ver nuevos registros y cambios de sincronización.')}</p>
+    <div className="table" role="region" aria-label={t("Tabla de registros")} tabIndex="0" aria-busy={loading}><table aria-label={t("Registros de esquila")}><thead><tr>{[t('Fila'), t('Fecha (Chile)'), t('Código'), t('Estación'), t('Modo'), t('Color'), t('Encuesta'), t('Estado'), t('Acciones')].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>{data?.rows.map((row, index) => {
       const schema = editableMode(modes, row);
-      return <tr key={row.id}><td>{stamp(row.date)}</td><td><strong>{row.tag}</strong></td><td>{names[row.station - 1]?.name || row.station}</td><td>{recordedMode(row).name}</td><td>{schema?.tagSchema?.colors.find(c => c.value === row.color)?.name || row.color}</td><td className="survey-summary">{surveyText(row.survey, t)}</td><td>{row.pending ? t('Pendiente') : t('Sincronizado')}</td><td className="actions"><button disabled={!!editing} onClick={() => { originalRecord.current = row; setDraft({ ...row, surveyResponses: { ...row.survey.responses }, action: 'edit' }); setError(''); }}>{t("Editar")}</button><button disabled={!!editing} onClick={() => { setDraft({ ...row, action: 'delete' }); setError(''); }}>{t("Eliminar")}</button></td></tr>;
+      return <tr key={row.id}><td className="row-number">{data.offset + index + 1}</td><td>{stamp(row.date)}</td><td><strong>{row.tag}</strong></td><td>{names[row.station - 1]?.name || row.station}</td><td>{recordedMode(row).name}</td><td>{schema?.tagSchema?.colors.find(c => c.value === row.color)?.name || row.color}</td><td className="survey-summary">{surveyText(row.survey, t)}</td><td>{row.pending ? t('Pendiente') : t('Sincronizado')}</td><td className="actions"><button disabled={!!editing || loading || !!loadError} onClick={() => { originalRecord.current = row; setDraft({ ...row, surveyResponses: { ...row.survey.responses }, action: 'edit' }); setError(''); }}>{t("Editar")}</button><button disabled={!!editing || loading || !!loadError} onClick={() => { setDraft({ ...row, action: 'delete' }); setError(''); }}>{t("Eliminar")}</button></td></tr>;
     })}</tbody></table></div>
     {data?.rows.length === 0 && <p>{t("No hay registros para esta búsqueda.")}</p>}
   </main>;

@@ -366,13 +366,14 @@ app.get(Object.keys(adminPaths), async (req, res) => {
   if (await adminSession(req)) res.type('html').send(renderAdminPage(adminPaths[req.path]));
   else res.sendFile(path.join(__dirname, 'login.html'));
 });
-for (const asset of ['i18n.js', 'browser-language.js', 'page-language.js', 'locales/en.js', 'locales/es.js']) {
+for (const asset of ['i18n.js', 'browser-language.js', 'page-language.js', 'record-report-view.js', 'locales/en.js', 'locales/es.js']) {
   app.get(`/shared/${asset}`, (_req, res) => res.type('application/javascript').sendFile(path.join(path.join(__dirname, '..'), 'shared', asset)));
 }
 
 for (const name of ['admin.js','admin-shell.js','admin-ui.js','admin-records.js','admin-devices.js','admin-configuration.js']) {
   app.get(`/${name}`, (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname,name)));
 }
+app.get('/shared/record-report.css', (_req, res) => res.type('text/css').sendFile(path.join(__dirname, '../shared/record-report.css')));
 app.get('/admin.css', (_req, res) => res.type('text/css').sendFile(path.join(__dirname,'admin.css')));
 app.get('/modes.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, '../shared/modes.js')));
 app.get('/surveys.js', (_req, res) => res.type('application/javascript').sendFile(path.join(__dirname, '../shared/surveys.js')));

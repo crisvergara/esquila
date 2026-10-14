@@ -20,6 +20,7 @@ import { unlink } from "node:fs/promises";
 import EventEmitter from "events";
 import { uuidv7 } from "./shared/uuidv7.js";
 import { ranchDay } from "./shared/ranchdate.js";
+import { parseLocalRecordFilters, browseLocalRecords } from './shared/local-records.js';
 import { createRanchSync } from "./shared/ranch-sync.js";
 import { validateShearingFields } from "./shared/shearing-validation.js";
 import { activeModes } from "./shared/ranch-configuration.js";
@@ -772,14 +773,13 @@ app.post("/bulk", bodyParser.json(), (req, res) => {
     });
 });
 
-const recentRecords = db.prepare(`
-  SELECT c.*, EXISTS(SELECT 1 FROM sync_outbox o WHERE o.tbl = 'counts' AND o.row_id = c.id) AS pending
-  FROM counts c WHERE c.deleted_at IS NULL AND c.tag LIKE ?
-  ORDER BY c.date DESC, c.id DESC LIMIT 200
-`);
+db.exec('CREATE INDEX IF NOT EXISTS counts_recent_live ON counts(date DESC, id DESC) WHERE deleted_at IS NULL');
 app.get("/api/records", (req, res) => {
-  const filter = typeof req.query.tag === "string" ? req.query.tag.slice(0, 40) : "";
-  res.json({ mode, rows: recentRecords.all(`%${filter}%`).map(recordWithSurvey),
+  let filters;
+  try { filters = parseLocalRecordFilters(req.query); }
+  catch (error) { return res.status(400).json({ error: error.message }); }
+  const records = browseLocalRecords(db, filters);
+  res.set('Cache-Control', 'no-store').json({ ...records, mode, rows: records.rows.map(recordWithSurvey),
     configurationRevision: ranchConfiguration.current().revision,
     pending: db.prepare("SELECT COUNT(DISTINCT row_id) AS n FROM sync_outbox WHERE tbl = 'counts'").get().n,
     syncConfigured: Boolean(process.env.CLOUD_SYNC_URL && process.env.CLOUD_SYNC_TOKEN),
