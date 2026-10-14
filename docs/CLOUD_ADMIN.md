@@ -4,7 +4,7 @@ The authenticated admin site has persistent navigation and separate pages:
 
 | Screen | Address | Purpose |
 |---|---|---|
-| Resumen | `/admin` | Shared flock totals by Chile day and station; server contact, version and pending sync |
+| Resumen | `/admin` | Selected server's totals by Chile day and station; contact, version and pending sync |
 | Registros | `/admin/records` | Recent shearing records, filters, corrections, survey answers, deletion and history |
 | Configuración | `/admin/configuration` | A server's stations, colors, tag rules and versioned surveys |
 | Dispositivos | `/admin/devices` | Enroll/revoke servers and phones; display one-time credentials |
@@ -36,28 +36,31 @@ today's Chile calendar date; **Limpiar filtros** returns to all records.
 - **Fila** numbers positions across the filtered pages (1–50, 51–100, etc.);
   these numbers are not animal identifiers and can change after a refresh.
 - **Históricos sin servidor identificado** includes older rows that cannot be
-  attributed reliably. They remain visible, editable and synchronized.
+  attributed reliably. They remain visible and editable in the cloud. Choose
+  **Servidor propietario** while editing to assign one after reviewing its history.
+  Until assigned, these records do not sync to any ranch.
 
-Server attribution is collected from the authenticated device during upload,
-not from the legacy `origin` string (often just `ranch-server`). We do not guess
-which server created old records. New manual cloud records are associated with
-the selected/reference server but are not shown as an upload until that server
-uploads them. A record can be sent by more than one server. Revocation retains
-historical attribution and marks the server as revoked.
+Every record has one permanent **owning server**, established by the authenticated
+token on its first upload, independently of the legacy `origin` string. Only that
+server can upload corrections and receive the record or its deletion. Manual
+cloud additions require an explicit owning server; cloud administrators can
+edit records belonging to any server. Once assigned, ownership cannot be changed
+in the editor. Revocation retains ownership and history; it does not transfer
+records to a newly enrolled device with the same name.
 
-This is still **one shared flock**: filtering by server does not restrict which
-records sync to other enrolled ranch servers. An acknowledgement badge refers
-to the filtered server, or all enrolled servers when none is selected. No active
-recipient means the record remains pending. The overview monitor shows shared
-counts; station names use the chosen reference server, including past dates.
+Choose **Todos los servidores** to search and report across all connected servers
+and unassigned history. This does not broaden a ranch server's sync access.
+Acknowledgement badges refer only to each record's owner. An unassigned record or
+a revoked owner remains pending. The overview monitor shows only the selected
+server's counts; station names use that server's configuration.
 
 ## Reports for the selected records
 
 Expand **Resumen e informes** on the records screen. The report uses every row
 matching the current filters, across all pages, and always excludes deleted rows.
 This differs from the overview monitor, whose totals ignore record-detail filters.
-Selecting a server limits the report to its attributed records; clearing the
-server includes the shared flock and unattributed history. The day shortcut sets
+Selecting a server limits the report to its owned records; clearing the
+server includes every server and unassigned history. The day shortcut sets
 both ends of the inclusive Chilean date range. Totals, rows and survey aggregates
 are read from one consistent database snapshot.
 
@@ -91,7 +94,7 @@ and stable identity are preserved. **Eliminar** asks for confirmation and keeps
 a tombstone. **Historial** shows readable before/after versions, including local
 corrections superseded by newer changes.
 
-A successful save means **saved in cloud**. The ranch receives it on its next
+A successful save means **saved in cloud**. The owning ranch receives it on its next
 successful sync; refresh the list to see **Recibido en galpón**. Offline ranches
 continue counting and catch up later. Interrupted saves retain the exact request
 in this browser for **Reintentar mismo cambio**, including after reload. A stale
@@ -105,10 +108,15 @@ instants. Upload attribution commits in the same transaction as the batch and
 rolls back with it. Equal/older retries do not advance upload timestamps. Manual
 cloud additions record their server context in the same mutation transaction.
 The table deliberately has no device foreign key so credential revocation does
-not erase historical information. Attribution itself needs no SQLite migration.
+not erase historical information. It records provenance, not replication permissions.
 
-The existing shearing payload, revision ordering, receipts, LWW checks, survey
-snapshots and tombstone protocol remain unchanged. The read API validates and
+The authoritative `shearing_events.owner_server_id` is immutable after assignment.
+Cloud migration uses original creation evidence, leaving ambiguous history
+unassigned. SQLite v7 archives foreign copies and their pending corrections
+before removing them locally, without deleting cloud data. See the
+[ownership rollout and recovery guide](DEPLOY.md#server-ownership-rollout).
+Revision ordering, receipts, LWW checks, survey snapshots and tombstones remain.
+The read API validates and
 bounds filters and uses parameterized SQL and a repeatable-read transaction for
 consistent totals/pages. Existing `day`, `tag`, `offset`, and `deleted=1` API
 calls remain supported; new controls add `from`, `to`, `server`, `station`,

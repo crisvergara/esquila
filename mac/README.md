@@ -68,6 +68,20 @@ another window has changed the row, cancel and reopen it before editing again.
 The editor is also available at `http://<mac-name>.local:3001/records/` on the
 trusted ranch WiFi.
 
+Each Mac syncs only the records owned by its configured server identity. Cloud
+administrators can correct them, but other ranch servers cannot see or change
+them. Use a separate device/token for each ranch; do not share one token between
+the test Mac and the working ranch.
+
+The ownership upgrade makes a SQLite v7 backup and verifies legacy records at
+the next cloud connection before uploading. Until then, old records are visible
+but read-only; new counting works offline. Foreign or unassigned copies move to
+a private recovery archive, including pending edits, without deleting cloud data.
+The records window shows a notice for verification or archived rows. An admin
+can review unassigned history in the cloud and explicitly choose its owner.
+Never change the saved token to bypass an ownership error; the database remains
+bound to its original identity. See [rollout and recovery](../docs/DEPLOY.md#server-ownership-rollout).
+
 Expand **Resumen e informes** for totals across every matching page, counts by
 station and recorded mode, and survey breakdowns. Choice questions show counts
 and percentages, numeric questions show average/minimum/maximum, and text

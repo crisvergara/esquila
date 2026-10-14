@@ -84,6 +84,10 @@ Support; do not replace those paths with repository-relative assumptions.
   avoid exposing stack traces or secrets.
 - Any count-changing path must update live monitors and remain recoverable by the
   periodic count refresh.
+- SQLite v7 marks locally created rows in the same transaction as their outbox.
+  Legacy ownership is verified before uploading; foreign copies go to the local
+  recovery archive without emitting a cloud deletion. Preserve the database's
+  cloud/server identity binding across restarts and credential edits.
 
 ### Cloud persistence and API
 
@@ -92,6 +96,10 @@ Support; do not replace those paths with repository-relative assumptions.
 - Preserve the role/table allowlist and last-write-wins condition.
 - Shearing writers acquire the transactional revision-counter lock before row
   locks. Preserve atomic revision/audit/receipt writes and commit-order cursors.
+- Device writes must match immutable `owner_server_id`, established from the
+  authenticated token for new rows. Reject the whole batch before writing when
+  any existing row is foreign or unassigned. Scope server pulls/snapshots to the
+  same identity; only cloud administrators may review across servers.
 - Barn pull applies data and cursor in one SQLite transaction without outbox
   echoes. Never overwrite an unuploaded local correction before cloud audit.
 - Keep request sizes bounded. The current sync ceiling is 20 MB because full

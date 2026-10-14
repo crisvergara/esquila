@@ -43,7 +43,8 @@ function renderRows() {
     const kind = cell(recordedMode(record).name);
     const color = ranchInfo.modes.flatMap(m => m.tagSchema?.colors || []).find(c => c.value === record.color);
     kind.append(node('small', color?.name || record.color));
-    const source = cell(record.servers.length ? record.servers.map(s => s.name + (s.revoked ? t(' (revocado)') : '')).join(', ') : t('Sin servidor identificado'));
+    const owner=record.servers.find(s=>s.id===record.owner_server_id);
+    const source = cell(owner ? owner.name + (owner.revoked ? t(' (revocado)') : '') : record.owner_server_id || t('Sin propietario: asigna un servidor al editar.'));
     if (record.origin === 'cloud-admin') source.append(node('small', t('Agregado en la nube')));
     const status = cell(''); status.append(node('span', record.pending_to_ranch ? t('Pendiente en galpón') : t('Recibido en galpón'), `badge ${record.pending_to_ranch ? 'pending' : 'received'}`));
     if (record.deleted_at) status.append(node('small',t('Eliminado'), 'badge deleted'));
@@ -85,7 +86,7 @@ async function loadRecords() {
     $('ranch-summary').textContent = t`${data.total} registros · Mostrando ${data.rows.length ? data.offset + 1 : 0}–${data.offset + data.rows.length}.`;
     $('ranch-page').textContent = t`Página ${Math.floor(data.offset / data.limit) + 1} de ${Math.max(1, Math.ceil(data.total / data.limit))}`;
     $('ranch-empty').hidden = data.rows.length > 0;
-    $('ranch-scope').textContent = filters.server && filters.server !== 'unknown' ? t('Registros enviados por este servidor o agregados para él desde la nube. Los históricos sin identificación siguen disponibles en «Todos los servidores e históricos». El rancho sigue compartiendo y sincronizando todos sus registros.') : t('Los registros antiguos no siempre identifican su servidor. Se conservan aquí sin atribuirlos a un galpón por suposición.');
+    $('ranch-scope').textContent = t('Cada registro pertenece a un solo servidor. Puedes consultar todos los servidores aquí; las correcciones llegan únicamente al propietario. Los históricos sin propietario requieren asignación.');
     $('ranch-filter-summary').textContent = filters.from || filters.to ? `${filters.from || t('Inicio')} → ${filters.to || t('Hoy')}` : t('Todas las fechas');
     $('ranch-error').textContent = '';
     controls.forEach(c => { c.disabled = false; });
@@ -101,7 +102,7 @@ async function prepareRecord(action, row = {}) {
   if (loading) return;
   try {
     if (localStorage.getItem(attemptKey)) throw new Error(t('Primero reintenta el cambio sin confirmación. Así evitamos perder una corrección.'));
-    const selected = row.servers?.find(s => s.id === filters.server && !s.revoked) || row.servers?.find(s => !s.revoked);
+    const selected = row.servers?.find(s => s.id === row.owner_server_id && !s.revoked);
     if (selected) ranchInfo = await api('GET', `/api/admin/ranch?server=${selected.id}`);
     openRecord(action, row);
   } catch (error) { $('ranch-error').textContent = errorText(error.message); }
@@ -141,7 +142,7 @@ function recordFields(row = {}) {
 }
 function openRecord(action, row = {}) {
   originalRecord = row;
-  editing = { action, ...(action === 'add' ? { configurationRevision: ranchInfo.configurationRevision } : {}), ...(ranchInfo.selectedId ? { serverId: ranchInfo.selectedId } : {}), ...(row.id ? { id: row.id, updated_at: row.updated_at } : {}) };
+  editing = { action, ...(action === 'add' ? { configurationRevision: ranchInfo.configurationRevision } : {}), ...(row.id ? { id: row.id, updated_at: row.updated_at } : {}) };
   if (localStorage.getItem(attemptKey)) { $('ranch-error').textContent = t('Primero reintenta el cambio sin confirmación.'); return; }
   $('editor-title').textContent = action === 'delete' ? t`Eliminar ${row.tag}` : action === 'add' ? t('Agregar registro') : t`Editar ${row.tag}`;
   $('editor-note').textContent = action === 'delete' ? t('El registro se eliminará de los conteos. El cambio llegará al galpón cuando vuelva a conectarse.') : t('Los cambios se guardan en la nube y llegan al galpón al sincronizar. Al editar se conserva la fecha original.');
@@ -149,6 +150,12 @@ function openRecord(action, row = {}) {
   options('record-station', stations, String(row.station || 1));
   $('record-tag').value = row.tag || ''; options('record-type', modeChoices(ranchInfo.modes, row, t), row.type); recordFields(row);
   for (const el of $('record-form').querySelectorAll('input, select')) el.disabled = action === 'delete';
+  const owners=ranchInfo.servers.map(s=>({value:s.id,name:s.name}));
+  if(row.owner_server_id&&!owners.some(s=>s.value===row.owner_server_id)) owners.push({value:row.owner_server_id,name:(row.servers.find(s=>s.id===row.owner_server_id)?.name||row.owner_server_id)+t(' (revocado)')});
+  options('record-owner',[{value:'',name:t('Sin propietario: solo en la nube')},...owners],row.owner_server_id||(action==='add'?ranchInfo.selectedId:''));
+  $('record-owner').required=action==='add';
+  $('record-owner').disabled=!!row.owner_server_id||action==='delete';
+  $('record-save').disabled=false;
   $('record-save').textContent = action === 'delete' ? t('Confirmar eliminación') : t('Guardar');
   $('editor-error').textContent = ''; $('ranch-editor').showModal();
 }
@@ -202,11 +209,25 @@ $('record-form').addEventListener('submit', event => {
   if (editing.action !== 'delete') for (const key of ['tag','station','type','color']) fields[key] = $(`record-${key}`).value;
   if (editing.action !== 'delete') fields.surveyResponses = { ...recordSurvey.responses };
   const intent = { ...editing, ...fields };
+  if ($('record-owner').value) intent.serverId=$('record-owner').value;
   const prior = JSON.parse(localStorage.getItem(attemptKey) || 'null');
   const same = prior && JSON.stringify({ ...prior, submissionId: undefined }) === JSON.stringify(intent);
   sendRecord({ ...intent, submissionId: same ? prior.submissionId : crypto.randomUUID() });
 });
 $('record-type').addEventListener('change', () => recordFields(editing.action === 'edit' ? { ...(originalRecord.type === $('record-type').value ? originalRecord : {}), survey: recordSurvey } : {}));
+$('record-owner').onchange=async()=>{
+  if (!$('record-owner').value || editing.action!=='add') return;
+  $('record-save').disabled=true;
+  $('record-owner').disabled=true;
+  try {
+    ranchInfo=await api('GET',`/api/admin/ranch?server=${encodeURIComponent($('record-owner').value)}`);
+    editing.configurationRevision=ranchInfo.configurationRevision;
+    options('record-type',modeChoices(ranchInfo.modes,null,t));
+    options('record-station',selectedShearers().map((s,i)=>({value:String(i+1),name:stationName(i+1),active:s.active})).filter(s=>s.active!==false));
+    recordFields(); $('editor-error').textContent=''; $('record-save').disabled=false;
+  } catch(error) { $('editor-error').textContent=errorText(error.message); }
+  finally { $('record-owner').disabled=false; }
+};
 $('record-cancel').addEventListener('click', () => $('ranch-editor').close());
 $('history-close').addEventListener('click', () => $('ranch-history').close());
 $('ranch-add').addEventListener('click', () => ranchInfo && openRecord('add'));

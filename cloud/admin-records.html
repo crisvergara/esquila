@@ -24,12 +24,13 @@
 <div class="scroll" role="region" aria-label="Tabla de registros" tabindex="0"><table aria-label="Registros de esquila"><thead><tr><th>Fila</th><th>Esquila / carga (Chile)</th><th>Código</th><th>Estación</th><th>Modo / color</th><th>Servidor</th><th>Sincronización</th><th>Acciones</th></tr></thead><tbody id="ranch-rows"></tbody></table></div>
 <div id="ranch-empty" class="empty-state" hidden><h3>No hay registros con estos filtros</h3><p>Prueba con todas las fechas o incluye los históricos sin servidor identificado. Los conteos sin internet aparecerán después de sincronizar.</p></div>
 <div class="pagination"><button id="ranch-prev" class="quiet">Anterior</button><span id="ranch-page"></span><button id="ranch-next" class="quiet">Siguiente</button></div>
-<p class="muted">La tabla y las confirmaciones se actualizan al buscar o guardar, para que nuevas cargas no muevan los registros mientras los revisas. La confirmación indica recepción por el servidor elegido; sin filtro, por todos los servidores inscritos.</p></section>
+<p class="muted">La tabla se actualiza al buscar o guardar. Cada registro se sincroniza únicamente con su servidor propietario. La confirmación indica recepción por ese servidor.</p></section>
   <dialog id="ranch-editor" aria-labelledby="editor-title">
     <h2 id="editor-title">Registro de esquila</h2>
     <p id="editor-note"></p>
     <form id="record-form">
       <div class="row">
+        <label>Servidor propietario<select id="record-owner" aria-label="Servidor propietario"></select></label>
         <label>Código<input id="record-tag" required maxlength="20"></label>
         <label>Estación<select aria-label="Estación" id="record-station"></select></label>
         <label>Modo<select aria-label="Modo" id="record-type"></select></label>
