@@ -787,7 +787,13 @@ test('a saved vaccination PWA never replaces health checks or API navigation wit
     expect(identity.fromServiceWorker()).toBe(false);
     expect(identity.status()).toBe(401);
     await context.setOffline(true);
-    await expect(page.goto(`${cloudBase}/healthz`)).rejects.toThrow(/net::ERR_/);
+    // Chromium can reject goto before its internal error page commits (notably
+    // on Linux). Wait for that navigation before opening the offline app shell,
+    // otherwise the late error-page commit can interrupt the next goto.
+    await Promise.all([
+      page.waitForEvent('framenavigated', { predicate: frame => frame === page.mainFrame() }),
+      expect(page.goto(`${cloudBase}/healthz`)).rejects.toThrow(/net::ERR_/),
+    ]);
     // The actual app shell still works offline after excluding diagnostics.
     const offline = await page.goto(`${cloudBase}/`);
     expect(offline.fromServiceWorker()).toBe(true);

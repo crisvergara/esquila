@@ -221,7 +221,14 @@ rollout constraints.
 ## Barn record corrections
 
 The Mac menu opens `/records/`, a LAN-only editor backed by `GET/POST
-/api/records`. It lists the latest 200 live records and supports code filtering.
+/api/records`. It pages all live records in stable date/ID descending order,
+with partial-code and Chile-calendar-day filters. The UI defaults to 50 rows
+and offers 25/50/100; the API retains its legacy 200-row default. An additive
+partial date/ID index supports recent-page reads without a schema-version change.
+UTC range boundaries reflect actual Chilean days, including 23/25-hour DST days.
+Page, count and optional report queries run in one SQLite read transaction.
+Numbered rows show the position across filtered pages. Refresh is explicit
+(also after filters/saves) to keep incoming scans from moving rows during review.
 Adds, edits, and deletes run in one SQLite transaction with their outbox entry
 and a durable `record_mutations` receipt (additive schema version 2). Receipts
 bind a submission ID to the exact mutation; replay returns the previous result,
@@ -254,6 +261,21 @@ across all dates; the original API's default day remains compatible. Monitor
 totals ignore code/detail filters and exclude deleted records. Both monitors use
 `America/Santiago`. Filter/sort/page state is bookmarkable. The browser refreshes
 on search/save rather than shifting records underneath an ongoing review.
+
+Both record APIs accept `report=1` to aggregate all matching live events, not
+only the page. Shared SQL/assembly logic produces event totals, current-station
+counts, recorded-mode counts and survey breakdowns in the same read snapshot.
+Cloud queries retain the existing authenticated filters and repeatable-read
+transaction. Reports never write records or depend on current survey manifests:
+group identity includes recorded mode ID/name, question ID/type/wording, and
+answer IDs/labels. Renamed snapshots stay separate; validation flags/order alone
+do not split an answer. Missing answers belong to that question's denominator;
+unasked questions do not. Text values are not enumerated. SQL aggregates numeric
+answers and choices before returning a bounded set; over 2,000 saved groups
+produces a visible survey-limit error, not misleading partial survey counts.
+This is read-only presentation; outbox, receipts, conflict rules and sync
+payloads are unchanged. The cloud gets reports on deployment; local browsing
+and reports require a Mac update and remain available without cloud connectivity.
 
 Cloud-only `shearing_record_servers` metadata attributes uploads to authenticated
 server UUIDs in the same transaction as each upload batch, independently of

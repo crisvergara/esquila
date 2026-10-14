@@ -1,4 +1,5 @@
-import { t, errorText } from '/shared/browser-language.js';
+import { renderRecordReport } from '/shared/record-report-view.js';
+import { t, errorText, locale } from '/shared/browser-language.js';
 import { modeChoices, modeName, recordTypeForMode, recordedMode, editableMode } from '/modes.js';
 import { questionsFor, defaultResponses, surveyText } from '/surveys.js';
 import { $, api, cell, node, button, options, dateText } from '/admin-ui.js';
@@ -10,7 +11,7 @@ const attemptKey = 'esquila-admin-record-attempt';
 const selectedShearers = () => ranchInfo?.configuration?.shearers || ranchInfo?.servers.find(s => s.id === ranchInfo.selectedId)?.information?.shearers || [];
 const stationName = station => `${station}: ${selectedShearers()[station - 1]?.name || t('Sin nombre')}`;
 const keys = ['server','tag','sort','from','to','station','type','color','sync','limit'];
-let filters = { day: '', server: '', tag: '', sort: 'newest', from: '', to: '', station: '', type: '', color: '', sync: '', deleted: '0', limit: '50', offset: '0' };
+let filters = { day: '', server: '', tag: '', sort: 'newest', from: '', to: '', station: '', type: '', color: '', sync: '', deleted: '0', limit: '50', offset: '0', report: '' };
 function restoreFilters() {
   const query = new URL(location.href).searchParams;
   for (const key of Object.keys(filters)) if (query.has(key)) filters[key] = query.get(key);
@@ -20,18 +21,22 @@ function restoreFilters() {
     if (input.tagName === 'SELECT' && filters[key] && ![...input.options].some(o => o.value === filters[key])) input.add(new Option(filters[key], filters[key]));
     input.value = filters[key];
   }
+  $('ranch-reports').open = filters.report === '1';
+  $('ranch-day').value = filters.from === filters.to ? filters.from : '';
   $('ranch-deleted').checked = filters.deleted === '1';
   $('record-filter-details').open = ['from','to','station','type','color','sync'].some(k => filters[k]) || filters.deleted === '1';
 }
 function saveUrl(push = false) {
   const query = new URLSearchParams(Object.entries(filters).filter(([key, value]) => value && key !== 'day' && !(key === 'offset' && value === '0') && !(key === 'deleted' && value === '0')));
+  const language = new URLSearchParams(location.search).get('lang');
+  if (['en', 'es'].includes(language)) query.set('lang', language);
   window.history[push ? 'pushState' : 'replaceState'](null, '', `/admin/records${query.size ? `?${query}` : ''}`);
   updateNavigation(filters.server);
 }
-function readFilters() { for (const key of keys) filters[key] = $(`ranch-${key}`).value; filters.deleted = $('ranch-deleted').checked ? '1' : '0'; filters.offset = '0'; }
+function readFilters() { for (const key of keys) filters[key] = $(`ranch-${key}`).value; filters.deleted = $('ranch-deleted').checked ? '1' : '0'; filters.offset = '0'; $('ranch-day').value = filters.from === filters.to ? filters.from : ''; }
 function renderRows() {
   $('ranch-rows').replaceChildren();
-  for (const record of currentRows) {
+  for (const [index, record] of currentRows.entries()) {
     const row = node('tr'); row.dataset.id = record.id;
     const date = cell(dateText(record.date)); date.append(node('small', record.last_uploaded_at ? t`Carga: ${dateText(record.last_uploaded_at)}` : record.origin === 'cloud-admin' ? t('Agregado en la nube') : t('Carga histórica no registrada')));
     const code = cell(''); code.append(node('span', record.tag, 'record-code'));
@@ -45,8 +50,8 @@ function renderRows() {
     const actions = cell(''); const controls = node('div', null, 'record-actions');
     if (!record.deleted_at) controls.append(button(t('Editar'), () => prepareRecord('edit', record)), button(t('Eliminar'), () => prepareRecord('delete', record)));
     controls.append(button(t('Historial'), () => history(record.id))); actions.append(controls);
-    row.append(date, code, cell(filters.server === ranchInfo.selectedId ? stationName(record.station) : t`Estación ${record.station}`), kind, source, status, actions);
-    [t('Esquila / carga (Chile)'), t('Código'), t('Estación'), t('Modo / color'), t('Servidor'), t('Sincronización'), t('Acciones')].forEach((label, i) => { row.children[i].dataset.label = label; });
+    row.append(cell(Number(filters.offset) + index + 1), date, code, cell(filters.server === ranchInfo.selectedId ? stationName(record.station) : t`Estación ${record.station}`), kind, source, status, actions);
+    [t('Fila'), t('Esquila / carga (Chile)'), t('Código'), t('Estación'), t('Modo / color'), t('Servidor'), t('Sincronización'), t('Acciones')].forEach((label, i) => { row.children[i].dataset.label = label; });
     $('ranch-rows').append(row);
   }
 }
@@ -54,6 +59,7 @@ async function loadRecords() {
   const generation = ++loadGeneration;
   const requested = { ...filters };
   loading = true;
+  if (filters.report === '1') renderRecordReport($('ranch-report-content'), null, { t, locale, stationName });
   const controls = [...$('ranch-filters').querySelectorAll('input,select,button'), ...$('ranch-rows').querySelectorAll('button'), $('ranch-limit'), $('ranch-add'), $('ranch-prev'), $('ranch-next')];
   controls.forEach(c => { c.disabled = true; }); $('ranch-rows').setAttribute('aria-busy', 'true');
   try {
@@ -75,6 +81,7 @@ async function loadRecords() {
     if (filters.type && !types.has(filters.type)) types.set(filters.type, filters.type);
     options('ranch-type', [{ value: '', name: t('Todos los modos') }, ...[...types].map(([value, name]) => ({ value, name }))], filters.type);
     renderRows();
+    if (requested.report === '1') renderRecordReport($('ranch-report-content'), data.report, { t, locale, stationName: selected ? stationName : station => t`Estación ${station}` });
     $('ranch-summary').textContent = t`${data.total} registros · Mostrando ${data.rows.length ? data.offset + 1 : 0}–${data.offset + data.rows.length}.`;
     $('ranch-page').textContent = t`Página ${Math.floor(data.offset / data.limit) + 1} de ${Math.max(1, Math.ceil(data.total / data.limit))}`;
     $('ranch-empty').hidden = data.rows.length > 0;
@@ -86,6 +93,7 @@ async function loadRecords() {
   } catch (error) {
     if (generation !== loadGeneration) return;
     $('ranch-error').textContent = t`No se pudo actualizar. Los datos visibles pueden estar atrasados. ${errorText(error.message)}`;
+    if (requested.report === '1') $('ranch-report-content').textContent = $('ranch-error').textContent;
     controls.forEach(c => { c.disabled = false; }); $('ranch-prev').disabled = true; $('ranch-next').disabled = true; $('ranch-add').disabled = !ranchInfo;
   } finally { if (generation === loadGeneration) { loading = false; $('ranch-rows').removeAttribute('aria-busy'); } }
 }
@@ -203,10 +211,12 @@ $('record-cancel').addEventListener('click', () => $('ranch-editor').close());
 $('history-close').addEventListener('click', () => $('ranch-history').close());
 $('ranch-add').addEventListener('click', () => ranchInfo && openRecord('add'));
 $('ranch-filters').onsubmit = event => { event.preventDefault(); readFilters(); saveUrl(true); loadRecords(); };
+$('ranch-day').onchange = () => { $('ranch-from').value = $('ranch-day').value; $('ranch-to').value = $('ranch-day').value; readFilters(); saveUrl(true); loadRecords(); };
+$('ranch-reports').ontoggle = () => { const value = $('ranch-reports').open ? '1' : ''; if (value === filters.report) return; filters.report = value; saveUrl(true); loadRecords(); };
 $('ranch-limit').onchange = () => { readFilters(); saveUrl(true); loadRecords(); };
 $('ranch-prev').onclick = () => { filters.offset = String(Math.max(0, Number(filters.offset) - Number(filters.limit))); saveUrl(true); loadRecords(); };
 $('ranch-next').onclick = () => { filters.offset = String(Number(filters.offset) + Number(filters.limit)); saveUrl(true); loadRecords(); };
-$('ranch-reset').onclick = () => { for (const key of Object.keys(filters)) filters[key] = key === 'sort' ? 'newest' : key === 'limit' ? '50' : key === 'offset' || key === 'deleted' ? '0' : ''; window.history.pushState(null, '', '/admin/records'); restoreFilters(); loadRecords(); };
+$('ranch-reset').onclick = () => { for (const key of Object.keys(filters)) filters[key] = key === 'sort' ? 'newest' : key === 'limit' ? '50' : key === 'offset' || key === 'deleted' ? '0' : ''; saveUrl(true); restoreFilters(); loadRecords(); };
 $('ranch-today').onclick = () => { $('ranch-from').value = ranchInfo.day; $('ranch-to').value = ranchInfo.day; $('record-filter-details').open = true; readFilters(); saveUrl(true); loadRecords(); };
 window.addEventListener('popstate', () => { for (const key of Object.keys(filters)) filters[key] = key === 'sort' ? 'newest' : key === 'limit' ? '50' : key === 'offset' || key === 'deleted' ? '0' : ''; restoreFilters(); loadRecords(); });
 restoreFilters(); await loadRecords();

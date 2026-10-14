@@ -66,6 +66,13 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
 - all ranch API validation boundaries, maximum bulk payload, and idempotent retries;
 - continued counting with the cloud unavailable, followed by exact row-for-row catch-up;
 - recent-record editor additions, edits, deletion confirmations, response-loss retries across reload/restart, stale-editor rejection, offline reconciliation, and stale tombstone replay;
+- numbered local/cloud record pages beyond 200 rows, Chile day filtering and both
+  DST transitions, stable ordering and pagination after deletion, bookmarkable
+  filters, phone layouts, visible report failures, and offline reports;
+- exact SQLite/PostgreSQL report agreement across all filtered pages, server
+  scoping and authorization, deleted/empty/unasked/optional survey responses,
+  numeric zero and averages, historical question/option wording, text-only
+  rendering, and totals after synchronized survey corrections;
 - edits made during a cloud upload whose response is lost, plus durable lamb-number reservation after manual corrections and restart;
 - ranch restart safety for lamb numbering and synchronization;
 - dedicated admin screens and navigation, legacy configuration deep links, mobile
