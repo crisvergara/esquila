@@ -31,7 +31,7 @@ let tempRoot;
 let ranchDir;
 let cloudService;
 let ranchService;
-let serverToken;
+let serverToken, serverId;
 let phoneToken;
 let testDatabaseUrl;
 let testSchema;
@@ -111,7 +111,7 @@ test.beforeAll(async () => {
 
   cloudService = startCloud();
   await waitForHealth(cloudBase, cloudService);
-  serverToken = (await createDevice("Ranch E2E", "server")).token;
+  const ranchDevice = await createDevice("Ranch E2E", "server"); serverToken = ranchDevice.token; serverId = ranchDevice.id;
   phoneToken = (await createDevice("Phone E2E", "phone")).token;
   await stopService(cloudService);
   cloudService = undefined;
@@ -161,7 +161,7 @@ test("migrates a legacy ranch database once and backs it up", async () => {
   await stopService(service);
 
   const migrated = new Database(legacyPath, { readonly: true });
-  expect(migrated.pragma("user_version", { simple: true })).toBe(6);
+  expect(migrated.pragma("user_version", { simple: true })).toBe(7);
   expect(migrated.prepare("SELECT COUNT(*) AS n FROM counts").get().n).toBe(1);
   expect(migrated.prepare("SELECT COUNT(*) AS n FROM treatments").get().n).toBe(1);
   expect(migrated.prepare("SELECT COUNT(*) AS n FROM sync_outbox").get().n).toBe(2);
@@ -696,7 +696,7 @@ test("cloud admin manages shearing offline, retries lost receipts, and reconcile
   await expect(page.locator('#ranch-editor')).not.toBeVisible();
   expect((await admin('POST', '/api/admin/shearing', { ...old, action: 'edit', submissionId: crypto.randomUUID() })).response.status).toBe(409);
   expect((await listing('A99882'))[0].occurred_at).toBe(old.occurred_at);
-  const addIntent = { action: 'add', tag: 'A99883', station: 1, type: 'oveja', color: 'none', woolQuality: 'GOOD', lactation: 'idk', submissionId: crypto.randomUUID() };
+  const addIntent = { action: 'add', serverId, tag: 'A99883', station: 1, type: 'oveja', color: 'none', woolQuality: 'GOOD', lactation: 'idk', submissionId: crypto.randomUUID() };
   const [tombstone, repeated] = await Promise.all([admin('POST', '/api/admin/shearing', addIntent), admin('POST', '/api/admin/shearing', addIntent)]);
   expect(repeated.response.status).toBe(200);
   expect(repeated.data.id).toBe(tombstone.data.id);

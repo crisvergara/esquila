@@ -24,6 +24,7 @@ import { registerRanchManagement } from "./ranch-management.js";
 import { registerMacUpdates } from "./mac-updates.js";
 import { registerRanchConfiguration } from "./ranch-configuration.js";
 import { createAdminAuth } from "./admin-auth.js";
+import { migrateShearingOwnership, registerShearingOwnership } from './shearing-ownership.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const BUILD_DIR = path.join(__dirname, "..", "build-cloud");
@@ -51,6 +52,7 @@ const schema = await readFile(path.join(__dirname, "schema.sql"), "utf8");
 await pool.query(schema);
 await migrateCloudSurveys(pool);
 await migrateCloudModes(pool);
+await migrateShearingOwnership(pool);
 console.log("Schema applied");
 
 const app = express();
@@ -118,26 +120,27 @@ const deviceAuth = async (req, res, next) => {
 // --------------------------------------------------------------------------
 
 registerRanchManagement(app, { pool, adminAuth, deviceAuth });
+registerShearingOwnership(app, { pool, deviceAuth });
 registerRanchConfiguration(app, { pool, adminAuth, deviceAuth });
 
 const UPSERTS = {
   shearing_events: {
     columns: [
       "id", "tag", "station", "color", "lactation", "type",
-      "wool_quality", "occurred_at", "updated_at", "deleted_at", "origin", "survey", "mode",
+      "wool_quality", "occurred_at", "updated_at", "deleted_at", "origin", "survey", "mode", "owner_server_id",
     ],
     required: ["id", "tag", "occurred_at", "updated_at"],
     sql: `
       INSERT INTO shearing_events
-        (id, tag, station, color, lactation, type, wool_quality, occurred_at, updated_at, deleted_at, origin, survey, mode)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        (id, tag, station, color, lactation, type, wool_quality, occurred_at, updated_at, deleted_at, origin, survey, mode, owner_server_id)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
       ON CONFLICT (id) DO UPDATE SET
         tag = excluded.tag, station = excluded.station, color = excluded.color,
         lactation = excluded.lactation, type = excluded.type,
         wool_quality = excluded.wool_quality, occurred_at = excluded.occurred_at,
         updated_at = excluded.updated_at, deleted_at = excluded.deleted_at,
         origin = excluded.origin, survey = excluded.survey, mode = excluded.mode
-      WHERE excluded.updated_at > shearing_events.updated_at
+      WHERE excluded.updated_at > shearing_events.updated_at AND excluded.owner_server_id = shearing_events.owner_server_id
     `,
   },
   treatments: {
@@ -217,12 +220,19 @@ app.post("/api/sync/push", deviceAuth, express.json({ limit: "20mb" }), async (r
     // Serialize shearing writers before acquiring row locks; revision order is commit order.
     if (batches.some(b => b.table === "shearing_events" && b.rows.length)) {
       await client.query('SELECT revision FROM shearing_sync_clock WHERE singleton FOR UPDATE');
+      const rows = batches.filter(b=>b.table==='shearing_events').flatMap(b=>b.rows);
+      if (rows.some(row=>row.owner_server_id != null && row.owner_server_id !== req.device.id))
+        throw Object.assign(new Error('record ownership mismatch'),{status:403});
+      const denied = await client.query(`SELECT 1 FROM shearing_events WHERE id=ANY($1::uuid[])
+        AND owner_server_id IS DISTINCT FROM $2::uuid LIMIT 1`,[rows.map(row=>row.id),req.device.id]);
+      if (denied.rowCount) throw Object.assign(new Error('record ownership mismatch'),{status:403});
     }
     const applied = {};
     for (const batch of batches) {
       const spec = UPSERTS[batch.table];
       for (const row of batch.rows) {
         if (batch.table === 'shearing_events') {
+          row.owner_server_id = req.device.id;
           const old = (row.survey === undefined || row.survey.legacy || !row.mode || row.mode.legacy)
             ? (await client.query('SELECT type,survey,mode FROM shearing_events WHERE id=$1', [row.id])).rows[0] : null;
           row.mode = reconcileRecordedMode(row.mode, old, row);
@@ -272,6 +282,7 @@ app.post("/api/sync/push", deviceAuth, express.json({ limit: "20mb" }), async (r
     res.json({ ok: true, applied });
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
+    if (err.status===403) return res.status(403).json({error:'server cannot modify records owned by another server or awaiting ownership review'});
     console.error("sync/push failed:", err.message);
     res.status(400).json({ error: "invalid sync batch" });
   } finally {
@@ -288,9 +299,9 @@ app.get("/api/snapshot", deviceAuth, async (req, res, next) => {
       pool.query(`
         SELECT id, tag, station, color, lactation, type, wool_quality, mode,
                occurred_at, updated_at, origin
-        FROM shearing_events WHERE deleted_at IS NULL
+        FROM shearing_events WHERE deleted_at IS NULL ${req.device.role === 'server' ? 'AND owner_server_id=$1' : ''}
         ORDER BY occurred_at DESC
-      `),
+      `, req.device.role === 'server' ? [req.device.id] : []),
       pool.query(`
         SELECT id, tag, type, medication, dose, occurred_on::text AS occurred_on,
                recorded_at, updated_at, origin

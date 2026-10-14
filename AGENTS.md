@@ -35,8 +35,12 @@ can be maintained without turning this file into a second README.
    submission identifiers, last-write-wins timestamps, and tombstones make replay
    safe. Never acknowledge a write before its durable local transaction commits.
 4. **Data ownership stays explicit.** The barn SQLite database and authenticated
-   cloud administrators may originate and correct shearing events. Shearing
-   changes synchronize in both directions with durable cursors and tombstones.
+   cloud administrators may originate and correct shearing events.
+   Each shearing event has one immutable owning server. Only that authenticated
+   server may push it or receive its cloud corrections/tombstones; admin users
+   may browse and correct records across servers. Ownership never comes from
+   a client-provided origin string. Unproven legacy ownership requires admin review.
+   Changes synchronize in both directions with durable cursors and tombstones.
    The remote PostgreSQL database is the shared flock view and system of record
    for treatments. Phone-role devices may write treatments and presets, but
    never shearing events.

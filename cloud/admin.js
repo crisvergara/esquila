@@ -27,7 +27,7 @@ else if (screen === 'configuration') {
       options('overview-server', info.servers.map(s => ({ value: s.id, name: s.name })), info.selectedId);
       updateNavigation(requested);
       $('overview-records').href = `/admin/records${info.selectedId ? `?server=${info.selectedId}` : ''}`;
-      const data = await api('GET', `/api/admin/shearing?${new URLSearchParams({ day: $('ranch-day').value, limit: '25' })}`);
+      const data = await api('GET', `/api/admin/shearing?${new URLSearchParams({ day: $('ranch-day').value, server:info.selectedId || '', limit: '25' })}`);
       const names = info.configuration?.shearers || info.servers.find(s => s.id === info.selectedId)?.information?.shearers || [];
       const stations = new Map();
       names.forEach((s, i) => { if (s.active !== false) stations.set(i + 1, Object.create(null)); });

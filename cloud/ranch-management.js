@@ -33,15 +33,15 @@ export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
       await pool.query(`INSERT INTO ranch_status(device_id, applied_revision, information) VALUES ($1, $2, $3)
         ON CONFLICT(device_id) DO UPDATE SET received_at = now(), applied_revision = excluded.applied_revision, information = excluded.information`,
       [req.device.id, cursor, safeInfo]);
-      const { rows } = await pool.query('SELECT * FROM shearing_events WHERE revision > $1 ORDER BY revision LIMIT 500', [cursor]);
-      res.set('Cache-Control', 'no-store').json({ rows, cursor: rows.at(-1)?.revision || cursor });
+      const { rows } = await pool.query('SELECT * FROM shearing_events WHERE revision > $1 AND owner_server_id=$2 ORDER BY revision LIMIT 500', [cursor,req.device.id]);
+      res.set('Cache-Control', 'no-store').json({ protocol:1, deviceId:req.device.id, rows, cursor: rows.at(-1)?.revision || cursor });
     } catch (error) { next(error); }
   });
 
   app.get('/api/admin/ranch', adminAuth, async (req, res, next) => {
     try {
       const servers = (await pool.query(`SELECT d.id, d.name, d.last_seen_at, r.received_at, r.applied_revision, r.information,
-        (SELECT count(*)::int FROM shearing_events e WHERE e.revision > COALESCE(r.applied_revision, 0)) AS pending_to_ranch
+        (SELECT count(*)::int FROM shearing_events e WHERE e.owner_server_id=d.id AND e.revision > COALESCE(r.applied_revision, 0)) AS pending_to_ranch
         FROM devices d LEFT JOIN ranch_status r ON r.device_id = d.id WHERE d.role = 'server'
         ORDER BY r.received_at DESC NULLS LAST, d.created_at DESC`)).rows;
       const selectedId = req.query.server || servers[0]?.id;
@@ -107,8 +107,10 @@ export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
       let survey, fields, target, savedMode;
       if (b.action !== 'delete') {
         if (b.serverId && !UUID.test(b.serverId)) fail(400, 'Galpón inválido.');
-        target = b.serverId || (await client.query("SELECT d.id FROM devices d LEFT JOIN ranch_status r ON r.device_id=d.id WHERE d.role='server' ORDER BY r.received_at DESC NULLS LAST,d.created_at DESC LIMIT 1")).rows[0]?.id;
-        if (target && !(await client.query("SELECT 1 FROM devices WHERE id=$1 AND role='server'", [target])).rowCount) fail(404, 'Galpón desconocido.');
+        if (old?.owner_server_id && b.serverId && b.serverId!==old.owner_server_id) fail(409, 'No se puede cambiar el servidor propietario de un registro.');
+        target = old?.owner_server_id || b.serverId || null;
+        if (!old && !target) fail(400, 'Selecciona el servidor propietario del registro.');
+        if (target && target!==old?.owner_server_id && !(await client.query("SELECT 1 FROM devices WHERE id=$1 AND role='server'", [target])).rowCount) fail(404, 'Galpón desconocido.');
         const manifest = target ? (await client.query('SELECT configuration,revision FROM ranch_configurations WHERE device_id=$1', [target])).rows[0] : null;
         const configuration = manifest?.configuration;
         if (!old && b.configurationRevision !== undefined && b.configurationRevision !== (manifest?.revision || 0)) fail(409, 'La configuración cambió. Cierra el formulario y vuelve a abrirlo.');
@@ -128,12 +130,12 @@ export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
         row = (await client.query('UPDATE shearing_events SET deleted_at = $1, updated_at = $1 WHERE id = $2 RETURNING *', [now, id])).rows[0];
       } else if (old) {
         row = (await client.query(`UPDATE shearing_events SET tag=$1, station=$2, color=$3, lactation=$4,
-          type=$5, wool_quality=$6, updated_at=$7, survey=$9, mode=$10 WHERE id=$8 RETURNING *`, [b.tag, Number(b.station), b.color, fields.lactation, b.type, fields.woolQuality, now, id, survey, savedMode])).rows[0];
+          type=$5, wool_quality=$6, updated_at=$7, survey=$9, mode=$10, owner_server_id=$11 WHERE id=$8 RETURNING *`, [b.tag, Number(b.station), b.color, fields.lactation, b.type, fields.woolQuality, now, id, survey, savedMode, target])).rows[0];
       } else {
-        row = (await client.query(`INSERT INTO shearing_events(id,tag,station,color,lactation,type,wool_quality,occurred_at,updated_at,origin,survey,mode)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8,'cloud-admin',$9,$10) RETURNING *`, [id,b.tag,Number(b.station),b.color,fields.lactation,b.type,fields.woolQuality,now,survey,savedMode])).rows[0];
+        row = (await client.query(`INSERT INTO shearing_events(id,tag,station,color,lactation,type,wool_quality,occurred_at,updated_at,origin,survey,mode,owner_server_id)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8,'cloud-admin',$9,$10,$11) RETURNING *`, [id,b.tag,Number(b.station),b.color,fields.lactation,b.type,fields.woolQuality,now,survey,savedMode,target])).rows[0];
       }
-      if (!old && target) await client.query(`INSERT INTO shearing_record_servers(record_id,server_id,server_name)
+      if (!old?.owner_server_id && target) await client.query(`INSERT INTO shearing_record_servers(record_id,server_id,server_name)
         SELECT $1,id,name FROM devices WHERE id=$2 ON CONFLICT DO NOTHING`, [id,target]);
       const result = { ok: true, id, updated_at: row.updated_at.toISOString(), revision: row.revision, duplicate: false };
       await client.query('INSERT INTO admin_record_mutations VALUES($1,$2,$3)', [b.submissionId, JSON.stringify(request), result]);

@@ -1,5 +1,16 @@
 // Built-in interface copy only. Never translate ranch-authored labels or record snapshots.
 export default {
+  "Servidor propietario": "Owning server",
+  "Sin propietario: solo en la nube": "Unassigned: cloud only",
+  "Sin propietario: asigna un servidor al editar.": "Unassigned: choose an owner when editing.",
+  "No se puede cambiar el servidor propietario de un registro.": "A record's owning server cannot be changed.",
+  "Selecciona el servidor propietario del registro.": "Choose the server that owns this record.",
+  "Conecta con la nube para verificar el servidor propietario antes de editar este registro histórico.": "Connect to the cloud to verify ownership before editing this historical record.",
+  "Los registros históricos pendientes de verificar se conservan aquí. Conecta con la nube para comprobar su propietario antes de editarlos.": "Historical records awaiting ownership verification are preserved here. Connect to the cloud to verify their owner before editing them.",
+  "{0} registros de otro servidor o sin propietario se conservaron en el archivo de recuperación local y se retiraron de esta lista. Revisa los históricos en la nube.": "{0} records belonging to another server or awaiting ownership review were preserved in the local recovery archive and removed from this list. Review historical records in the cloud.",
+  "Cada registro pertenece a un solo servidor. Puedes consultar todos los servidores aquí; las correcciones llegan únicamente al propietario. Los históricos sin propietario requieren asignación.": "Each record belongs to one server. You can browse all servers here; corrections sync only to the owner. Unassigned historical records require an owner.",
+  "La tabla se actualiza al buscar o guardar. Cada registro se sincroniza únicamente con su servidor propietario. La confirmación indica recepción por ese servidor.": "Search or save to refresh the table. Each record syncs only to its owning server. Acknowledgement refers to that server.",
+  "Conteos del servidor elegido para la fecha indicada. En Registros puedes consultar todos los servidores.": "Counts for the selected server and day. Use Records to browse all servers.",
   "Fila": "Row",
   "Día (Chile)": "Day (Chile)",
   "Orden: del más reciente al más antiguo.": "Order: newest to oldest.",

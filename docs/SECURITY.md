@@ -10,7 +10,7 @@ CI log, issue excerpt, and Git object is permanently accessible.
 | Public internet to cloud admin | Strong password, throttled login, 12-hour HttpOnly SameSite session, same-origin mutation checks, security headers | HTTPS terminates at the trusted Fly proxy |
 | Public internet to cloud API | Per-device random bearer token; only SHA-256 token hash stored | Enrollment QR/token is transferred privately |
 | Phone role to cloud data | Server-side role/table allowlist | Phones can write treatments/presets but not counts |
-| Barn server to cloud | Revocable `server` device token over HTTPS | Mac/Pi secret storage is not shared |
+| Barn server to cloud | Revocable `server` token over HTTPS; immutable per-record server ownership | Each ranch has its own identity/token; Mac/Pi secret storage is not shared |
 | Barn WiFi to local server | No application authentication; HTTP and LAN reachability | Ranch WiFi and people on it are trusted |
 | Local disk | OS account permissions; Mac token encryption | Barn computer account and backups are protected |
 
@@ -105,9 +105,22 @@ as text, including server names and audit JSON.
 Cloud mutation receipts and shearing history contain ranch data; include them in
 protected database backups and never export production history into the public
 repository. Audit versions are retained, including rejected stale uploads, but
-are not a tamper-proof compliance log. A compromised administrator or server
-credential can change the flock. Keep local/cloud clocks accurate because
+are not a tamper-proof compliance log. A compromised administrator can change
+records across servers; a compromised server credential can change only its own
+shearing records (treatment permissions remain shared). Keep local/cloud clocks accurate because
 conflicting offline writes use timestamps.
+
+Cloud shearing push checks ownership for the entire batch under the revision
+lock before any writes, including stale uploads and tombstones. Ownership comes
+from authentication, never `origin` or a caller's selector. Server snapshots and
+revision feeds include only that server's rows; phone vaccination snapshots still
+serve the shared flock. Old unassigned records can be assigned only by admins.
+The ownership-classification endpoint returns no foreign record content or owner
+identity, and accepts at most 500 caller-supplied IDs. The Mac binds its database
+to the authenticated server and cloud before uploads, rejects identity changes,
+and validates every downloaded owner. Legacy foreign copies and unsent edits
+are archived atomically outside the active counts/outbox. Archives and migration
+backups are private runtime data, never repository fixtures.
 
 ## Data-integrity controls are security controls
 

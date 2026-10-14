@@ -113,6 +113,12 @@ Conflicting edits use the later timestamp, with the cloud winning exact ties;
 versions are retained in the admin history. The cloud monitor is a synchronized
 view, not a live LAN feed. Names reflect the latest station configuration.
 
+Each ranch server syncs only its own shearing records. The cloud derives ownership
+from its device token and blocks cross-server edits and deletions. Cloud admins
+can search all servers and send corrections to the owning ranch. Install the
+current Mac release for cleanup of older shared copies; ambiguous historical
+ownership requires review. See the [ownership rollout](docs/DEPLOY.md#server-ownership-rollout).
+
 ## API Endpoints
 
 ### On-prem (countserver.js, port 3001)
@@ -139,10 +145,11 @@ All deletes are soft deletes (tombstones), and every row carries a UUIDv7 `id`, 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `POST` | `/api/sync/push` | device token | Batched last-write-wins upserts `{batches: [{table, rows}]}` |
-| `GET` | `/api/snapshot` | device token | Full flock: latest shearing events, all treatments, presets |
+| `GET` | `/api/snapshot` | device token | Shared vaccination flock for phones; server tokens see only their own shearing events; treatments and presets remain shared |
 | `POST` | `/api/admin/login`, `/api/admin/logout` | admin password/session | Start or end an HttpOnly admin session |
 | `GET/POST/DELETE` | `/api/admin/devices` | admin session | Device lifecycle; POST returns the token + enrollment QR |
-| `POST` | `/api/sync/ranch` | server token | Ranch heartbeat and up to 500 shearing changes after a durable revision cursor |
+| `POST` | `/api/sync/ranch` | server token | Ranch heartbeat and up to 500 owned shearing changes after a durable revision cursor |
+| `POST` | `/api/sync/ownership` | server token | Bounded legacy-ID classification and authenticated identity, without foreign content |
 | `GET` | `/api/admin/ranch` | admin session | Last ranch contact, version, mode, shearers, and pending changes |
 | `GET/POST` | `/api/admin/shearing` | admin session | Browse by Chile date/code, monitor totals, retry-safe additions/edits/deletions |
 | `GET` | `/api/admin/shearing/:id/history` | admin session | Last 50 accepted changes and discarded stale corrections |

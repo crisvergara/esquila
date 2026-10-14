@@ -51,6 +51,8 @@ CREATE TABLE IF NOT EXISTS devices (
 
 ALTER TABLE shearing_events ADD COLUMN IF NOT EXISTS survey jsonb;
 ALTER TABLE shearing_events ADD COLUMN IF NOT EXISTS mode jsonb;
+-- Deliberately no device FK: revocation must not remove ownership/history.
+ALTER TABLE shearing_events ADD COLUMN IF NOT EXISTS owner_server_id uuid;
 
 -- Latest shearing event per tag = current sheep status.
 CREATE OR REPLACE VIEW sheep_latest AS
@@ -67,6 +69,7 @@ CREATE TABLE IF NOT EXISTS shearing_sync_clock (
 );
 INSERT INTO shearing_sync_clock VALUES (true, 0) ON CONFLICT DO NOTHING;
 ALTER TABLE shearing_events ADD COLUMN IF NOT EXISTS revision bigint NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS idx_shearing_owner_revision ON shearing_events(owner_server_id, revision);
 CREATE TABLE IF NOT EXISTS shearing_audit (
   id bigserial PRIMARY KEY, row_id uuid NOT NULL, recorded_at timestamptz NOT NULL DEFAULT now(),
   source text NOT NULL, before_row jsonb, after_row jsonb, dedupe text UNIQUE
@@ -74,6 +77,9 @@ CREATE TABLE IF NOT EXISTS shearing_audit (
 CREATE INDEX IF NOT EXISTS idx_shearing_audit_row ON shearing_audit (row_id, id);
 CREATE OR REPLACE FUNCTION record_shearing_change() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
+  IF TG_OP = 'UPDATE' AND OLD.owner_server_id IS NOT NULL AND NEW.owner_server_id IS DISTINCT FROM OLD.owner_server_id THEN
+    RAISE EXCEPTION 'shearing ownership is immutable';
+  END IF;
   UPDATE shearing_sync_clock SET revision = revision + 1 WHERE singleton RETURNING revision INTO NEW.revision;
   RETURN NEW;
 END $$;
@@ -105,6 +111,9 @@ CREATE TABLE IF NOT EXISTS shearing_record_servers (
 );
 CREATE INDEX IF NOT EXISTS idx_shearing_record_servers_server ON shearing_record_servers(server_id, record_id);
 CREATE INDEX IF NOT EXISTS idx_shearing_record_servers_uploaded ON shearing_record_servers(last_uploaded_at DESC);
+CREATE TABLE IF NOT EXISTS shearing_ownership_migration (
+  singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton)
+);
 
 CREATE TABLE IF NOT EXISTS ranch_status (
   device_id uuid PRIMARY KEY REFERENCES devices(id) ON DELETE CASCADE,

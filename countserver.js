@@ -22,6 +22,7 @@ import { uuidv7 } from "./shared/uuidv7.js";
 import { ranchDay } from "./shared/ranchdate.js";
 import { parseLocalRecordFilters, browseLocalRecords } from './shared/local-records.js';
 import { createRanchSync } from "./shared/ranch-sync.js";
+import { createRanchOwnership, migrateBarnOwnership } from './shared/ranch-ownership.js';
 import { validateShearingFields } from "./shared/shearing-validation.js";
 import { activeModes } from "./shared/ranch-configuration.js";
 import { createLocalConfiguration } from "./shared/local-configuration.js";
@@ -341,6 +342,11 @@ if (db.pragma('user_version', { simple: true }) < 6) {
   if (db.prepare('SELECT 1 FROM counts LIMIT 1').get()) await db.backup(`esquila-pre-v6-${Date.now()}.sqlite`);
   migrateBarnModes(db);
 }
+if (db.pragma('user_version', { simple:true }) < 7) {
+  if (db.prepare('SELECT 1 FROM counts LIMIT 1').get()) await db.backup(`esquila-pre-v7-${Date.now()}.sqlite`);
+  migrateBarnOwnership(db);
+}
+const ranchOwnership = createRanchOwnership(db, process.env.CLOUD_SYNC_URL || '');
 const recordWithSurvey = row => {
   const { survey_json, mode_json, ...record } = row;
   return { ...record, mode: recordedMode(row), survey: survey_json ? JSON.parse(survey_json) : legacySurvey(row) };
@@ -421,7 +427,7 @@ db.function("ranch_day", { varargs: true }, ranchDay);
 const readTagsFromDb = db.prepare(`
   SELECT rowid, tag, station, color, lactation, type, woolQuality, date FROM counts
   WHERE ranch_day(date) = ranch_day() AND deleted_at IS NULL
-  ORDER BY date;
+  ORDER BY date, rowid;
 `);
 
 const searchSheepByTag = db.prepare(`
@@ -572,6 +578,7 @@ const insertCountTxn = db.transaction((row, submissionId) => {
     JSON.stringify(row.survey), JSON.stringify(row.mode)
   );
   queueSyncRow.run("counts", row.id);
+  ranchOwnership.markCreated(row.id);
   if (submissionId) recordCountSubmission.run(submissionId, "single", row.date);
   return true;
 });
@@ -638,6 +645,7 @@ const insertBulkCountTxn = db.transaction((station, quantity, submissionId, surv
       JSON.stringify(row.survey), JSON.stringify(row.mode)
     );
     queueSyncRow.run("counts", row.id);
+    ranchOwnership.markCreated(row.id);
   }
   reserveLambSequence.run(lambs);
   if (submissionId) recordCountSubmission.run(submissionId, "bulk", dateString);
@@ -779,7 +787,7 @@ app.get("/api/records", (req, res) => {
   try { filters = parseLocalRecordFilters(req.query); }
   catch (error) { return res.status(400).json({ error: error.message }); }
   const records = browseLocalRecords(db, filters);
-  res.set('Cache-Control', 'no-store').json({ ...records, mode, rows: records.rows.map(recordWithSurvey),
+  res.set('Cache-Control', 'no-store').json({ ...records, mode, ownership:ranchOwnership.status(), rows: records.rows.map(row=>({...recordWithSurvey(row),editable:ranchOwnership.canEdit(row)})),
     configurationRevision: ranchConfiguration.current().revision,
     pending: db.prepare("SELECT COUNT(DISTINCT row_id) AS n FROM sync_outbox WHERE tbl = 'counts'").get().n,
     syncConfigured: Boolean(process.env.CLOUD_SYNC_URL && process.env.CLOUD_SYNC_TOKEN),
@@ -800,6 +808,7 @@ const mutateRecord = db.transaction((body) => {
   const old = body.action === "add" ? null : db.prepare("SELECT * FROM counts WHERE id = ?").get(body.id);
   if (body.action !== "add") {
     if (!old || old.deleted_at) fail(404, "El registro ya no existe. Actualiza la tabla.");
+    if (!ranchOwnership.canEdit(old)) fail(409, 'Conecta con la nube para verificar el servidor propietario antes de editar este registro histórico.');
     if (old.updated_at !== body.updated_at) fail(409, "El registro cambió. Cierra el formulario y vuelve a abrirlo.");
   }
   const now = new Date(Math.max(Date.now(), old ? Date.parse(old.updated_at) + 1 : 0)).toISOString();
@@ -820,6 +829,7 @@ const mutateRecord = db.transaction((body) => {
     } else {
       writeTagToDb.run(id, body.tag, Number(body.station), body.color, fields.lactation,
         body.type, fields.woolQuality, now, now, JSON.stringify(survey), JSON.stringify(savedMode));
+      ranchOwnership.markCreated(id);
     }
   }
   if (body.action !== "delete" && /^L[0-9]+$/.test(body.tag)) {
@@ -1342,12 +1352,25 @@ const remoteTableFor = {
   treatment_presets: "treatment_presets",
 };
 
-const ranchSync = createRanchSync(db);
+const ranchSync = createRanchSync(db, {deviceId:ranchOwnership.deviceId});
 const appVersion = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version;
 let syncDelay = SYNC_INTERVAL_MS;
 
 const runSync = async () => {
   try {
+    // Verify the authenticated identity every cycle, before any upload. Old
+    // cached copies are classified in bounded pages, including pending edits.
+    let ids=ranchOwnership.pendingIds();
+    const verification=await fetch(`${CLOUD_SYNC_URL}/api/sync/ownership`, {
+      method:'POST',signal:AbortSignal.timeout(30000),
+      headers:{'Content-Type':'application/json',Authorization:`Bearer ${CLOUD_SYNC_TOKEN}`},
+      body:JSON.stringify({ids}),
+    });
+    if (!verification.ok) throw new Error(`ownership verification returned ${verification.status}`);
+    const removed=ranchOwnership.apply(ids,await verification.json());
+    if (removed) await refreshCounts();
+    // Finish ownership classification before pushing legacy outbox entries.
+    if (ranchOwnership.pendingIds().length) { syncDelay=Math.min(SYNC_INTERVAL_MS,1000); return; }
     const entries = readOutbox.all(SYNC_BATCH_SIZE);
     if (entries.length > 0) {
       const seen = new Set();
