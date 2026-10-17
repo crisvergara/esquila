@@ -15,6 +15,13 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
   device access; no real messages or production credentials are used;
 - UUIDv7 generation and Chile ranch-calendar behavior across summer and winter offsets;
 - legacy SQLite migration, pre-migration backup, vaccination conversion, and outbox backfill;
+- immediate startup/lifecycle sync despite long polling intervals, coalesced
+  triggers, independent manifest delivery during a held upload, response-loss
+  replay preserving a newer edit, bidirectional corrections, final upload on quit,
+  and a five-second hung-network shutdown followed by durable replay on restart;
+- interrupted ownership verification on shutdown, re-verification before the
+  final attempt, and multi-page legacy ownership classification before uploads
+  even when the normal polling interval is long;
 - independent English/Spanish preferences for cloud administration, local controls
   and tagger; unchanged ranch-authored content; offline counting/QR generation,
   ambiguous-response retries, restart persistence, translated errors, native settings
@@ -115,7 +122,10 @@ sandboxed preload. It never launches the barn, reads operator data,
 or opens an external browser. The teardown scenario exercises the packaged local
 page helper through normal close, forced destruction, and application quit with
 pending recovery. It must exit cleanly and cancel retries without accessing a
-destroyed BrowserWindow. Neither scenario installs an update or touches ranch data.
+destroyed BrowserWindow. The connectivity scenario exercises the packaged hidden
+observer/preload with Chromium offline/online transitions, sender/frame filtering,
+closed operator windows, wake/reopen events and listener cleanup. These scenarios
+never install an update or touch ranch data.
 
 The remaining Mac window lifecycle is indirectly covered by the same ranch server and browser onboarding contracts. A full macOS GUI test is intentionally omitted because login-item, tray, fullscreen, and local-network permission dialogs are controlled by macOS and are substantially less reliable on headless GitHub runners. Those remain release-candidate smoke tests on a real Mac.
 

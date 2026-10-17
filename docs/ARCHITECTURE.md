@@ -54,6 +54,13 @@ idle sleep must not take the barn server offline. The assertion ends on app
 exit; display sleep and screen locking remain available. Explicit system sleep,
 lid closure, shutdown, and battery exhaustion can still interrupt LAN service.
 
+A hidden, sandboxed renderer loads only the bundled connectivity observer and
+reports OS online/offline changes to the Mac main process. Only that renderer's
+main frame may send the connectivity IPC message. Reconnection, wake, app
+activation/reopening, and closing an operator window request sync through a
+private parent/child IPC channel; no LAN endpoint or cloud credentials are
+exposed to the observer. Window closure keeps the barn hosting in the background.
+
 ## Interface language ownership
 
 Language preferences are presentation settings, separate from ranch manifests.
@@ -120,6 +127,16 @@ writes may preserve historical values; new records use active choices.
    visible (five seconds in background), with bounded retries after failure.
 6. The sync agent later uploads at most 500 queued entries per attempt. Failed
    attempts remain queued and back off to a ten-minute maximum.
+
+Both record and configuration loops attempt immediately at server startup.
+Mac lifecycle hints bypass backoff without overlapping a loop's active request;
+multiple hints during one attempt coalesce into one subsequent attempt. The
+loops remain independent, and online status never gates local writes or retries.
+On SIGTERM/SIGINT, the barn closes LAN connections, cancels in-flight sync, and
+attempts one final cycle with a shared five-second shutdown deadline (including
+optional backup). Unacknowledged outbox sequences stay durable for the next
+launch; interrupted responses can be replayed safely. Force quit/power loss
+cannot run this hook. The Mac retains its eight-second child kill fallback.
 
 A client may lose the response after step 3. Retrying the same submission must
 return success without creating another animal. Bulk quantity must be an integer
@@ -352,6 +369,9 @@ binding, and a recovery archive. Existing databases are backed up first. Before
 uploading, each sync cycle verifies identity with `/api/sync/ownership`; up to 500
 unverified local UUIDs are classified per call. No foreign row content/owner ID
 is returned. Classification validates the entire reply and commits atomically.
+Ownership verification uses the same cancellation signal as the serial lifecycle
+loop, including its bounded final attempt. Remaining classification pages request
+a short next delay; no upload runs until every legacy page is classified.
 The first verified binding resets the old global cursor exactly once. Credentials
 for another server/cloud cannot silently rebind that database. Token renewal for
 the same device ID remains compatible; different physical servers need distinct

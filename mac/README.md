@@ -39,6 +39,26 @@ Closing the monitor does **not** stop the server. Esquila remains available
 from the sheep icon in the macOS menu bar. That menu can reopen the monitor,
 change settings, open the tagger, edit recent records, disable launch-at-login, or fully quit.
 
+Cloud records and configuration sync immediately when the server starts. The
+Mac also requests a sync when macOS reports a return to online connectivity,
+on wake, when reopening Esquila, and when closing an operator window. Closing
+a window leaves counting and background sync running. Successful sync normally
+repeats every minute; failures back off up to ten minutes. A lifecycle trigger
+bypasses that wait, and repeated triggers never overlap the same sync loop.
+
+Choosing **Quit / Salir**, including an explicitly approved update, gives sync
+up to **five seconds** for a final attempt before the barn process exits. A slow
+or offline cloud cannot keep quitting blocked indefinitely. Every accepted local
+write is already saved in SQLite; unacknowledged records, corrections and
+deletions remain queued for the next launch. A force quit or power loss cannot
+run a final attempt, but committed data remains on disk. Large backlogs still
+sync in batches, so quitting does not guarantee the entire backlog was uploaded.
+
+“Online” is an OS connectivity hint, not proof that Fly or the configured token
+works. Periodic retries continue even if the OS does not report a connectivity
+change. Use **Configuration → Test connection / Configuración → Probar conexión**
+to investigate persistent failures; that diagnostic does not upload records.
+
 Choose **Configuración… → Modo de conteo → Aplicar modo** to switch all tagger
 phones to an active configured mode. This works without internet, remembers the
 selection across restarts and does not restart the server. Animals already
