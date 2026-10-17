@@ -20,7 +20,7 @@ configuration link. Unpublished configuration retains its navigation warning.
 
 Open **Registros** to see the latest shearing events across **all dates**, without
 entering a code. A server card's **Ver registros** link selects that server.
-Choose **Servidor**, a partial **Buscar código**, and **Ordenar por**. Expand
+Choose **Servidor**, a partial **Buscar código**, **Día (Chile)**, and **Ordenar por**. Expand
 **Más filtros** to combine inclusive Chile date ranges, station, animal type,
 tag color, acknowledgement status and deleted rows. **Hoy en Chile** applies
 today's Chile calendar date; **Limpiar filtros** returns to all records.
@@ -33,6 +33,8 @@ today's Chile calendar date; **Limpiar filtros** returns to all records.
 - Page sizes are 25, 50 and 100. Filters, sort and pagination live in the URL and
   survive reload and browser back/forward. Search and save refresh the table;
   background uploads do not rearrange it while the operator is reviewing it.
+- **Fila** numbers positions across the filtered pages (1–50, 51–100, etc.);
+  these numbers are not animal identifiers and can change after a refresh.
 - **Históricos sin servidor identificado** includes older rows that cannot be
   attributed reliably. They remain visible, editable and synchronized.
 
@@ -48,6 +50,37 @@ records sync to other enrolled ranch servers. An acknowledgement badge refers
 to the filtered server, or all enrolled servers when none is selected. No active
 recipient means the record remains pending. The overview monitor shows shared
 counts; station names use the chosen reference server, including past dates.
+
+## Reports for the selected records
+
+Expand **Resumen e informes** on the records screen. The report uses every row
+matching the current filters, across all pages, and always excludes deleted rows.
+This differs from the overview monitor, whose totals ignore record-detail filters.
+Selecting a server limits the report to its attributed records; clearing the
+server includes the shared flock and unattributed history. The day shortcut sets
+both ends of the inclusive Chilean date range. Totals, rows and survey aggregates
+are read from one consistent database snapshot.
+
+- **Ovejas contadas** counts shearing events, not distinct animal tags. Repeated
+  shearings count separately. Totals also split by station and recorded mode.
+  Station names come from the current reference configuration; mode names come
+  from each event's saved snapshot.
+- Choice questions show counts and percentages for each saved answer and for
+  skipped answers. Only events that actually recorded that question enter its
+  denominator. Records with no survey are counted separately.
+- Numeric questions show average, minimum and maximum over answered values;
+  zero is an answer. Text questions show answered/unanswered counts; their text
+  remains available in the record editor.
+- Changed question or option wording is reported separately within each recorded
+  mode. Later manifest edits never relabel old responses. Built-in controls are
+  translated; ranch-authored names and questions are not.
+
+Reports refresh on filtering, paging, manual refresh and corrections. Failures
+show an error instead of partial totals. If more than 2,000 saved question/answer
+groups are needed, the survey section asks for a narrower day/code filter; basic
+counts still cover all matching records. Corrections appear on the other side
+after synchronization. The same report is available offline in the Mac's
+**Registros recientes** window after installing this release.
 
 ## Correct a scan
 
@@ -72,14 +105,15 @@ instants. Upload attribution commits in the same transaction as the batch and
 rolls back with it. Equal/older retries do not advance upload timestamps. Manual
 cloud additions record their server context in the same mutation transaction.
 The table deliberately has no device foreign key so credential revocation does
-not erase historical information. No SQLite migration or Mac update is needed.
+not erase historical information. Attribution itself needs no SQLite migration.
 
 The existing shearing payload, revision ordering, receipts, LWW checks, survey
 snapshots and tombstone protocol remain unchanged. The read API validates and
 bounds filters and uses parameterized SQL and a repeatable-read transaction for
 consistent totals/pages. Existing `day`, `tag`, `offset`, and `deleted=1` API
 calls remain supported; new controls add `from`, `to`, `server`, `station`,
-`type`, `color`, `sync`, `sort`, and `limit`. All pages and APIs retain session,
+`type`, `color`, `sync`, `sort`, and `limit`. `report=1` adds full filtered report
+aggregates without changing monitor totals or sync payloads. All pages and APIs retain session,
 CSRF, no-store and content-security protections. UI tests use disposable data.
 
 ## Language preference

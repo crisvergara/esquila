@@ -120,7 +120,7 @@ view, not a live LAN feed. Names reflect the latest station configuration.
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/count` | Log a single animal (tag, station, color, type, surveyResponses, configurationRevision) |
-| `GET/POST` | `/api/records` | List recent shearing records; retry-safe additions, edits, and tombstone deletions |
+| `GET/POST` | `/api/records` | Paginated shearing records with tag/Chile-day filters and optional `report=1` aggregates; retry-safe additions, edits, and tombstone deletions |
 | `POST` | `/bulk` | Log a batch of lambs by quantity and station |
 | `GET` | `/count` | Get current per-station stats (counted, last tag, breakdown by type) |
 | `GET/POST` | `/mode` | List configured modes / persist the active local mode |

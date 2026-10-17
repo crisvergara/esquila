@@ -12,7 +12,7 @@ export const adminPaths = Object.fromEntries(Object.entries(sections).map(([key,
 export function renderAdminPage(key) {
   const [, title, description] = sections[key];
   return `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-    <title>${title} — Esquila</title><link rel="stylesheet" href="/admin.css"></head>
+    <title>${title} — Esquila</title><link rel="stylesheet" href="/admin.css"><link rel="stylesheet" href="/shared/record-report.css"></head>
     <body data-screen="${key}"><a class="skip-link" href="#main">Saltar al contenido</a>
     <aside class="sidebar"><a class="brand" href="/admin"><span class="brand-mark">E</span><span>Esquila<small>Administración del rancho</small></span></a>
       <nav aria-label="Administración">${Object.entries(sections).map(([id, [url, name]], i) => `<a href="${url}" data-nav="${id}"${id === key ? ' aria-current="page"' : ''}><span aria-hidden="true">0${i + 1}</span>${name}</a>`).join('')}</nav>

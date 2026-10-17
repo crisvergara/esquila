@@ -16,3 +16,12 @@ table { border-collapse: collapse; width: 100%; } th, td { text-align: left; pad
 @media(max-width: 700px) { main { padding: 16px; } header { align-items: stretch; flex-direction: column; } }
 
 .survey-summary { white-space: pre-line; min-width: 12rem; max-width: 30rem; overflow-wrap: anywhere; }
+
+.record-filters { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-top: 24px; }
+.record-filters label { min-width: 0; }
+.record-filters input, .record-filters select { max-width: 100%; }
+.record-pagination { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 20px 0 10px; }
+.record-pagination p { margin-right: auto; }
+.records-note { color: #52655b; font-size: .9rem; }
+.row-number { font-variant-numeric: tabular-nums; font-weight: 700; }
+@media(max-width: 420px) { .record-filters label { width: 100%; } .record-pagination p { width: 100%; } }

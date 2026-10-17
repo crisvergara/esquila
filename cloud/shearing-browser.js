@@ -1,8 +1,8 @@
 import { validModeId, modeIdForType } from '../shared/modes.js';
-import { ranchDay } from '../shared/ranchdate.js';
+import { ranchDay, validRanchDay } from '../shared/ranchdate.js';
+import { reportQueries, assembleReport } from '../shared/record-reports.js';
 import { MAX_STATIONS, UUID } from '../shared/ranch-configuration.js';
 
-const validDay = value => !value.startsWith('0000-') && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
 const orders = {
   newest: 'e.occurred_at DESC, e.id DESC',
   oldest: 'e.occurred_at ASC, e.id ASC',
@@ -10,17 +10,17 @@ const orders = {
   updated: 'e.updated_at DESC, e.id DESC',
 };
 export function parseRecordFilters(query) {
-  const keys = ['day', 'from', 'to', 'tag', 'server', 'station', 'type', 'color', 'sync', 'deleted', 'sort', 'limit', 'offset'];
+  const keys = ['day', 'from', 'to', 'tag', 'server', 'station', 'type', 'color', 'sync', 'deleted', 'sort', 'limit', 'offset', 'report'];
   if (Object.keys(query).some(key => !keys.includes(key)) || keys.some(key => query[key] !== undefined && typeof query[key] !== 'string')) throw new Error('Filtros inválidos.');
   const f = Object.fromEntries(keys.map(key => [key, query[key] || '']));
   // Preserve the original API's default day; the browser explicitly requests all dates.
   f.day = query.day ?? (query.from !== undefined || query.to !== undefined ? '' : ranchDay());
   f.limit = Number(query.limit || 100); f.offset = Number(query.offset || 0); f.sort ||= 'newest';
-  if ([f.day, f.from, f.to].some(day => day && !validDay(day)) || (f.from && f.to && f.from > f.to) ||
+  if ([f.day, f.from, f.to].some(day => day && !validRanchDay(day)) || (f.from && f.to && f.from > f.to) ||
       (f.server && f.server !== 'unknown' && !UUID.test(f.server)) ||
       (f.station && (!/^\d+$/.test(f.station) || Number(f.station) < 1 || Number(f.station) > MAX_STATIONS)) ||
       (f.type && !validModeId(modeIdForType(f.type))) || f.tag.length > 40 || f.color.length > 80 ||
-      !['', 'pending', 'received'].includes(f.sync) || !['', '0', '1', 'only'].includes(f.deleted) ||
+      !['', 'pending', 'received'].includes(f.sync) || !['', '0', '1', 'only'].includes(f.deleted) || !['', '0', '1'].includes(f.report) ||
       !Object.hasOwn(orders, f.sort) || ![25, 50, 100].includes(f.limit) ||
       !Number.isSafeInteger(f.offset) || f.offset < 0 || f.offset > 1_000_000) throw new Error('Filtros inválidos.');
   return f;
@@ -70,5 +70,12 @@ export async function browseShearing(client, f) {
     UNION ALL SELECT DISTINCT ON (s.server_id) s.server_id AS id,s.server_name AS name,true AS revoked
       FROM shearing_record_servers s WHERE NOT EXISTS(SELECT 1 FROM devices d WHERE d.id=s.server_id)
     ORDER BY name,id`)).rows;
-  return { rows, total, totals, offset, limit: f.limit, day: f.day, colors, types, servers };
+  let report;
+  if (f.report === '1') {
+    const sql = reportQueries({ postgres: true, table: 'shearing_events', where });
+    report = assembleReport({ totals: (await client.query(sql.totals, args)).rows[0],
+      stations: (await client.query(sql.stations, args)).rows, modes: (await client.query(sql.modes, args)).rows,
+      surveys: (await client.query(sql.surveys, args)).rows });
+  }
+  return { rows, total, totals, offset, limit: f.limit, day: f.day, colors, types, servers, ...(report ? { report } : {}) };
 }

@@ -68,7 +68,12 @@ retires the selected mode, new entries use the first remaining active mode.
 Install this update before publishing schema-3 modes and reload phone tagger tabs.
 
 Choose **Registros recientes…** from the sheep menu to open the record editor.
-It shows the latest 200 live shearing records, with a code search for older rows.
+It opens across all dates, newest first, with numbered rows and pages of 25, 50
+or 100 records. Use **Día (Chile)** or **Hoy en Chile** to select a shearing day,
+combine it with a partial code search, and use **Anterior / Siguiente** to browse
+older pages. Filters and the page survive reload. Row numbers count positions in
+the filtered list; they are not permanent animal identifiers. **Actualizar**
+refreshes new scans and sync status without moving rows automatically during review.
 Use **Agregar registro**, **Editar**, or **Eliminar** (then confirm) to correct
 an animal's code, station, mode, color, or original survey responses. Editing keeps
 the original shearing time; dates are displayed in Chile time. For a manually
@@ -82,6 +87,17 @@ even if you close and reopen the window, so it cannot create a duplicate. If
 another window has changed the row, cancel and reopen it before editing again.
 The editor is also available at `http://<mac-name>.local:3001/records/` on the
 trusted ranch WiFi.
+
+Expand **Resumen e informes** for totals across every matching page, counts by
+station and recorded mode, and survey breakdowns. Choice questions show counts
+and percentages, numeric questions show average/minimum/maximum, and text
+questions show answered/unanswered totals. Reports use the questions and answers
+saved with each shearing; renamed wording stays separate. Skipped answers count
+in that question's denominator, while animals never asked the question do not.
+Deleted records are excluded. Each shearing event counts once, so repeated
+shearings of the same animal count separately. Station labels use current names.
+All browsing, reports and corrections work without internet while connected to
+the Mac. Install the new Mac release to get these controls.
 
 Choose **Configurar teléfonos…** from the sheep menu to display two QR codes:
 
