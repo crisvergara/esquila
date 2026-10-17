@@ -1,7 +1,7 @@
 import { validateRecordedMode, reconcileRecordedMode } from './modes.js';
 import { validateSurvey, legacySurvey } from './surveys.js';
 // Apply a page and its cursor together. Remote rows never create upload echoes.
-export function createRanchSync(db) {
+export function createRanchSync(db, { deviceId } = {}) {
   db.transaction(() => {
     db.exec(`CREATE TABLE IF NOT EXISTS ranch_sync_state (singleton INTEGER PRIMARY KEY CHECK(singleton=1), cursor TEXT NOT NULL);
       INSERT OR IGNORE INTO ranch_sync_state VALUES(1,'0');`);
@@ -14,7 +14,9 @@ export function createRanchSync(db) {
     let position = cursor();
     let previous = BigInt(position);
     if (!page || !Array.isArray(page.rows) || page.rows.length > 500 || !revision(page.cursor)) throw new Error('Invalid sync page');
+    if (deviceId && (!deviceId() || page.protocol!==1 || page.deviceId!==deviceId())) throw new Error('Invalid sync ownership');
     for (const row of page.rows) {
+      if (deviceId && row.owner_server_id!==deviceId()) throw new Error('Foreign sync row');
       if (!revision(row.revision) || BigInt(row.revision) <= previous ||
           typeof row.id !== 'string' || !/^[a-f0-9-]{36}$/i.test(row.id) ||
           typeof row.tag !== 'string' || !instant(row.occurred_at) || !instant(row.updated_at) ||
@@ -44,6 +46,10 @@ export function createRanchSync(db) {
           new Date(row.occurred_at).toISOString(),new Date(row.updated_at).toISOString(),
           row.deleted_at ? new Date(row.deleted_at).toISOString() : null,row.origin || 'ranch-server',JSON.stringify(survey), JSON.stringify(reconcileRecordedMode(row.mode, old, row)));
         changed++;
+      }
+      if (deviceId) {
+        db.prepare('UPDATE counts SET owner_server_id=? WHERE id=?').run(deviceId(),row.id);
+        db.prepare('UPDATE record_quarantine SET restored_at=? WHERE id=?').run(new Date().toISOString(),row.id);
       }
       if (/^L\d+$/.test(row.tag) && Number.isSafeInteger(Number(row.tag.slice(1)))) {
         db.prepare('UPDATE lamb_sequence SET value=max(value,?) WHERE singleton=1').run(Number(row.tag.slice(1)));

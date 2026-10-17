@@ -19,6 +19,9 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
   triggers, independent manifest delivery during a held upload, response-loss
   replay preserving a newer edit, bidirectional corrections, final upload on quit,
   and a five-second hung-network shutdown followed by durable replay on restart;
+- interrupted ownership verification on shutdown, re-verification before the
+  final attempt, and multi-page legacy ownership classification before uploads
+  even when the normal polling interval is long;
 - independent English/Spanish preferences for cloud administration, local controls
   and tagger; unchanged ranch-authored content; offline counting/QR generation,
   ambiguous-response retries, restart persistence, translated errors, native settings
@@ -88,6 +91,14 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
   boundaries;
 - bidirectional offline corrections in both conflict directions, retained conflict
   versions, tombstone pulls, ranch acknowledgements, and persisted restart cursors;
+- two independent barn servers with isolated snapshots, revision feeds, reports
+  and corrections; rejected cross-server edits/deletes/forged ownership and
+  whole-batch rollback; cloud-wide browsing and explicit owner assignment;
+- SQLite v7 backup, offline legacy read-only history and continued new counting,
+  atomic foreign-copy/outbox recovery archives, token/cloud identity mismatch,
+  archived-record restoration without replaying discarded edits, strict pull
+  owner validation, 500-row paging, and restart-safe cloud ownership backfill
+  using original upload or admin-add evidence instead of a later uploader;
 - transactional pull-page validation, 500-row paging, no upload echoes, and local
   edits made while a pull is in flight;
 - cloud device authentication, phone/server role boundaries, malformed requests, transaction rollback, last-write-wins semantics, admin login, CSRF protection, and device revocation;

@@ -180,11 +180,56 @@ counts — on the ranch machine:
 sqlite3 esquila "SELECT (SELECT COUNT(*) FROM counts), (SELECT COUNT(*) FROM treatments), (SELECT COUNT(*) FROM sync_outbox);"
 ```
 
-vs. in Neon: `SELECT COUNT(*) FROM shearing_events;` etc. When
-`sync_outbox` reaches 0, everything is uploaded.
+vs. the cloud records screen filtered to that server (include deleted rows for
+raw database comparisons). Do not compare one barn to the cloud's all-server
+total. An empty outbox alone does not prove migration completed: also review
+unverified/archived notices and unassigned cloud history below.
 
 If the ranch has no internet that day, nothing breaks — the outbox just
 waits and the server logs a retry with backoff.
+
+## Server ownership rollout
+
+Deploy the cloud first, then install the matching Mac release on **each** server.
+Keep each server's existing token; separate Macs/ranches must use separate device
+identities. Reusing a token makes them the same server. Cloud admin records remain
+searchable across servers; each barn receives only its own events and corrections.
+
+- Cloud startup assigns legacy owners only when one authenticated uploader is
+  proven to have created the row, or an original admin-add receipt names it.
+  Multiple/no uploaders or only a later uploader leave the row unassigned. In
+  **Records → Unattributed historical records**, review history, edit the row,
+  and select **Owning server**. Assignment is permanent. Never guess from tag
+  codes, mutable names or the old `origin` string.
+- SQLite v7 creates a pre-migration backup when records exist. On the first
+  successful cloud connection, the Mac binds the database to its device identity,
+  resets the old shared cursor once, and classifies cached IDs before any upload.
+  Foreign/unassigned copies and their pending outbox entries move atomically into
+  `record_quarantine`; no deletion is sent to the cloud. The records screen shows
+  a recovery-archive notice. Unsent local counts remain queued and upload normally.
+- Before that first connection, old records remain visible but cannot be edited
+  or deleted. New counting and editing newly created records work offline. After
+  verification, owned history can be edited offline again.
+- Preserve `esquila-pre-v7-*.sqlite` and the live database. To review an archived
+  correction, work from a private backup and inspect its `row_json` and
+  `outbox_json` in `record_quarantine`, then deliberately apply the correction
+  through the cloud editor for the confirmed owner. Do not requeue foreign rows
+  or publish these files. Assigning a previously unassigned record to this Mac
+  restores the current cloud version on sync; archived edits are never replayed.
+- The migration does not undo changes already accepted under the old shared
+  model. Review those through cloud history before applying corrections.
+- A new Mac against an old cloud fails ownership verification and retains local
+  writes. An old Mac with foreign/unassigned edits gets a rejected batch from
+  the new cloud; update it to perform cleanup. Do not downgrade after cleanup or
+  switch tokens to bypass an ownership error. A database bound to another device
+  or cloud fails closed; credential revocation retains historical ownership.
+
+Verify with one disposable scan on each server: each local list should contain
+only its own scan, while **All servers** in cloud records shows both. Edit each in
+the cloud and confirm only its owner acknowledges it. Check archived/unassigned
+history before declaring the migration complete. Treatment/phone vaccination
+access remains the existing shared flock; personal cloud admins retain access
+to every server.
 
 ## Remote ranch monitor and corrections (Mac 0.1.5+)
 
@@ -215,8 +260,9 @@ Operational tradeoffs:
   slower updates and a stale-contact indicator.
 - Historical totals use stations and their latest reported names. Changing a
   shearer's name does not create historical staff assignment records.
-- Initial down-sync copies retained cloud history into SQLite, 500 rows per
-  cycle. One flock/one active barn is assumed. Do not connect unrelated farms.
+- Initial down-sync copies only that server's retained cloud history into SQLite,
+  500 rows per cycle. Server ownership is permanent; the cloud administrator can
+  browse and manage all servers. Follow the ownership rollout above when upgrading.
 - History, receipts, and tombstones grow over time and require database storage
   and backups. Do not truncate them or reset the revision counter to save space.
 - If restoring PostgreSQL from an older backup, a barn cursor may be ahead and

@@ -70,7 +70,7 @@ test('browser API attributes authenticated uploads, preserves old records, combi
   await jsonRequest(`${base}/api/sync/ranch`,{method:'POST',token:first.token,body:{cursor:revision,information:info}});
   expect((await listing(`server=${first.id}&sync=received`)).total).toBe(31);
   expect((await listing(`server=${first.id}&sync=pending`)).total).toBe(0);
-  expect((await listing('sync=received')).total).toBe(0); // the other server has not acknowledged
+  expect((await listing('sync=received')).total).toBe(31); // only the owning server must acknowledge
   const updated = {...events[0],updated_at:'2025-07-06T00:00:00.000Z',tag:'A29000'};
   expect((await push(first,[updated])).response.status).toBe(200);
   expect((await listing('sort=uploaded')).rows[0].id).toBe(updated.id);

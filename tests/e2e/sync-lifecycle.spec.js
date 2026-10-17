@@ -15,6 +15,7 @@ const password = `sync-lifecycle-fixture-${crypto.randomUUID()}`;
 let pool, schema, directory, cloud, barn, device, proxy, proxyBase;
 let network = 'online', dropPush = false, releasePush, proxyError;
 const requests = [];
+const ownershipBatchSizes = [];
 const admin = (method, route, body) => jsonRequest(`${cloudBase}${route}`, { method, token: password, body });
 const records = async () => (await jsonRequest(`${barnBase}/api/records`)).data;
 const remoteRows = async tag => (await admin('GET', `/api/admin/shearing?tag=${tag}`)).data.rows;
@@ -65,6 +66,7 @@ test.beforeAll(async () => {
     if (network === 'offline') { res.writeHead(503); res.end(); return; }
     try {
       let body = ''; for await (const chunk of req) body += chunk;
+      if (req.url === '/api/sync/ownership') ownershipBatchSizes.push(JSON.parse(body).ids.length);
       const upstream = await fetch(`${cloudBase}${req.url}`, { method: req.method, headers: {
         'Content-Type': 'application/json', Authorization: req.headers.authorization,
       }, body, signal: AbortSignal.timeout(10000) });
@@ -135,7 +137,9 @@ test('startup and lifecycle hints sync both ways immediately, including configur
 
 test('offline/hung shutdown is bounded and all accepted writes replay on the next launch', async () => {
   network = 'hung';
+  const ownershipAttempts = requests.filter(route => route === '/api/sync/ownership').length;
   barn = startBarn(); await waitForHealth(barnBase, barn);
+  await waitFor(() => requests.filter(route => route === '/api/sync/ownership').length > ownershipAttempts);
   await add('A82001');
   await add('A82002');
   expect((await records()).pending).toBe(2);
@@ -143,6 +147,9 @@ test('offline/hung shutdown is bounded and all accepted writes replay on the nex
   await stopService(barn);
   expect(barn.child.exitCode).toBe(0); // Not the test helper's SIGKILL fallback.
   expect(Date.now() - started).toBeLessThan(6500);
+  // Shutdown cancels the hung ownership request and verifies identity again
+  // for its final attempt, without bypassing the check or waiting 30 seconds.
+  expect(requests.filter(route => route === '/api/sync/ownership').length).toBe(ownershipAttempts + 2);
   expect(snapshot().pending).toBe(2);
   expect(snapshot().rows.map(row => row.tag)).toEqual(expect.arrayContaining(['A82001', 'A82002']));
   network = 'online';
@@ -150,5 +157,34 @@ test('offline/hung shutdown is bounded and all accepted writes replay on the nex
   await waitSynced('A82001');
   expect((await remoteRows('A82002')).length).toBe(1);
   expect((await records()).rows.filter(row => row.tag === 'A82001')).toHaveLength(1);
+  await stopService(barn);
+});
+
+test('legacy ownership pages finish promptly before uploads despite a long periodic interval', async () => {
+  const db = new Database(path.join(directory, 'esquila'));
+  try {
+    const template = db.prepare('SELECT * FROM counts LIMIT 1').get();
+    const insert = db.prepare(`INSERT INTO counts(id,tag,station,color,lactation,type,woolQuality,date,updated_at,origin,survey_json,mode_json)
+      VALUES(?,?,1,'none','idk','oveja','GOOD',?,?,'ranch-server',?,?)`);
+    const queue = db.prepare("INSERT INTO sync_outbox(tbl,row_id) VALUES('counts',?)");
+    db.transaction(() => {
+      for (let i = 0; i < 501; i++) {
+        const id = crypto.randomUUID();
+        insert.run(id, `A${83000 + i}`, template.date, template.updated_at, template.survey_json, template.mode_json);
+        queue.run(id);
+      }
+    })();
+  } finally { db.close(); }
+  const requestStart = requests.length, batchStart = ownershipBatchSizes.length;
+  barn = startBarn(); await waitForHealth(barnBase, barn);
+  // Ten-minute polling cannot account for this progress: the second ownership
+  // page must be scheduled by the lifecycle loop's returned short delay.
+  await waitFor(async () => (await records()).pending === 1, { timeoutMs: 8000 });
+  expect(ownershipBatchSizes.slice(batchStart)).toEqual([500, 1]);
+  expect(requests.slice(requestStart).filter(route => route !== '/api/sync/configuration').slice(0, 3))
+    .toEqual(['/api/sync/ownership', '/api/sync/ownership', '/api/sync/push']);
+  expect((await records()).ownership.unverified).toBe(0);
+  await trigger();
+  await waitSynced('A83500');
   await stopService(barn);
 });

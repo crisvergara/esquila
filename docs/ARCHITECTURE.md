@@ -76,22 +76,27 @@ animal or retry. See [LOCALIZATION.md](LOCALIZATION.md).
 
 - `counts` in barn SQLite and authenticated cloud administrators may originate
   and correct shearing records. Barn `counts` maps to PostgreSQL
-  `shearing_events`; both replicas reconcile through the cloud. Phone-role
-  devices cannot mutate shearing rows.
+  `shearing_events`. Each event has one immutable `owner_server_id`, derived from
+  the authenticated creating server or an explicit cloud-admin selection.
+  Only that server and cloud administrators may correct it. Server pulls and
+  snapshots contain only that owner's events, including tombstones in pulls.
+  Cloud administrators retain cross-server search/reporting. Phone-role devices
+  cannot mutate shearing rows; their vaccination snapshot remains the shared flock.
 - `treatments` and `treatment_presets` may originate from EsquilaDB. The cloud
   is their shared system of record. Legacy barn endpoints remain transitional.
 - Every synchronized entity has a client-generated UUIDv7 `id` and an
   `updated_at` instant. Synchronized records use tombstones (`deleted_at`) rather
   than hard deletion.
-- `origin` records the creating server/device. Device display names are useful
-  attribution, not an authorization mechanism.
+- `origin` and device display names are descriptive attribution, never proof of
+  ownership. UUID ownership survives device revocation without a device FK.
 - Treatment occurrence is an `occurred_on` Chile calendar date. Shearing and
   update times are absolute timestamps.
 - Current sheep status is derived from the newest live shearing event for a tag;
   it is not a separately mutable sheep row.
 
 Schema definitions are canonical in `countserver.js`, `shared/ranch-sync.js`,
-`shared/survey-migration.js`, `shared/mode-migration.js`, and `cloud/schema.sql`. A schema change must include migration behavior for
+`shared/survey-migration.js`, `shared/mode-migration.js`, `shared/ranch-ownership.js`,
+`cloud/shearing-ownership.js`, and `cloud/schema.sql`. A schema change must include migration behavior for
 existing barn databases, fresh-install behavior, synchronization mapping, and
 tests for both old and new data.
 
@@ -195,7 +200,7 @@ SQLite v6 stores `counts.mode_json`; PostgreSQL stores `shearing_events.mode`.
 New records snapshot `{id, name, bulk}` and individual tag rules (color IDs,
 prefixes and digit bounds). Writes commit snapshot, survey, receipt and outbox
 together. Edits preserve that snapshot unless the mode is explicitly corrected;
-shared historical records can be validated without that mode in today's local
+owned historical records can be validated without that mode in today's local
 manifest. New records may only use active configured modes. Custom-mode totals
 use a separate keyed map, keeping legacy total fields safe from mode ID collisions.
 All bulk modes share the durable L-code sequence.
@@ -290,8 +295,7 @@ do not split an answer. Missing answers belong to that question's denominator;
 unasked questions do not. Text values are not enumerated. SQL aggregates numeric
 answers and choices before returning a bounded set; over 2,000 saved groups
 produces a visible survey-limit error, not misleading partial survey counts.
-This is read-only presentation; outbox, receipts, conflict rules and sync
-payloads are unchanged. The cloud gets reports on deployment; local browsing
+Reports do not mutate outbox, receipts or event snapshots. The cloud gets reports on deployment; local browsing
 and reports require a Mac update and remain available without cloud connectivity.
 
 Cloud-only `shearing_record_servers` metadata attributes uploads to authenticated
@@ -299,11 +303,10 @@ server UUIDs in the same transaction as each upload batch, independently of
 client-supplied `origin`. First/latest upload instants survive equal/older retries.
 Manual cloud additions retain their selected server context without inventing
 an upload timestamp. Old records with ambiguous origins stay unattributed and
-browsable; revoking a device preserves its historical identity/name. Attribution
-never changes event payloads, SQLite schemas, or the shared-flock replication
-scope. A record's acknowledgement is relative to the selected server or all
-active enrolled servers when no server is selected.
-Station names and record-editor choices come from the selected server's
+browsable; revoking a device preserves its historical identity/name. Ownership,
+not upload attribution, now scopes replication, server filters and acknowledgements.
+Each acknowledgement refers only to the event's owning server. Unassigned records
+are cloud-only and pending review. Station names and editor choices come from the owning server's
 published manifest, falling back to its last report for older installations;
 historical name assignments are not stored. Contact older than three minutes is marked stale;
 this is a synchronized monitor, not a cloud dependency in the LAN counting path.
@@ -318,8 +321,11 @@ receipt; no remote change triggers an application update or restart.
 
 After each successful outbox push (or with an empty outbox), the barn posts its
 last applied cursor and heartbeat to `/api/sync/ranch`. Only server-role devices
-can use this endpoint. It returns at most 500 current shearing versions ordered
-by revision, including tombstones. A PostgreSQL transactional counter lock
+can use this endpoint. It returns at most 500 versions owned by the authenticated
+server, ordered by revision, including tombstones. Caller-supplied selectors never
+change the scope. The response declares ownership protocol 1 and the device ID;
+the new Mac validates every row's owner before committing a page. Empty pages
+retain the cursor; unrelated servers' revision gaps are harmless. A PostgreSQL transactional counter lock
 serializes shearing writers, so committed revision order cannot skip a delayed
 transaction as an ordinary sequence could. Revisions may have gaps. Existing
 cloud rows are assigned revisions on migration.
@@ -346,6 +352,46 @@ cycle, so initial historical catch-up may take several minutes. A cursor ahead
 of the cloud fails closed to flag a database restore requiring operator review;
 never reset a production cursor or erase tombstones without a recovery plan.
 Treatments continue using their existing ownership and phone snapshot protocol.
+
+## Ownership migration and local recovery
+
+Cloud migration assigns an owner only when a single authenticated uploader can
+be tied to the event's original insert audit timestamp, or a durable admin-add
+receipt explicitly names that server. A lone later editor is not creation proof.
+Other legacy rows stay unassigned and visible to admins, but cannot be claimed
+by a device or downloaded. An admin can choose an owner while editing an
+unassigned row; the assignment advances the revision and is permanent. Database
+triggers also prevent changing an established owner. A migration marker and the
+revision lock make backfill restart-safe; it never reruns ownership inference.
+
+SQLite v7 adds ownership, a local-creation flag, a durable cloud-origin/device-ID
+binding, and a recovery archive. Existing databases are backed up first. Before
+uploading, each sync cycle verifies identity with `/api/sync/ownership`; up to 500
+unverified local UUIDs are classified per call. No foreign row content/owner ID
+is returned. Classification validates the entire reply and commits atomically.
+Ownership verification uses the same cancellation signal as the serial lifecycle
+loop, including its bounded final attempt. Remaining classification pages request
+a short next delay; no upload runs until every legacy page is classified.
+The first verified binding resets the old global cursor exactly once. Credentials
+for another server/cloud cannot silently rebind that database. Token renewal for
+the same device ID remains compatible; different physical servers need distinct
+device identities and separate databases.
+
+Confirmed foreign/unassigned local copies and their pending outbox entries are
+archived verbatim in `record_quarantine`, then removed from the working list in
+the same transaction. Cleanup never generates a cloud delete or replays a foreign
+correction. Count receipts and reserved lamb numbers remain intact. A later admin
+assignment to this server arrives through the normal feed, marking the archived
+copy restored without replaying its old edits. Unknown IDs absent from cloud are
+retained as unsent local records; the push API still atomically rejects a competing
+foreign claim. Owned records reconcile with the existing LWW/receipt rules.
+
+While offline, unverified historical records remain visible but cannot be edited;
+new counting and edits to verified/local-created records remain available. Cloud
+failures never erase local data. An old cloud without the ownership endpoint
+cannot receive uploads from a new Mac. An old Mac against the new cloud receives
+only its records, but a pending foreign edit blocks its batch until it is upgraded.
+See [DEPLOY.md](DEPLOY.md#server-ownership-rollout) for deployment and recovery.
 
 ## Vaccination and flock lookup flow
 

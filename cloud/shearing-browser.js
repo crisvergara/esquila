@@ -35,8 +35,8 @@ export async function browseShearing(client, f) {
   if (f.from) constraints.push(`${calendar} >= ${bind(f.from)}::date`);
   if (f.to) constraints.push(`${calendar} <= ${bind(f.to)}::date`);
   let serverParam;
-  if (f.server === 'unknown') constraints.push('NOT EXISTS (SELECT 1 FROM shearing_record_servers s WHERE s.record_id=e.id)');
-  else if (f.server) { serverParam = bind(f.server); constraints.push(`EXISTS (SELECT 1 FROM shearing_record_servers s WHERE s.record_id=e.id AND s.server_id=${serverParam}::uuid)`); }
+  if (f.server === 'unknown') constraints.push('e.owner_server_id IS NULL');
+  else if (f.server) { serverParam = bind(f.server); constraints.push(`e.owner_server_id=${serverParam}::uuid`); }
   const monitorConstraints = [...constraints];
   const monitorArgs = [...args];
   if (f.tag) constraints.push(`e.tag ILIKE ${bind(`%${f.tag.replace(/[\\%_]/g, '\\$&')}%`)}`);
@@ -45,9 +45,8 @@ export async function browseShearing(client, f) {
   if (f.color) constraints.push(`e.color=${bind(f.color)}`);
   if (f.deleted === 'only') constraints.push('e.deleted_at IS NOT NULL');
   else if (f.deleted !== '1') constraints.push('e.deleted_at IS NULL');
-  const selected = serverParam ? `AND d.id=${serverParam}::uuid` : '';
-  const pending = `(NOT EXISTS (SELECT 1 FROM devices d WHERE d.role='server' ${selected}) OR EXISTS
-    (SELECT 1 FROM devices d LEFT JOIN ranch_status r ON r.device_id=d.id WHERE d.role='server' ${selected}
+  const pending = `(NOT EXISTS (SELECT 1 FROM devices d WHERE d.role='server' AND d.id=e.owner_server_id) OR EXISTS
+    (SELECT 1 FROM devices d LEFT JOIN ranch_status r ON r.device_id=d.id WHERE d.role='server' AND d.id=e.owner_server_id
       AND COALESCE(r.applied_revision,0) < e.revision))`;
   if (f.sync) constraints.push(f.sync === 'pending' ? pending : `NOT ${pending}`);
   const where = constraints.length ? constraints.join(' AND ') : 'true';

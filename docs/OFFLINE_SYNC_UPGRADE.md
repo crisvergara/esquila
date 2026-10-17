@@ -12,6 +12,16 @@ transactional revision cursor, and limitations are documented in
 The original decisions below remain as design history. Treatment ownership and
 the fully offline LAN counting requirement are unchanged.
 
+## Subsequent approved extension (October 2026)
+
+Each ranch server now owns its shearing records. Cloud administrators retain
+cross-server browsing and corrections, while devices upload and pull only their
+own events. This supersedes shared shearing replication between barns. Legacy
+ownership uses original creation evidence; ambiguous records require admin review.
+The [architecture](ARCHITECTURE.md#ownership-migration-and-local-recovery) and
+[rollout guide](DEPLOY.md#server-ownership-rollout) describe SQLite v7, recovery
+archives, and cloud-first deployment. Vaccination retains its shared flock view.
+
 ## Context
 
 Esquila today is a single on-prem Express + SQLite server (`countserver.js`, port 3001) serving four React apps from one Vite build: `tagger/` (counting app), `monitor/` + `mobilemonitor/` (dashboards), and `esquiladb/` (vaccination/records app). Everything assumes the LAN and the server are reachable; a failed fetch silently loses data. The upgrade goals:

@@ -56,7 +56,7 @@ test.beforeAll(async () => {
   expect((await push(server,events)).response.status).toBe(200);
   expect((await push(other,[{...events[0],id:crypto.randomUUID(),tag:'B99999',occurred_at:'2027-01-01T12:00:00.000Z'}])).response.status).toBe(200);
   barn=startBarn(); await waitForHealth(local,barn);
-  await waitFor(async () => (await localList()).total === 254);
+  await waitFor(async () => (await localList()).total === 253);
 });
 test.afterAll(async () => {
   await stopService(barn); await stopService(cloud);
