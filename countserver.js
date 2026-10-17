@@ -22,6 +22,7 @@ import { uuidv7 } from "./shared/uuidv7.js";
 import { ranchDay } from "./shared/ranchdate.js";
 import { parseLocalRecordFilters, browseLocalRecords } from './shared/local-records.js';
 import { createRanchSync } from "./shared/ranch-sync.js";
+import { createSyncLoop } from "./shared/sync-loop.js";
 import { validateShearingFields } from "./shared/shearing-validation.js";
 import { activeModes } from "./shared/ranch-configuration.js";
 import { createLocalConfiguration } from "./shared/local-configuration.js";
@@ -31,6 +32,11 @@ const modeEmitter = new EventEmitter();
 const countEmitter = new EventEmitter();
 
 const app = express();
+let shuttingDown = false;
+app.use((req, res, next) => {
+  if (shuttingDown) return res.status(503).json({ error: 'El servidor se está cerrando. Vuelve a intentarlo.' });
+  next();
+});
 const port = Number(process.env.PORT) || 3001;
 
 const db = new Database("esquila", {});
@@ -405,23 +411,11 @@ if (hasAwsCredentials) {
   console.log("S3 backups disabled — no AWS credentials configured");
 }
 
-process.on("SIGTERM", async () => {
-  console.log(`Received SIGTERM, exiting...`);
-  await backupDb();
-  process.exit(0);
-});
-
-process.on("SIGINT", async () => {
-  console.log(`Received SIGINT, exiting...`);
-  await backupDb();
-  process.exit(0);
-});
-
 db.function("ranch_day", { varargs: true }, ranchDay);
 const readTagsFromDb = db.prepare(`
   SELECT rowid, tag, station, color, lactation, type, woolQuality, date FROM counts
   WHERE ranch_day(date) = ranch_day() AND deleted_at IS NULL
-  ORDER BY date;
+  ORDER BY date, rowid;
 `);
 
 const searchSheepByTag = db.prepare(`
@@ -1344,94 +1338,114 @@ const remoteTableFor = {
 
 const ranchSync = createRanchSync(db);
 const appVersion = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version;
-let syncDelay = SYNC_INTERVAL_MS;
-
-const runSync = async () => {
-  try {
-    const entries = readOutbox.all(SYNC_BATCH_SIZE);
-    if (entries.length > 0) {
-      const seen = new Set();
-      const rowsByTable = { counts: [], treatments: [], treatment_presets: [] };
-      for (const entry of entries) {
-        const key = `${entry.tbl}:${entry.row_id}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        const row = getRowForSync[entry.tbl]?.get(entry.row_id);
-        if (row) rowsByTable[entry.tbl].push(toRemoteRow[entry.tbl](row));
-      }
-      const batches = Object.entries(rowsByTable)
-        .filter(([, rows]) => rows.length > 0)
-        .map(([tbl, rows]) => ({ table: remoteTableFor[tbl], rows }));
-
-      if (batches.length > 0) {
-        const res = await fetch(`${CLOUD_SYNC_URL}/api/sync/push`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${CLOUD_SYNC_TOKEN}`,
-          },
-          body: JSON.stringify({ batches }),
-          signal: AbortSignal.timeout(30000),
-        });
-        if (!res.ok) {
-          throw new Error(`push returned ${res.status}`);
-        }
-      }
-      clearOutboxEntries(entries);
-      console.log(`Cloud sync: pushed ${entries.length} outbox entries`);
+const runSync = async signal => {
+  const entries = readOutbox.all(SYNC_BATCH_SIZE);
+  if (entries.length > 0) {
+    const seen = new Set();
+    const rowsByTable = { counts: [], treatments: [], treatment_presets: [] };
+    for (const entry of entries) {
+      const key = `${entry.tbl}:${entry.row_id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      const row = getRowForSync[entry.tbl]?.get(entry.row_id);
+      if (row) rowsByTable[entry.tbl].push(toRemoteRow[entry.tbl](row));
     }
-    const response = await fetch(`${CLOUD_SYNC_URL}/api/sync/ranch`, {
-      method: "POST", signal: AbortSignal.timeout(30000),
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${CLOUD_SYNC_TOKEN}` },
-      body: JSON.stringify({ cursor: ranchSync.cursor(), information: {
-        shearers: readShearers(), mode, modeName: modeName(findMode(ranchConfiguration.current().configuration.modes, mode)), hostname: os.hostname(), platform: os.platform(),
-        version: appVersion, uptime: Math.floor(process.uptime()),
-        pending: db.prepare("SELECT count(*) AS n FROM sync_outbox").get().n,
-      } }),
-    });
-    if (!response.ok) throw new Error(`ranch pull returned ${response.status}`);
-    const result = ranchSync.apply(await response.json());
-    lambs = Math.max(lambs, db.prepare("SELECT value FROM lamb_sequence WHERE singleton=1").get().value);
-    if (result.changed) {
-      await refreshCounts();
+    const batches = Object.entries(rowsByTable)
+      .filter(([, rows]) => rows.length > 0)
+      .map(([tbl, rows]) => ({ table: remoteTableFor[tbl], rows }));
+
+    if (batches.length > 0) {
+      const res = await fetch(`${CLOUD_SYNC_URL}/api/sync/push`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${CLOUD_SYNC_TOKEN}`,
+        },
+        body: JSON.stringify({ batches }),
+        signal: AbortSignal.any([signal, AbortSignal.timeout(30000)]),
+      });
+      if (!res.ok) {
+        throw new Error(`push returned ${res.status}`);
+      }
     }
-    syncDelay = SYNC_INTERVAL_MS;
-  } catch (err) {
-    syncDelay = Math.min(syncDelay * 2, SYNC_MAX_BACKOFF_MS);
-    console.error(`Cloud sync failed (next attempt in ${Math.round(syncDelay / 1000)}s):`, err.message);
-  } finally {
-    setTimeout(runSync, syncDelay);
+    clearOutboxEntries(entries);
+    console.log(`Cloud sync: pushed ${entries.length} outbox entries`);
+  }
+  const response = await fetch(`${CLOUD_SYNC_URL}/api/sync/ranch`, {
+    method: "POST", signal: AbortSignal.any([signal, AbortSignal.timeout(30000)]),
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${CLOUD_SYNC_TOKEN}` },
+    body: JSON.stringify({ cursor: ranchSync.cursor(), information: {
+      shearers: readShearers(), mode, modeName: modeName(findMode(ranchConfiguration.current().configuration.modes, mode)), hostname: os.hostname(), platform: os.platform(),
+      version: appVersion, uptime: Math.floor(process.uptime()),
+      pending: db.prepare("SELECT count(*) AS n FROM sync_outbox").get().n,
+    } }),
+  });
+  if (!response.ok) throw new Error(`ranch pull returned ${response.status}`);
+  const result = ranchSync.apply(await response.json());
+  lambs = Math.max(lambs, db.prepare("SELECT value FROM lamb_sequence WHERE singleton=1").get().value);
+  if (result.changed) {
+    await refreshCounts();
   }
 };
 
-if (CLOUD_SYNC_URL && CLOUD_SYNC_TOKEN) {
-  setTimeout(runSync, 5000);
-  // Configuration retries independently of uploads and shearing pulls.
-  let configurationDelay = SYNC_INTERVAL_MS;
-  const syncConfiguration = async () => {
-    try {
+// Independent loops keep a malformed manifest from blocking durable records.
+const syncLoops = CLOUD_SYNC_URL && CLOUD_SYNC_TOKEN ? [
+  createSyncLoop({
+    run: runSync, intervalMs: SYNC_INTERVAL_MS, maxBackoffMs: SYNC_MAX_BACKOFF_MS,
+    onError: (error, delay) => console.error(`Cloud sync failed (${delay === null ? 'pending records retained for next launch' : `next attempt in ${Math.round(delay / 1000)}s`}):`, error.message),
+  }),
+  createSyncLoop({
+    intervalMs: SYNC_INTERVAL_MS, maxBackoffMs: SYNC_MAX_BACKOFF_MS,
+    run: async signal => {
       const current = ranchConfiguration.current();
       const response = await fetch(`${CLOUD_SYNC_URL}/api/sync/configuration`, {
-        method: 'POST', signal: AbortSignal.timeout(30000),
+        method: 'POST', signal: AbortSignal.any([signal, AbortSignal.timeout(30000)]),
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${CLOUD_SYNC_TOKEN}` },
         body: JSON.stringify({ revision: current.revision, ...(current.revision === 0 ? { configuration: current.configuration } : {}) }),
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const changed = ranchConfiguration.apply(await response.json());
       if (changed) { ensureActiveMode(); await refreshCounts(); }
-      configurationDelay = changed ? Math.min(SYNC_INTERVAL_MS, 1000) : SYNC_INTERVAL_MS;
-    } catch (error) {
-      configurationDelay = Math.min(configurationDelay * 2, SYNC_MAX_BACKOFF_MS);
-      console.error(`Configuración remota pendiente (${error.message}); se conserva la copia local.`);
-    } finally { setTimeout(syncConfiguration, configurationDelay); }
-  };
-  setTimeout(syncConfiguration, 1000);
-} else {
-  console.log("Cloud sync disabled — set CLOUD_SYNC_URL and CLOUD_SYNC_TOKEN to enable");
+      return changed ? Math.min(SYNC_INTERVAL_MS, 1000) : SYNC_INTERVAL_MS;
+    },
+    onError: error => console.error(`Configuración remota pendiente (${error.message}); se conserva la copia local.`),
+  }),
+] : [];
+
+function requestCloudSync() {
+  if (!shuttingDown) for (const loop of syncLoops) loop.request();
 }
+// Only the Electron parent can send these messages; there is no LAN sync API.
+process.on('message', message => {
+  if (message?.type === 'sync-now') requestCloudSync();
+});
+if (!syncLoops.length) console.log("Cloud sync disabled — set CLOUD_SYNC_URL and CLOUD_SYNC_TOKEN to enable");
+
+function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log('Shutting down: attempting final cloud sync (up to 5 seconds).');
+  server.close();
+  server.closeAllConnections();
+  const controller = new AbortController();
+  // Never hold quitting hostage to DNS, the cloud, or optional S3 backups.
+  // SQLite transactions are already committed before local writes are accepted.
+  const deadline = setTimeout(() => {
+    controller.abort();
+    console.log('Shutdown deadline reached; unacknowledged records remain in SQLite.');
+    process.exit(0);
+  }, 5000);
+  Promise.allSettled([...syncLoops.map(loop => loop.finish(controller.signal)), backupDb()]).then(() => {
+    clearTimeout(deadline);
+    process.exit(0);
+  });
+}
+process.on('SIGTERM', shutdown);
+process.on('SIGINT', shutdown);
 
 // QR codes advertise IPv4 LAN addresses; bind all IPv4 interfaces explicitly.
-app.listen(port, "0.0.0.0", () => {
+const server = app.listen(port, "0.0.0.0", () => {
+  requestCloudSync();
   console.log(`Go count some sheep! App listening on 0.0.0.0:${port}`);
   const info = taggerConnectionInfo();
   // Optional delivery requires internet; local QR display never waits for it.
