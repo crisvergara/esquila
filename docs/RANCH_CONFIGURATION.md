@@ -161,6 +161,13 @@ not the same as immediate delivery. When connected, delivery is normally within
 one minute. Network failures retry up to a ten-minute interval. Invalid or older
 metadata leaves the last working configuration in place.
 
+Startup, Mac reconnection/wake, reopening the app, and closing an operator window
+also request an immediate check, bypassing retry backoff. Quitting attempts one
+last sync within a five-second budget. Configuration and record loops remain
+independent and serial within each loop; an OS “online” report is only a hint.
+Failed or interrupted attempts keep the validated local manifest and pending
+record queue for the next attempt.
+
 The barn validates and commits each manifest to SQLite before using it. Its
 phones fetch only the barn's local `/api/live`; they never call the cloud.
 Polling sends configuration only when its identity/revision changes. An animal
