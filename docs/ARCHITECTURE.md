@@ -306,6 +306,14 @@ next. The transaction ends before downloading; the file is removed afterward
 or on failure. One export per instance and a 10,000-record ceiling bound work;
 query and request timeouts limit stalled work. It never changes records, receipts,
 outbox state or ownership. Saved mode/question/answer labels are preserved.
+An initial cursor pass discovers all saved question versions in the selection
+before writing the Records sheet's survey columns. Column identity includes mode
+ID/name, question ID/type/wording and option IDs/labels, ignoring order and active/
+required flags. Discovery is bounded to 256 versions; excess fails visibly rather
+than omitting answers. Owner-scoped shearer references use published settings or,
+if absent, the last heartbeat within the same snapshot. The column explicitly
+labels these as current reference names; station numbers remain intact, and
+missing/revoked references are never borrowed from another server.
 
 Cloud-only `shearing_record_servers` metadata attributes uploads to authenticated
 server UUIDs in the same transaction as each upload batch, independently of
