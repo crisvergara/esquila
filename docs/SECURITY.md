@@ -172,6 +172,24 @@ signing authority. Never add these credentials to PR jobs or print them.
   credential/private-key patterns. Confirm generated DMGs, logs, databases, and
   test reports remain ignored.
 
+## Admin Excel exports
+
+The XLSX endpoint uses the same admin authorization and validated, parameterized
+filters as the record browser. Device tokens cannot export. Responses are
+`no-store` downloads, never public links. Workbooks contain selected record data
+and survey snapshots, not credentials, account details or arbitrary server files.
+Strings are literal Excel strings, never formulas or hyperlinks; unrepresentable
+cell values fail visibly instead of being truncated. Creation uses private OS
+temporary directories and mode-0600 files, removed after download/failure.
+A hard process crash may leave a private temporary file until host cleanup;
+temporary files are never served statically or stored on the persistent volume.
+Downloaded files are the administrator's responsibility and must stay out of Git.
+
+ExcelJS is cloud-only. Its UUID dependency is overridden to the patched,
+CommonJS-compatible 11.x line; ExcelJS only calls its `v4` export. Keep this
+override reviewed with dependency updates. No spreadsheet upload/parser endpoint
+is exposed. Tests use the reader only to validate synthetic generated workbooks.
+
 ## Deployment hardening
 
 - Serve the cloud only through HTTPS. Set `PUBLIC_URL` to the exact public HTTPS

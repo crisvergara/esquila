@@ -1,5 +1,6 @@
 import { validModeId, recordedMode, modeForRecord } from '../shared/modes.js';
 import { parseRecordFilters, browseShearing } from './shearing-browser.js';
+import { registerShearingExport } from './shearing-export.js';
 import { createSurvey, legacyFields, legacySurvey } from '../shared/surveys.js';
 import express from 'express';
 import { uuidv7 } from '../shared/uuidv7.js';
@@ -12,6 +13,7 @@ const uuidPattern = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{1
 const normalized = row => ({ ...row, date: row.occurred_at, woolQuality: row.wool_quality, mode: recordedMode(row), survey: row.survey || legacySurvey(row) });
 
 export function registerRanchManagement(app, { pool, adminAuth, deviceAuth }) {
+  registerShearingExport(app, { pool, adminAuth });
   app.post('/api/sync/ranch', deviceAuth, express.json({ limit: '32kb' }), async (req, res, next) => {
     if (req.device.role !== 'server') return res.status(403).json({ error: 'server role required' });
     const { cursor, information } = req.body || {};

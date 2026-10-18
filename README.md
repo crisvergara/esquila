@@ -152,6 +152,7 @@ All deletes are soft deletes (tombstones), and every row carries a UUIDv7 `id`, 
 | `POST` | `/api/sync/ownership` | server token | Bounded legacy-ID classification and authenticated identity, without foreign content |
 | `GET` | `/api/admin/ranch` | admin session | Last ranch contact, version, mode, shearers, and pending changes |
 | `GET/POST` | `/api/admin/shearing` | admin session | Browse by Chile date/code, monitor totals, retry-safe additions/edits/deletions |
+| `GET` | `/api/admin/shearing/export.xlsx` | admin session | Excel download of all filtered shearing records and historical survey answers; up to 10,000 records |
 | `GET` | `/api/admin/shearing/:id/history` | admin session | Last 50 accepted changes and discarded stale corrections |
 | `GET` | `/admin` | login required | Ranch monitor, shearing management, and device enrollment |
 | `GET` | `/healthz` | — | Health check |

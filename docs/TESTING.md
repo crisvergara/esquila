@@ -81,6 +81,11 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
   numeric zero and averages, historical question/option wording, text-only
   rendering, and totals after synchronized survey corrections;
 - edits made during a cloud upload whose response is lost, plus durable lamb-number reservation after manual corrections and restart;
+- authenticated Excel downloads across all filtered pages, stable sort and owner
+  scoping, Chile dates, deleted/empty selections, saved survey wording, unasked
+  versus skipped questions, numeric zero, literal formula-like strings and text
+  tags, localized workbooks, browser download/failure states and mobile layout;
+  unit coverage also checks export limits, abort/rollback and invalid Excel values;
 - ranch restart safety for lamb numbering and synchronization;
 - dedicated admin screens and navigation, legacy configuration deep links, mobile
   layout, bookmarkable filters/pages, Chile date boundaries, authenticated server
