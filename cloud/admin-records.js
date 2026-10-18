@@ -1,5 +1,5 @@
 import { renderRecordReport } from '/shared/record-report-view.js';
-import { t, errorText, locale } from '/shared/browser-language.js';
+import { t, errorText, locale, language } from '/shared/browser-language.js';
 import { modeChoices, modeName, recordTypeForMode, recordedMode, editableMode } from '/modes.js';
 import { questionsFor, defaultResponses, surveyText } from '/surveys.js';
 import { $, api, cell, node, button, options, dateText } from '/admin-ui.js';
@@ -7,6 +7,7 @@ import { updateNavigation } from '/admin-shell.js';
 let ranchInfo, editing, originalRecord, recordSurvey, savingRecord = false, loading = false;
 let currentRows = [];
 let loadGeneration = 0;
+let exportFilters, exporting = false;
 const attemptKey = 'esquila-admin-record-attempt';
 const selectedShearers = () => ranchInfo?.configuration?.shearers || ranchInfo?.servers.find(s => s.id === ranchInfo.selectedId)?.information?.shearers || [];
 const stationName = station => `${station}: ${selectedShearers()[station - 1]?.name || t('Sin nombre')}`;
@@ -60,6 +61,7 @@ async function loadRecords() {
   const generation = ++loadGeneration;
   const requested = { ...filters };
   loading = true;
+  exportFilters = null; $('ranch-export').disabled = true;
   if (filters.report === '1') renderRecordReport($('ranch-report-content'), null, { t, locale, stationName });
   const controls = [...$('ranch-filters').querySelectorAll('input,select,button'), ...$('ranch-rows').querySelectorAll('button'), $('ranch-limit'), $('ranch-add'), $('ranch-prev'), $('ranch-next')];
   controls.forEach(c => { c.disabled = true; }); $('ranch-rows').setAttribute('aria-busy', 'true');
@@ -71,6 +73,7 @@ async function loadRecords() {
     if (generation !== loadGeneration) return;
     ranchInfo = info;
     currentRows = data.rows; filters.offset = String(data.offset); saveUrl(); updateNavigation(selected);
+    exportFilters = requested;
     options('ranch-server', [{ value:'',name:t('Todos los servidores e históricos') },{value:'unknown',name:t('Históricos sin servidor identificado')}, ...data.servers.map(s => ({value:s.id,name:s.name + (s.revoked ? t(' (revocado)') : '')}))], filters.server);
     const stations = Array.from({ length: Math.min(24, Math.max(selectedShearers().length, ...currentRows.map(r => r.station), 6)) }, (_,i) => ({value:String(i+1),name: selected ? stationName(i+1) : t`Estación ${i+1}`}));
     options('ranch-station', [{value:'',name:t('Todas las estaciones')}, ...stations], filters.station);
@@ -96,8 +99,35 @@ async function loadRecords() {
     $('ranch-error').textContent = t`No se pudo actualizar. Los datos visibles pueden estar atrasados. ${errorText(error.message)}`;
     if (requested.report === '1') $('ranch-report-content').textContent = $('ranch-error').textContent;
     controls.forEach(c => { c.disabled = false; }); $('ranch-prev').disabled = true; $('ranch-next').disabled = true; $('ranch-add').disabled = !ranchInfo;
-  } finally { if (generation === loadGeneration) { loading = false; $('ranch-rows').removeAttribute('aria-busy'); } }
+  } finally { if (generation === loadGeneration) { loading = false; $('ranch-rows').removeAttribute('aria-busy'); $('ranch-export').disabled = exporting || !exportFilters; } }
 }
+async function exportRecords() {
+  if (loading || exporting || !exportFilters) return;
+  const query = new URLSearchParams({ ...exportFilters, lang: language });
+  for (const key of ['offset', 'limit', 'report']) query.delete(key);
+  exporting = true; $('ranch-export').disabled = true;
+  $('ranch-export-error').textContent = '';
+  $('ranch-export-status').textContent = t('Preparando Excel con todas las páginas…');
+  try {
+    const response = await fetch(`/api/admin/shearing/export.xlsx?${query}`, { credentials: 'same-origin', cache: 'no-store', signal: AbortSignal.timeout(100_000) });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({}));
+      throw new Error(response.status === 401 ? t('La sesión venció o los datos son incorrectos. Vuelve a iniciar sesión.') : errorText(result.error || 'No se pudo generar la exportación. Reintenta o acota los filtros.'));
+    }
+    if (!response.headers.get('content-type')?.includes('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')) throw new Error(t('No se pudo generar la exportación. Reintenta o acota los filtros.'));
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob), link = document.createElement('a');
+    link.href = url;
+    link.download = /esquila-records-\d{4}-\d{2}-\d{2}\.xlsx/.exec(response.headers.get('content-disposition') || '')?.[0] || 'esquila-records.xlsx';
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    $('ranch-export-status').textContent = t('Descarga iniciada. Revisa las descargas de tu navegador.');
+  } catch (error) {
+    $('ranch-export-status').textContent = '';
+    $('ranch-export-error').textContent = `${t('No se pudo descargar Excel. Revisa la conexión y reintenta.')} ${errorText(error.message)}`;
+  } finally { exporting = false; $('ranch-export').disabled = loading || !exportFilters; }
+}
+$('ranch-export').onclick = exportRecords;
 async function prepareRecord(action, row = {}) {
   if (loading) return;
   try {

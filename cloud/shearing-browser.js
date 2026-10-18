@@ -26,7 +26,8 @@ export function parseRecordFilters(query) {
   return f;
 }
 
-export async function browseShearing(client, f) {
+// Browsing, reports and exports must use identical ownership and filter rules.
+export function shearingQuery(f) {
   const args = [];
   const bind = value => { args.push(value); return `$${args.length}`; };
   const constraints = [];
@@ -50,16 +51,21 @@ export async function browseShearing(client, f) {
       AND COALESCE(r.applied_revision,0) < e.revision))`;
   if (f.sync) constraints.push(f.sync === 'pending' ? pending : `NOT ${pending}`);
   const where = constraints.length ? constraints.join(' AND ') : 'true';
-  const total = Number((await client.query(`SELECT count(*) AS n FROM shearing_events e WHERE ${where}`, args)).rows[0].n);
-  const offset = total ? Math.min(f.offset, Math.floor((total - 1) / f.limit) * f.limit) : 0;
   const attribution = `LEFT JOIN LATERAL (SELECT max(s.last_uploaded_at) ${serverParam ? `FILTER (WHERE s.server_id=${serverParam}::uuid)` : ''} AS last_uploaded_at,
     jsonb_agg(jsonb_build_object('id',s.server_id,'name',COALESCE(d.name,s.server_name),
       'lastUploadedAt',s.last_uploaded_at,'revoked',d.id IS NULL) ORDER BY s.server_id) AS servers
     FROM shearing_record_servers s LEFT JOIN devices d ON d.id=s.server_id WHERE s.record_id=e.id) attribution ON true`;
-  const rows = (await client.query(`SELECT e.*, ${pending} AS pending_to_ranch,
+  const select = `SELECT e.*, ${pending} AS pending_to_ranch,
     attribution.last_uploaded_at, COALESCE(attribution.servers,'[]'::jsonb) AS servers
-    FROM shearing_events e ${attribution} WHERE ${where} ORDER BY ${orders[f.sort]}
-    LIMIT $${args.length + 1} OFFSET $${args.length + 2}`, [...args, f.limit, offset])).rows;
+    FROM shearing_events e ${attribution} WHERE ${where} ORDER BY ${orders[f.sort]}`;
+  return { args, where, select, monitorConstraints, monitorArgs };
+}
+
+export async function browseShearing(client, f) {
+  const { args, where, select, monitorConstraints, monitorArgs } = shearingQuery(f);
+  const total = Number((await client.query(`SELECT count(*) AS n FROM shearing_events e WHERE ${where}`, args)).rows[0].n);
+  const offset = total ? Math.min(f.offset, Math.floor((total - 1) / f.limit) * f.limit) : 0;
+  const rows = (await client.query(`${select} LIMIT $${args.length + 1} OFFSET $${args.length + 2}`, [...args, f.limit, offset])).rows;
   const totals = (await client.query(`SELECT e.station,e.type,count(*)::int AS count FROM shearing_events e
     WHERE e.deleted_at IS NULL ${monitorConstraints.length ? `AND ${monitorConstraints.join(' AND ')}` : ''}
     GROUP BY e.station,e.type ORDER BY e.station`, monitorArgs)).rows;

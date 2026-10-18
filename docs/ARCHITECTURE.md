@@ -298,6 +298,15 @@ produces a visible survey-limit error, not misleading partial survey counts.
 Reports do not mutate outbox, receipts or event snapshots. The cloud gets reports on deployment; local browsing
 and reports require a Mac update and remain available without cloud connectivity.
 
+`GET /api/admin/shearing/export.xlsx` shares the record browser's validated query
+builder, omits pagination, and reads both workbook data sheets from one read-only
+repeatable-read snapshot. ExcelJS streams committed rows in 100-record cursor
+batches to a private temporary file, finishing each sheet before starting the
+next. The transaction ends before downloading; the file is removed afterward
+or on failure. One export per instance and a 10,000-record ceiling bound work;
+query and request timeouts limit stalled work. It never changes records, receipts,
+outbox state or ownership. Saved mode/question/answer labels are preserved.
+
 Cloud-only `shearing_record_servers` metadata attributes uploads to authenticated
 server UUIDs in the same transaction as each upload batch, independently of
 client-supplied `origin`. First/latest upload instants survive equal/older retries.

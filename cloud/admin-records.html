@@ -19,6 +19,9 @@
 <p id="ranch-error" class="error" role="alert"></p><p id="ranch-result" class="notice" role="status"></p>
 <details class="panel record-report" id="ranch-reports"><summary>Resumen e informes</summary><div id="ranch-report-content"></div></details>
 <section class="panel records-panel"><div class="section-heading"><div><h2>Registros de esquila</h2><p id="ranch-summary" role="status">Cargando registros…</p></div><label>Por página<select aria-label="Por página" id="ranch-limit"><option>25</option><option selected>50</option><option>100</option></select></label></div>
+<div class="row"><button id="ranch-export" type="button" disabled>Exportar a Excel</button><span class="muted">Todas las páginas con los filtros aplicados. Solo datos recibidos en la nube.</span></div>
+<p id="ranch-export-status" role="status" aria-live="polite"></p>
+<p id="ranch-export-error" class="error" role="alert"></p>
 <p class="muted">Los números de fila corresponden a esta lista, no al código del animal.</p>
 <p id="ranch-scope" class="muted"></p>
 <div class="scroll" role="region" aria-label="Tabla de registros" tabindex="0"><table aria-label="Registros de esquila"><thead><tr><th>Fila</th><th>Esquila / carga (Chile)</th><th>Código</th><th>Estación</th><th>Modo / color</th><th>Servidor</th><th>Sincronización</th><th>Acciones</th></tr></thead><tbody id="ranch-rows"></tbody></table></div>

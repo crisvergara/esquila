@@ -85,6 +85,41 @@ counts still cover all matching records. Corrections appear on the other side
 after synchronization. The same report is available offline in the Mac's
 **Registros recientes** window after installing this release.
 
+## Export to Excel
+
+In **Registros / Records**, apply your filters, then choose **Exportar a Excel /
+Export to Excel**. The `.xlsx` download includes **all matching pages**, in the
+selected order, even when you are viewing a later page. Unapplied changes in the
+search form are not included. The file is a fresh, consistent snapshot of the
+cloud database; counts still waiting on an offline ranch are not available yet.
+Check the browser's Downloads list after the completion message.
+
+The workbook uses the admin browser's language for headings and contains:
+
+- **Records**: numbered rows, stable record and owning-server IDs, tag codes,
+  Chile day/time and original UTC instant, station number, saved mode, color
+  code, acknowledgement status, deletion state and upload/update timestamps.
+  Server names are current references (or retained names for revoked servers).
+  Station numbers and color codes avoid inventing historical names.
+- **Answers**: one row per saved survey question, with its original wording,
+  type, response value and saved choice label. Numeric answers remain numbers,
+  including zero. Skipped questions have a blank value and an explicit unanswered
+  flag; questions never asked have no row. Records without questions remain in
+  the Records sheet. Imported legacy surveys are marked in Records.
+- **Export**: generation time, timezone, record count, scope and applied filter
+  values. This is an export for analysis, not an import or database backup.
+
+Deleted records are excluded unless **Include deleted** is selected; included
+deletions are clearly marked. Tags remain text, including leading zeros. Excel
+filters and frozen headings help browse the workbook; values beginning with
+formula characters remain literal text. Ranch-authored content is not translated.
+
+The cloud permits one export at a time per instance, up to **10,000 records**
+(and their saved answers). Larger selections produce an error; narrow the server
+or date filters. Export failures show a retry message and never change records
+or sync state. Only authenticated administrators can download exports; device
+tokens do not grant access. No Mac update is needed for this cloud feature.
+
 ## Correct a scan
 
 Choose **Editar** in the row. The form shows the recorded survey questions and

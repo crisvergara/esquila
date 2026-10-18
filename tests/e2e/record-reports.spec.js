@@ -9,6 +9,7 @@ import { jsonRequest, startNodeService, stopService, waitFor, waitForHealth } fr
 import { validateQuestions } from '../../shared/surveys.js';
 import { legacyMode } from '../../shared/modes.js';
 const { Pool } = createRequire(new URL('../../cloud/package.json', import.meta.url))('pg');
+const ExcelJS = createRequire(new URL('../../cloud/package.json', import.meta.url))('exceljs');
 const root = fileURLToPath(new URL('../..', import.meta.url));
 const remote = 'http://127.0.0.1:4202', local = 'http://127.0.0.1:3202';
 const password = `reports-fixture-${crypto.randomUUID()}`;
@@ -200,4 +201,87 @@ test('new scans leave displayed row numbers stable; cloud corrections, replay an
   await expect(page).toHaveURL(/tag=0/);
   await page.reload();
   await expect(page.getByLabel('Search code')).toHaveValue('0');
+});
+
+test('Excel exports enforce admin access and match filtered records across every page with historical answers', async () => {
+  const route = `${remote}/api/admin/shearing/export.xlsx?day=&lang=en`;
+  for (const token of [undefined, phone.token, server.token]) {
+    const response = await fetch(route, {headers:token?{Authorization:`Bearer ${token}`}:{}});
+    expect(response.status).toBe(401);
+  }
+  for (const query of ['lang=fr','server=bad','sort=invalid','day=2026-02-30','tag[]=x','unknown=yes']) {
+    expect((await fetch(`${remote}/api/admin/shearing/export.xlsx?${query}`,{headers:{Authorization:`Bearer ${password}`}})).status).toBe(400);
+  }
+  const conditions = [`server=${server.id}&from=2026-01-02&to=2026-01-02&sort=oldest`,
+    `server=${other.id}`, 'deleted=only', 'tag=NO-MATCH', 'station=2&type=oveja&color=none&tag=A50&sync=received&sort=updated',
+    'from=2026-01-01&to=2026-01-01', 'deleted=1&sort=uploaded', 'server=unknown'];
+  for (const condition of conditions) {
+    const expected = []; let total;
+    do {
+      const data = await remoteList(`${condition}&limit=100&offset=${expected.length}`);
+      total = data.total; expected.push(...data.rows);
+    } while(expected.length < total);
+    const response = await fetch(`${route}&limit=25&offset=100&${condition}`, {headers:{Authorization:`Bearer ${password}`}});
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(response.headers.get('content-type')).toContain('spreadsheetml.sheet');
+    expect(response.headers.get('content-disposition')).toContain('attachment;');
+    const book = await new ExcelJS.Workbook().xlsx.load(Buffer.from(await response.arrayBuffer()));
+    const records=book.getWorksheet('Records'), answers=book.getWorksheet('Answers');
+    expect(records.rowCount).toBe(expected.length+1);
+    expect(records.getColumn(2).values.slice(2)).toEqual(expected.map(row=>row.id));
+    for (const [i,row] of expected.entries()) {
+      expect(records.getCell(`A${i+2}`).value).toBe(i+1);
+      expect(records.getCell(`G${i+2}`).value).toBe(row.owner_server_id||null);
+      expect(records.getCell(`F${i+2}`).value).toBe(row.occurred_at);
+    }
+    expect(answers.rowCount).toBe(1+expected.reduce((sum,row)=>sum+row.survey.questions.length,0));
+    if (condition===conditions[0]) {
+      expect(expected.length).toBeGreaterThan(200);
+      expect(answers.getColumn(7).values).toContain('Pregunta <img src=x onerror=alert(1)>');
+      expect(answers.getColumn(11).values).toContain('Renombrado');
+      expect(answers.getColumn(10).values).toContain(0);
+      const unasked=expected.find(row=>row.tag==='A60000');
+      expect(answers.getColumn(1).values).not.toContain(unasked.id);
+    }
+  }
+});
+
+test('Excel button downloads applied filters from later pages and displays failures in both languages', async ({page},testInfo) => {
+  await page.goto(`${remote}/admin/records?server=${server.id}&from=2026-01-02&to=2026-01-02&offset=100&lang=en`);
+  await page.getByLabel('Administration password').fill(password);
+  await page.getByRole('button',{name:'Sign in',exact:true}).click();
+  const button=page.getByRole('button',{name:'Export to Excel',exact:true});
+  await expect(button).toBeEnabled();
+  await expect(page.locator('#ranch-rows tr').first().locator('td').first()).toHaveText('101');
+  // Unapplied edits must not silently change the export's selection.
+  await page.getByLabel('Search code').fill('NOT-APPLIED');
+  let release;
+  const held=new Promise(resolve=>{release=resolve;});
+  await page.route('**/api/admin/shearing/export.xlsx?**',async route=>{await held;await route.continue();});
+  const downloadEvent=page.waitForEvent('download');
+  await button.click();
+  await expect(button).toBeDisabled();
+  await expect(page.locator('#ranch-export-status')).toHaveText('Preparing Excel with all pages…');
+  release();
+  const download=await downloadEvent;
+  expect(download.suggestedFilename()).toMatch(/^esquila-records-\d{4}-\d{2}-\d{2}\.xlsx$/);
+  const filename=testInfo.outputPath('records.xlsx'); await download.saveAs(filename);
+  const book=await new ExcelJS.Workbook().xlsx.readFile(filename);
+  expect(book.getWorksheet('Records').rowCount).toBe(253);
+  await expect(page.locator('#ranch-export-status')).toContainText('Download started');
+  await page.unroute('**/api/admin/shearing/export.xlsx?**');
+  await page.route('**/api/admin/shearing/export.xlsx?**',route=>route.abort('failed'));
+  await button.click();
+  await expect(page.locator('#ranch-export-error')).toContainText('Could not download Excel');
+  await expect(button).toBeEnabled();
+  await page.unroute('**/api/admin/shearing/export.xlsx?**');
+  await page.goto(`${remote}/admin/records?server=${other.id}&lang=es`);
+  await expect(page.getByRole('button',{name:'Exportar a Excel',exact:true})).toBeEnabled();
+  await page.route('**/api/admin/shearing/export.xlsx?**',route=>route.fulfill({status:413,json:{error:'La exportación admite hasta 10000 registros. Acota los filtros por fecha o servidor.'}}));
+  await page.getByRole('button',{name:'Exportar a Excel',exact:true}).click();
+  await expect(page.locator('#ranch-export-error')).toContainText('10000 registros');
+  await page.setViewportSize({width:390,height:844});
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  await page.screenshot({path:testInfo.outputPath('export-phone.png')});
 });
