@@ -1,5 +1,10 @@
 // Built-in interface copy only. Never translate ranch-authored labels or record snapshots.
 export default {
+  "Esquilador (nombre de referencia actual)": "Shearer (current reference name)",
+  "La exportación admite hasta 256 versiones de preguntas. Acota los filtros por fecha, modo o servidor.": "Exports support up to 256 question versions. Narrow the date, mode or server filters.",
+  "Columnas de encuesta": "Survey columns",
+  "Cada columna conserva una versión de la pregunta y del modo. Una celda vacía indica que no se hizo esa pregunta; Sin respuesta indica que se omitió. La hoja Respuestas conserva los valores y estados explícitos.": "Each column retains one saved question and mode version. A blank cell means the question was not asked; No answer means it was skipped. The Answers sheet retains explicit values and statuses.",
+  "Nombre de referencia del servidor propietario: configuración publicada o, si no existe, último informe del servidor. No es un nombre histórico guardado con la esquila.": "Reference name from the owning server: published configuration or, if absent, its last status report. This is not a historical name saved with the shearing.",
   "Exportar a Excel": "Export to Excel",
   "Todas las páginas con los filtros aplicados. Solo datos recibidos en la nube.": "All pages matching the applied filters. Only data received in the cloud.",
   "Preparando Excel con todas las páginas…": "Preparing Excel with all pages…",

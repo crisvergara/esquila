@@ -85,6 +85,10 @@ This job runs on Linux with a disposable PostgreSQL 16 service and Chromium. It 
   scoping, Chile dates, deleted/empty selections, saved survey wording, unasked
   versus skipped questions, numeric zero, literal formula-like strings and text
   tags, localized workbooks, browser download/failure states and mobile layout;
+  survey columns on the main sheet across cursor batches, stable column order,
+  separate renamed question/option/mode versions, ignored retirement flags,
+  the 256-version limit, and owner-scoped shearer names from published settings
+  or heartbeat fallback, including retired/missing/revoked station references;
   unit coverage also checks export limits, abort/rollback and invalid Excel values;
 - ranch restart safety for lamb numbering and synchronization;
 - dedicated admin screens and navigation, legacy configuration deep links, mobile

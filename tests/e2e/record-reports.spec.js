@@ -228,12 +228,21 @@ test('Excel exports enforce admin access and match filtered records across every
     expect(response.headers.get('content-disposition')).toContain('attachment;');
     const book = await new ExcelJS.Workbook().xlsx.load(Buffer.from(await response.arrayBuffer()));
     const records=book.getWorksheet('Records'), answers=book.getWorksheet('Answers');
+    const headings=records.getRow(1).values;
     expect(records.rowCount).toBe(expected.length+1);
     expect(records.getColumn(2).values.slice(2)).toEqual(expected.map(row=>row.id));
     for (const [i,row] of expected.entries()) {
       expect(records.getCell(`A${i+2}`).value).toBe(i+1);
       expect(records.getCell(`G${i+2}`).value).toBe(row.owner_server_id||null);
       expect(records.getCell(`F${i+2}`).value).toBe(row.occurred_at);
+      for (const question of row.survey.questions) {
+        const column=headings.findIndex(value=>value?.startsWith(`${question.display} [`));
+        expect(column).toBeGreaterThan(20);
+        const value=row.survey.responses[question.field];
+        const expectedValue=value==null||value===''?'No answer':question.type==='choice'?question.options.find(option=>option.value===value).name:value;
+        expect(records.getRow(i+2).getCell(column).value).toBe(expectedValue);
+      }
+      if(!row.survey.questions.length) for(let column=21;column<=records.columnCount;column++) expect(records.getRow(i+2).getCell(column).value).toBeNull();
     }
     expect(answers.rowCount).toBe(1+expected.reduce((sum,row)=>sum+row.survey.questions.length,0));
     if (condition===conditions[0]) {
@@ -269,6 +278,8 @@ test('Excel button downloads applied filters from later pages and displays failu
   const filename=testInfo.outputPath('records.xlsx'); await download.saveAs(filename);
   const book=await new ExcelJS.Workbook().xlsx.readFile(filename);
   expect(book.getWorksheet('Records').rowCount).toBe(253);
+  expect(book.getWorksheet('Records').getRow(1).values.some(value=>value?.startsWith('¿Buena lana? ['))).toBe(true);
+  expect(book.getWorksheet('Records').getCell('J1').value).toBe('Shearer (current reference name)');
   await expect(page.locator('#ranch-export-status')).toContainText('Download started');
   await page.unroute('**/api/admin/shearing/export.xlsx?**');
   await page.route('**/api/admin/shearing/export.xlsx?**',route=>route.abort('failed'));
@@ -284,4 +295,33 @@ test('Excel button downloads applied filters from later pages and displays failu
   await page.setViewportSize({width:390,height:844});
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   await page.screenshot({path:testInfo.outputPath('export-phone.png')});
+});
+
+test('Excel resolves shearer names per owner from published settings or last status and keeps revoked stations', async () => {
+  const settings=(await admin('GET',`/api/admin/ranches/${server.id}/configuration`)).data;
+  settings.configuration.shearers[0]={...settings.configuration.shearers[0],name:'José Martínez',active:false};
+  settings.configuration.shearers[1]={...settings.configuration.shearers[1],name:'Lucía'};
+  expect((await admin('PUT',`/api/admin/ranches/${server.id}/configuration`,{
+    revision:settings.revision,configuration:settings.configuration,submissionId:crypto.randomUUID(),
+  })).response.status).toBe(200);
+  // The second server has no published manifest. Its same-numbered station
+  // must use its own heartbeat, never the first server's configuration.
+  expect((await admin('GET',`/api/admin/ranches/${other.id}/configuration`)).data.revision).toBe(0);
+  expect((await jsonRequest(`${remote}/api/sync/ranch`,{method:'POST',token:other.token,body:{cursor:'0',information:{
+    shearers:[{name:'Ana del otro galpón'}],mode:'oveja',pending:0,uptime:1,hostname:'fixture',version:'test',platform:'test',
+  }}})).response.status).toBe(200);
+  const revoked=(await admin('POST','/api/admin/devices',{name:'Revoked fixture',role:'server'})).data;
+  expect((await push(revoked,[{...events[0],id:crypto.randomUUID(),tag:'C88888'}])).response.status).toBe(200);
+  expect((await admin('DELETE',`/api/admin/devices/${revoked.id}`)).response.status).toBe(200);
+  const response=await fetch(`${remote}/api/admin/shearing/export.xlsx?day=&lang=en`,{headers:{Authorization:`Bearer ${password}`}});
+  expect(response.status).toBe(200);
+  const book=await new ExcelJS.Workbook().xlsx.load(Buffer.from(await response.arrayBuffer())),sheet=book.getWorksheet('Records');
+  const byTag=new Map(); sheet.eachRow((row,i)=>{if(i>1) byTag.set(row.getCell(3).value,row);});
+  expect(byTag.get('A50000').getCell(9).value).toBe(1);
+  expect(byTag.get('A50000').getCell(10).value).toBe('José Martínez');
+  expect(byTag.get('A50001').getCell(10).value).toBe('Lucía');
+  expect(byTag.get('B99999').getCell(9).value).toBe(1);
+  expect(byTag.get('B99999').getCell(10).value).toBe('Ana del otro galpón');
+  expect(byTag.get('C88888').getCell(9).value).toBe(1);
+  expect(byTag.get('C88888').getCell(10).value).toBe('Unnamed');
 });

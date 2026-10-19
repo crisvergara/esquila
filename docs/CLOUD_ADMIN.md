@@ -97,10 +97,23 @@ Check the browser's Downloads list after the completion message.
 The workbook uses the admin browser's language for headings and contains:
 
 - **Records**: numbered rows, stable record and owning-server IDs, tag codes,
-  Chile day/time and original UTC instant, station number, saved mode, color
+  Chile day/time and original UTC instant, station number and shearer name, saved mode, color
   code, acknowledgement status, deletion state and upload/update timestamps.
   Server names are current references (or retained names for revoked servers).
-  Station numbers and color codes avoid inventing historical names.
+  Shearer names come from that record's owning server's published configuration,
+  falling back to its last status report only when it has no configuration.
+  Retired stations keep their numbers and names. The column is labeled
+  **Shearer (current reference name)** because events do not save historical
+  shearer names; unavailable references show **Unnamed**. Color codes avoid
+  inventing historical names.
+  Survey questions also appear as columns directly in this sheet, with each
+  animal's saved answer on its row. Headings include the original question,
+  saved mode name and a distinguishing column number. Choice answers show their
+  saved labels; text and numeric answers retain their values. Changed question,
+  mode or option wording gets a separate column. Blank cells mean the question
+  was not asked; **No answer** means it was asked but skipped. The Answers sheet
+  retains explicit answer states and raw values, including when user-entered text
+  happens to be “No answer.”
 - **Answers**: one row per saved survey question, with its original wording,
   type, response value and saved choice label. Numeric answers remain numbers,
   including zero. Skipped questions have a blank value and an explicit unanswered
@@ -115,8 +128,9 @@ filters and frozen headings help browse the workbook; values beginning with
 formula characters remain literal text. Ranch-authored content is not translated.
 
 The cloud permits one export at a time per instance, up to **10,000 records**
-(and their saved answers). Larger selections produce an error; narrow the server
-or date filters. Export failures show a retry message and never change records
+(and their saved answers), with up to **256 saved question versions** as columns.
+Larger selections produce an error; narrow the server, mode or date filters.
+Export failures show a retry message and never change records
 or sync state. Only authenticated administrators can download exports; device
 tokens do not grant access. No Mac update is needed for this cloud feature.
 
